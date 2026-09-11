@@ -8,6 +8,7 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "imagehash>=4.3.2",
+    "librosa>=1.0.0",
     "numpy>=2.5.3",
     "pillow>=12.3.0",
     "pillow-heif>=1.7.0",
