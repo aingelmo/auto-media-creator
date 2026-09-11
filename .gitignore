@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Claude Code / headroom local state
+.claude/.headroom_wrap_*
+
+# WSL/Windows NTFS zone-identifier marker
+*:Zone.Identifier
