@@ -163,9 +163,12 @@ def place_develop_arc(
 
 
 # --------------------------------------------------------------------------
-# 6.2.5 Relajacion (implementada como puntos de extension; el modo estricto
-# usado por el planner de synteticos de la Sesion 3 no la necesita porque
-# S5 garantiza >=1 candidato admisible por rol antes de llegar aqui).
+# 6.2.5 Relajacion. Implementada en selection.build_selected: si hook/close
+# no tienen candidato admisible libre, se reclama (preempt) uno ya asignado
+# a develop -- mas flexible (N slots, tipicamente mas candidatos) -- y el
+# hueco que deja se intenta rellenar con el pool de fallback restante. Solo
+# cubre develop -> hook/close; si develop se queda corto sin nada que lo
+# rellene, este modulo sigue lanzando PlannerError mas abajo.
 # --------------------------------------------------------------------------
 
 @dataclass
@@ -188,7 +191,9 @@ def assign_slots(slots: list[dict], selected: list[dict], candidates_by_id: dict
     if hook is None:
         raise PlannerError("no admissible hook candidate (fallback de reglas fuera de alcance)")
 
-    close = _select_single(selected, "close", {"calm", "image"}, candidates_by_id,
+    # "peak" incluido porque fallback_close (#8.6) lo usa como ultimo recurso
+    # (close_not_calm) cuando no hay calm/image admisible.
+    close = _select_single(selected, "close", {"calm", "image", "peak"}, candidates_by_id,
                             close_slot["end_f"] - close_slot["start_f"], 1.0)
     if close is None:
         raise PlannerError("no admissible close candidate (fallback de reglas fuera de alcance)")
@@ -310,6 +315,79 @@ def effect_for(candidate: dict, layout: str, config: dict) -> tuple[str, dict]:
 
 
 # --------------------------------------------------------------------------
+# 8.2 Invariantes del planner: asserts, no reparaciones. Un fallo aqui es un
+# bug del planner; la sesion se detiene con PlannerError.
+# --------------------------------------------------------------------------
+
+def _assert_invariants(
+    clips: list[dict], slots: list[dict], candidates_by_id: dict, sources_by_src: dict,
+) -> None:
+    n_slots = len(slots)
+
+    # P1
+    if len(clips) != n_slots or [c["slot"] for c in clips] != [s["slot"] for s in slots]:
+        raise PlannerError("P1: clips no cubren los slots 1:1 en orden")
+
+    # P2
+    if len({c["candidate_id"] for c in clips}) != len(clips):
+        raise PlannerError("P2: candidate_id repetido entre clips")
+
+    for c in clips:
+        if c["type"] != "image":
+            # P3
+            window = candidates_by_id[c["candidate_id"]]["window"]
+            if not (window[0] - 1e-6 <= c["in_s"] and c["out_s"] <= window[1] + 1e-6):
+                raise PlannerError(f"P3: in_s/out_s fuera de window en slot {c['slot']}")
+            # P4
+            duration_s = sources_by_src[c["src"]]["duration_s"]
+            if not (0 <= c["in_s"] < c["out_s"] <= duration_s + 1e-6):
+                raise PlannerError(f"P4: in_s/out_s invalido en slot {c['slot']}")
+            # P5
+            expected_n_frames = round((c["out_s"] - c["in_s"]) / c["speed"] * FPS)
+            if expected_n_frames != c["n_frames"]:
+                raise PlannerError(f"P5: n_frames no coincide en slot {c['slot']}")
+
+        # P8
+        crop = c["crop"]
+        if not (0 <= crop["x"] <= 1 and 0 <= crop["y"] <= 1 and 0 < crop["w"] <= 1 and 0 < crop["h"] <= 1):
+            raise PlannerError(f"P8: crop fuera de [0,1] en slot {c['slot']}")
+        px = c["crop_px"]
+        if not (0 <= px["x"] and px["x"] + px["w"] <= c["src_w"]
+                and 0 <= px["y"] and px["y"] + px["h"] <= c["src_h"]):
+            raise PlannerError(f"P8: crop_px fuera de W x H en slot {c['slot']}")
+        if px["w"] % 2 != 0 or px["h"] % 2 != 0:
+            raise PlannerError(f"P8: crop_px impar en slot {c['slot']}")
+        if c["layout"] == "crop" and abs(px["w"] / px["h"] - 9 / 16) * px["h"] > 2:
+            raise PlannerError(f"P8: crop_px no respeta 9:16 en slot {c['slot']}")
+
+        # P9
+        if c["n_frames"] < 30:
+            raise PlannerError(f"P9: n_frames < 30 en slot {c['slot']}")
+
+    # P6
+    if clips[0]["timeline_start_f"] != 0:
+        raise PlannerError("P6: timeline_start_f[0] != 0")
+    if clips[-1]["timeline_end_f"] != slots[-1]["end_f"]:
+        raise PlannerError("P6: timeline_end_f[-1] != duration_f")
+    for a, b in zip(clips, clips[1:]):
+        if a["timeline_end_f"] != b["timeline_start_f"]:
+            raise PlannerError(f"P6: hueco en la timeline entre slots {a['slot']} y {b['slot']}")
+    if sum(c["n_frames"] for c in clips) != slots[-1]["end_f"]:
+        raise PlannerError("P6: sum(n_frames) != duration_f")
+
+    # P7: sin solapes de la misma fuente (margen 0.25s)
+    by_src: dict[str, list[dict]] = {}
+    for c in clips:
+        if c["type"] != "image":
+            by_src.setdefault(c["src"], []).append(c)
+    for segs in by_src.values():
+        segs = sorted(segs, key=lambda c: c["in_s"])
+        for a, b in zip(segs, segs[1:]):
+            if a["out_s"] + 0.25 > b["in_s"] + 1e-6:
+                raise PlannerError(f"P7: solape de la misma fuente {a['src']}")
+
+
+# --------------------------------------------------------------------------
 # Orquestacion: construye la lista `clips` del EDL (#7) a partir de slots,
 # selection y candidatos+fuentes.
 # --------------------------------------------------------------------------
@@ -364,4 +442,5 @@ def build_clips(
         })
 
     clips.sort(key=lambda c: c["slot"])
+    _assert_invariants(clips, slots, candidates_by_id, sources_by_src)
     return clips, warnings

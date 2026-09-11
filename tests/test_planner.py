@@ -26,10 +26,10 @@ def _slots(n_develop: int, hook_f=45, develop_f=40, close_f=60):
     return slots
 
 
-def _source(src, w, h, hdr="none", rotation=0):
+def _source(src, w, h, hdr="none", rotation=0, duration_s=20.0):
     return {
         "src": src, "sha256": f"sha-{src}", "type": "video", "w": w, "h": h,
-        "rotation": rotation, "hdr": hdr,
+        "rotation": rotation, "hdr": hdr, "duration_s": duration_s,
         "color": {"primaries": "bt709", "trc": "bt709", "space": "bt709", "range": "tv"},
     }
 
