@@ -1,0 +1,23 @@
+[project]
+name = "edl-agent"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "Andres Ingelmo Poveda", email = "aingelmop@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "imagehash>=4.3.2",
+    "numpy>=2.5.3",
+    "pillow>=12.3.0",
+    "pillow-heif>=1.7.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
