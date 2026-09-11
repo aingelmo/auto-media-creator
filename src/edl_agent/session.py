@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from .candidates import build_image_candidate, build_video_candidates
+from .edl import build_edl
 from .features import Detector, detect_scene_cuts, extract_features, save_features
 from .ingest import (
     TONEMAP_CHAIN_HLG, IngestError, build_manifest, build_proxy, cut_music,
@@ -142,3 +143,35 @@ def run_candidates(
     with open(session_dir / "candidates.json", "w") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     return result
+
+
+def run_planner(
+    session_dir: Path,
+    manifest: dict,
+    candidates_json: dict,
+    slots_json: dict,
+    selection: dict | None = None,
+    selection_meta: dict | None = None,
+    threads: int = 4,
+    config: dict | None = None,
+) -> dict:
+    """#8.5: selection (LLM, opcional) -> S-checks/fallback -> planner -> edl.json."""
+    session_dir = Path(session_dir)
+    tonemap_chain = TONEMAP_CHAIN_HLG if any(
+        s.get("hdr") in ("hlg", "dv84") for s in manifest["sources"] if s["type"] == "video"
+    ) else ""
+
+    edl = build_edl(
+        session_id=manifest["session_id"],
+        manifest=manifest,
+        candidates_json=candidates_json,
+        slots_json=slots_json,
+        selection=selection,
+        selection_meta=selection_meta,
+        threads=threads,
+        tonemap_chain=tonemap_chain,
+        config=config,
+    )
+    with open(session_dir / "edl.json", "w") as f:
+        json.dump(edl, f, indent=2, ensure_ascii=False)
+    return edl
