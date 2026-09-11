@@ -17,6 +17,12 @@ from PIL import Image
 
 FRAME_OFFSETS = (-2, -1, 0, 1, 2)  # frames de proxy a comparar, a 30 fps
 D0_MAX = 6  # umbral [validar margen] segun #4.4
+# Margen entre d0 y el minimo de los vecinos: en escenas estaticas/de movimiento
+# lento el ruido de pHash (y el propio tonemap HDR) hace que un vecino puntue
+# unos bits por debajo de d0 sin que haya contenido distinto (ver sesiones
+# reales #4.4). Un desalineamiento real dispara d0 muy por encima de D0_MAX en
+# al menos algun instante, asi que el margen no enmascara errores genuinos.
+BEST_MARGIN = 4
 
 
 @dataclass
@@ -48,6 +54,16 @@ def _phash(path: Path) -> imagehash.ImageHash:
         return imagehash.phash(im)
 
 
+def _instant_ok(distances: dict[int, int]) -> bool:
+    d0 = distances[0]
+    best = min(distances.values())
+    # #4.4 + riesgo #13: no exigimos que 0 sea el minimo exacto (el ruido de
+    # pHash en escenas estaticas hace perder el empate sin que haya
+    # desalineamiento real); basta con que este cerca del mejor vecino y por
+    # debajo del umbral absoluto.
+    return d0 <= D0_MAX and (d0 - best) <= BEST_MARGIN
+
+
 def verify_source(
     original: str,
     proxy: str,
@@ -76,11 +92,6 @@ def verify_source(
                 _extract_frame(["-vf", "scale=256:-2"], proxy, t + k / proxy_fps, proxy_png)
                 distances[k] = orig_hash - _phash(proxy_png)
 
-            d0 = distances[0]
-            best = min(distances.values())
-            # #4.4 + riesgo #13: argmin_k==0 admite empates (movimiento lento);
-            # solo exige que 0 alcance el minimo y este por debajo del umbral.
-            ok = d0 == best and d0 <= D0_MAX
-            results.append(InstantResult(t_s=t, distances=distances, ok=ok))
+            results.append(InstantResult(t_s=t, distances=distances, ok=_instant_ok(distances)))
 
     return all(r.ok for r in results), results

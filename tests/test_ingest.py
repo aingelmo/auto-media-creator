@@ -16,7 +16,7 @@ from edl_agent.ingest import (
     IngestError, build_proxy, classify_hdr, post_rotation_dims, probe_video_source,
 )
 from edl_agent.session import run_ingest
-from edl_agent.verify import pick_instants, verify_source
+from edl_agent.verify import D0_MAX, _instant_ok, pick_instants, verify_source
 
 
 def _make_clip(path: Path, *, w=1080, h=1920, fps=30, duration=3, hlg=False):
@@ -137,6 +137,24 @@ def test_pick_instants_fills_with_percentiles_when_no_kp_speed():
 def test_pick_instants_prioritises_extra_up_to_five():
     instants = pick_instants(duration_s=20.0, extra_instants_s=[1.0, 3.0, 5.0, 7.0, 9.0])
     assert instants == [1.0, 3.0, 5.0, 7.0, 9.0]
+
+
+# Real sessions (real_test_01) showed the old exact-argmin check rejecting
+# ~67% of genuinely aligned clips: on static/slow-motion content, pHash noise
+# (worsened by HDR tonemap) routinely makes a +-1/+-2 frame neighbour score a
+# few bits below d0 with no real content shift. See docs #4.4 riesgo #13.
+def test_instant_ok_tolerates_neighbour_within_margin():
+    # d0 within D0_MAX but not the exact argmin (real failures observed: diff of 2-4).
+    assert _instant_ok({-2: 2, -1: 2, 0: 2, 1: 2, 2: 0})
+
+
+def test_instant_ok_rejects_when_gap_to_best_too_large():
+    # d0 itself is within D0_MAX, but a neighbour is drastically better: genuine shift.
+    assert not _instant_ok({-2: 6, -1: 6, 0: 6, 1: 0, 2: 0})
+
+
+def test_instant_ok_rejects_when_d0_exceeds_threshold():
+    assert not _instant_ok({-2: 0, -1: 0, 0: D0_MAX + 1, 1: 0, 2: 0})
 
 
 def test_run_ingest_end_to_end(session_dir):
