@@ -12,6 +12,8 @@ from .ingest import (
     TONEMAP_CHAIN_HLG, IngestError, build_manifest, build_proxy, cut_music,
     normalize_image, probe_video_source, sha256_file, write_manifest,
 )
+from .selector import select as selector_select
+from .slots import FRAME_RATE
 from .verify import verify_source
 
 VIDEO_EXTS = {".mov", ".mp4", ".m4v"}
@@ -143,6 +145,24 @@ def run_candidates(
     with open(session_dir / "candidates.json", "w") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     return result
+
+
+def run_selection(
+    session_dir: Path,
+    candidates_json: dict,
+    slots_json: dict,
+    config: dict | None = None,
+    client=None,
+) -> tuple[dict | None, dict]:
+    """#5: llama a Capa 3 con un client real. Por defecto google-genai (API key via env
+    GEMINI_API_KEY/GOOGLE_API_KEY); pasa `client=OllamaClient()` (ollama_client.py) para
+    probar en local antes de gastar en Gemini."""
+    if client is None:
+        from google import genai
+        client = genai.Client()
+
+    duration_s = slots_json["duration_f"] / FRAME_RATE
+    return selector_select(candidates_json, slots_json, duration_s, client, Path(session_dir), config)
 
 
 def run_planner(
