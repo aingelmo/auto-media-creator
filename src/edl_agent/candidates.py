@@ -17,6 +17,7 @@ PEAK_MIN_PROMINENCE = 0.2  # [validar]
 SHARPNESS_MIN = 0.35  # [validar]
 PEAK_MOTION_BG_MAX = 0.6  # [validar]
 PEAK_WINDOW_MAX_S = 6.0
+PEAK_WINDOW_SHARPNESS_TOLERANCE = 3  # frames de sharpness baja tolerados sin cortar la ventana (motion blur transitorio en el pico); subir si sigue cortando ventanas cerca de picos reales
 
 CALM_MIN_DURATION_S = 2.0
 CALM_KP_SPEED_MAX = 0.25
@@ -66,21 +67,41 @@ def _crosses_cut(t_a: float, t_b: float, scene_cuts_s: list[float]) -> bool:
 
 
 def _peak_window(features: dict, i: int, scene_cuts_s: list[float]) -> list[float]:
+    """Crece la ventana desde el pico hacia cada lado. Un corte de escena o
+    perdida de sujeto es un limite real y corta de inmediato; una racha corta
+    de sharpness baja (motion blur del propio movimiento explosivo que hace
+    el pico) se tolera sin cortar, pero el limite de la ventana no pasa del
+    ultimo frame nitido."""
     t_s = features["t_s"]
     sharpness = features["sharpness"]
     subject_visible = features["subject_visible"]
     t_peak = t_s[i]
 
-    def ok(j: int) -> bool:
-        return (sharpness[j] >= SHARPNESS_MIN and subject_visible[j]
-                and not _crosses_cut(t_peak, t_s[j], scene_cuts_s))
+    def hard_ok(j: int) -> bool:
+        return subject_visible[j] and not _crosses_cut(t_peak, t_s[j], scene_cuts_s)
 
-    lo = i
-    while lo > 0 and ok(lo - 1) and (t_peak - t_s[lo - 1]) <= PEAK_WINDOW_MAX_S:
-        lo -= 1
-    hi = i
-    while hi < len(t_s) - 1 and ok(hi + 1) and (t_s[hi + 1] - t_peak) <= PEAK_WINDOW_MAX_S:
-        hi += 1
+    def extend(step: int) -> int:
+        boundary = i
+        j = i
+        low_sharpness_streak = 0
+        while True:
+            nxt = j + step
+            if not (0 <= nxt < len(t_s)) or abs(t_s[nxt] - t_peak) > PEAK_WINDOW_MAX_S:
+                break
+            if not hard_ok(nxt):
+                break
+            j = nxt
+            if sharpness[j] >= SHARPNESS_MIN:
+                low_sharpness_streak = 0
+                boundary = j
+            else:
+                low_sharpness_streak += 1
+                if low_sharpness_streak > PEAK_WINDOW_SHARPNESS_TOLERANCE:
+                    break
+        return boundary
+
+    lo = extend(-1)
+    hi = extend(1)
     return [t_s[lo], t_s[hi]]
 
 
