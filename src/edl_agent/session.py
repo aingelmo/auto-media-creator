@@ -1,8 +1,12 @@
-"""Orquestacion de Capa 1 para una sesion: sessions/<session_id>/ (ver #1)."""
+"""Orquestacion de Capa 1 y Capa 2 para una sesion: sessions/<session_id>/ (ver #1, #4)."""
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
+from .candidates import build_image_candidate, build_video_candidates
+from .features import Detector, detect_scene_cuts, extract_features, save_features
 from .ingest import (
     TONEMAP_CHAIN_HLG, IngestError, build_manifest, build_proxy, cut_music,
     normalize_image, probe_video_source, sha256_file, write_manifest,
@@ -84,3 +88,57 @@ def run_ingest(
     manifest = build_manifest(session_dir.name, sources, music)
     write_manifest(manifest, session_dir / "manifest.json")
     return manifest
+
+
+def run_candidates(
+    session_dir: Path, manifest: dict, slots: dict, detector: Detector,
+    pose_model_path: str | None = None,
+) -> dict:
+    """#4.2-#4.3: features + candidates.json sobre los proxies de la sesion."""
+    session_dir = Path(session_dir)
+    peaks_dir = session_dir / "peaks"
+    features_dir = session_dir / "features"
+    slots_list = slots["slots"]
+
+    manifest_sha256 = hashlib.sha256(
+        json.dumps(manifest, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+    pose_model_sha256 = sha256_file(Path(pose_model_path)) if pose_model_path else ""
+
+    candidates: list[dict] = []
+    next_id = 1
+    features_config_sha256 = ""
+
+    for src_info in manifest["sources"]:
+        src = src_info["src"]
+        if src_info["type"] == "image":
+            image_path = session_dir / src_info.get("normalized", src)
+            candidates.append(
+                build_image_candidate(src, f"c{next_id:02d}", slots_list, str(image_path))
+            )
+            next_id += 1
+            continue
+
+        proxy_path = session_dir / src_info["proxy"]
+        feats = extract_features(str(proxy_path), detector)
+        features_config_sha256 = feats["features_config_sha256"]
+        save_features(feats, features_dir / f"{Path(src).stem}.parquet")
+        scene_cuts_s = detect_scene_cuts(str(proxy_path))
+
+        video_cands = build_video_candidates(
+            src, next_id, feats, src_info["duration_s"], scene_cuts_s,
+            slots_list, str(proxy_path), peaks_dir,
+        )
+        candidates.extend(video_cands)
+        next_id += len(video_cands)
+
+    result = {
+        "session_id": manifest["session_id"],
+        "manifest_sha256": manifest_sha256,
+        "features_config_sha256": features_config_sha256,
+        "pose_model_sha256": pose_model_sha256,
+        "candidates": candidates,
+    }
+    with open(session_dir / "candidates.json", "w") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+    return result

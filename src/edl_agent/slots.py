@@ -34,7 +34,7 @@ def beats_confident(tempo_bpm: float, y: np.ndarray, sr: int, beats_s: list[floa
         return False
     ac = librosa.autocorrelate(onset_env, max_size=lag_frames + 1)
     peak = ac[lag_frames] / ac[0] if ac[0] > 0 else 0.0
-    return peak >= 0.3
+    return bool(peak >= 0.3)
 
 
 def build_slots(

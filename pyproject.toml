@@ -10,8 +10,13 @@ dependencies = [
     "imagehash>=4.3.2",
     "librosa>=1.0.0",
     "numpy>=2.5.3",
+    "opencv-python-headless>=5.0.0.93",
+    "pandas>=3.0.5",
     "pillow>=12.3.0",
     "pillow-heif>=1.7.0",
+    "pyarrow>=25.0.1",
+    "scenedetect>=0.7.1",
+    "ultralytics>=8.4.147",
 ]
 
 [build-system]

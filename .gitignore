@@ -224,5 +224,8 @@ __marimo__/
 /data/
 /sessions/
 
+# Downloaded model weights (YOLO-pose etc.)
+/models/
+
 # WSL/Windows NTFS zone-identifier marker
 *:Zone.Identifier
