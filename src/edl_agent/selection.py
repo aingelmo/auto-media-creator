@@ -30,10 +30,12 @@ def _admits(cand: dict, slot_indices: list[int]) -> bool:
 # 8.1 S-checks sobre selection.json
 # --------------------------------------------------------------------------
 
-def apply_s_checks(selection: dict, candidates_by_id: dict) -> tuple[list[dict], list[str]]:
-    """S2-S4. S1 (status incomplete) y S5 (huecos por rol) se resuelven fuera
-    de esta funcion: S1 es cosa del llamador del LLM, S5 lo cubre el fallback
-    en `build_selected`."""
+def apply_s_checks(
+    selection: dict, candidates_by_id: dict, slots: list[dict],
+) -> tuple[list[dict], list[str]]:
+    """S2-S5. S1 (status incomplete) se resuelve fuera de esta funcion (cosa
+    del llamador del LLM); los huecos por rol que deje S5 los cubre el
+    fallback en `build_selected`."""
     warnings: list[str] = []
     seen: set[str] = set()
     cleaned: list[dict] = []
@@ -54,6 +56,18 @@ def apply_s_checks(selection: dict, candidates_by_id: dict) -> tuple[list[dict],
         elif entry["role"] == "close" and kind == "peak":
             entry["role"] = "develop"
             warnings.append(f"s4_moved:{entry['candidate_id']}->develop")
+
+    # S5: el LLM no conoce `admits_slots` (no se le envia); descarta aqui lo
+    # que eligio para un rol cuyo(s) slot(s) no caben en su ventana, para que
+    # el fallback de `build_selected` pueda cubrir ese hueco.
+    admissible: list[dict] = []
+    for entry in cleaned:
+        cand = candidates_by_id[entry["candidate_id"]]
+        if not _admits(cand, _slot_indices(slots, entry["role"])):
+            warnings.append(f"s5_dropped:{entry['candidate_id']}")
+            continue
+        admissible.append(entry)
+    cleaned = admissible
 
     by_role: dict[str, list[dict]] = {role: [] for role in ROLES}
     for entry in cleaned:
@@ -142,6 +156,15 @@ def fallback_develop(candidates: list[dict], slot_indices: list[int], used_ids: 
 # 8.5 Orquestacion: S-checks + fallback -> `selected` para el planner
 # --------------------------------------------------------------------------
 
+def _preempt_develop(cleaned: list[dict], candidate_id: str, warnings: list[str], role: str) -> list[dict]:
+    """Un candidato ya asignado a develop pasa a `role` (hook/close): develop
+    tiene mas slack (N slots, mas candidatos tipicamente) que hook/close
+    (obligatorios, 1 slot). El hueco que deja se rellena luego con
+    `fallback_develop` sobre el pool restante."""
+    warnings.append(f"{role}_preempted_develop:{candidate_id}")
+    return [e for e in cleaned if not (e["role"] == "develop" and e["candidate_id"] == candidate_id)]
+
+
 def build_selected(
     candidates_json: dict, slots_json: dict, selection: dict | None = None,
 ) -> tuple[list[dict], list[str], list[str]]:
@@ -152,7 +175,7 @@ def build_selected(
     develop_k = sum(1 for s in slots if s["role"] == "develop")
 
     if selection is not None:
-        cleaned, warnings = apply_s_checks(selection, candidates_by_id)
+        cleaned, warnings = apply_s_checks(selection, candidates_by_id, slots)
     else:
         cleaned, warnings = [], []
 
@@ -161,6 +184,12 @@ def build_selected(
 
     if not any(e["role"] == "hook" for e in cleaned):
         entry = fallback_hook(candidates, _slot_indices(slots, "hook"), used_ids)
+        if entry is None:
+            # #6.2.5: nada libre admite hook; reclama lo que develop tenga admisible.
+            develop_ids = {e["candidate_id"] for e in cleaned if e["role"] == "develop"}
+            entry = fallback_hook(candidates, _slot_indices(slots, "hook"), used_ids - develop_ids)
+            if entry:
+                cleaned = _preempt_develop(cleaned, entry["candidate_id"], warnings, "hook")
         if entry:
             cleaned.append(entry)
             used_ids.add(entry["candidate_id"])
@@ -168,6 +197,11 @@ def build_selected(
 
     if not any(e["role"] == "close" for e in cleaned):
         entry, close_warnings = fallback_close(candidates, _slot_indices(slots, "close"), used_ids)
+        if entry is None:
+            develop_ids = {e["candidate_id"] for e in cleaned if e["role"] == "develop"}
+            entry, close_warnings = fallback_close(candidates, _slot_indices(slots, "close"), used_ids - develop_ids)
+            if entry:
+                cleaned = _preempt_develop(cleaned, entry["candidate_id"], warnings, "close")
         warnings.extend(close_warnings)
         if entry:
             cleaned.append(entry)
