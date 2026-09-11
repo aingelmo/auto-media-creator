@@ -36,6 +36,38 @@ def _audio_block(manifest: dict, config: dict) -> dict:
     }
 
 
+_RELAXED_LOW_MATERIAL = ("relaxed_4", "relaxed_5")
+
+
+def _aggregate_warnings(clips: list[dict], warnings: list[str]) -> list[str]:
+    """#8.3 W1-W5: checks compuestos sobre el conjunto de clips, no bloquean
+    pero obligan a revisar el preview."""
+    agg: list[str] = []
+
+    cropped = sum(1 for c in clips if c["subject_cropped"])
+    upscaled = sum(1 for c in clips if "upscale_gt_1.3" in c["warnings"])
+    if cropped > 3 or upscaled > 3:
+        agg.append("low_framing_quality")
+
+    relaxed = sum(1 for w in warnings if w in _RELAXED_LOW_MATERIAL)
+    relaxed += sum(1 for c in clips for w in c["warnings"] if w in _RELAXED_LOW_MATERIAL)
+    if relaxed > len(clips) / 2:
+        agg.append("low_material_quality")
+
+    peak_off_beat_clips = sum(1 for c in clips if "peak_off_beat" in c["warnings"])
+    if "arc_fallback" in warnings or peak_off_beat_clips >= 2:
+        agg.append("weak_rhythm")
+
+    hook = next((c for c in clips if c["role"] == "hook"), None)
+    if hook is not None and hook["speed"] == 0.5 and hook["src_fps_nominal"] <= 30:
+        agg.append("slowmo_duplicates")
+
+    if "sharpness_cross_clip" in warnings:
+        agg.append("sharpness_cross_clip")
+
+    return agg
+
+
 def _provenance(fallback_roles: list[str], has_develop: bool, warnings: list[str], selection_meta: dict | None) -> dict:
     roles_in_use = {"hook", "close"} | ({"develop"} if has_develop else set())
     if not fallback_roles:
@@ -83,6 +115,7 @@ def build_edl(
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
     clips, clip_warnings = build_clips(slots, selected, candidates_by_id, sources_by_src, config)
     warnings = warnings + clip_warnings
+    warnings = warnings + _aggregate_warnings(clips, warnings)
 
     render_profile = get_render_profile(threads, tonemap_chain, tonemap_chain_pq)
 

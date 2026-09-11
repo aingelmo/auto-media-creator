@@ -437,6 +437,8 @@ def build_clips(
             "speed": speed,
             "timeline_start_f": timing["timeline_start_f"], "timeline_end_f": timing["timeline_end_f"],
             "layout": crop_info["layout"], "crop": crop_info["crop"], "crop_px": crop_px,
+            "subject_cropped": crop_info["subject_cropped"],
+            "src_fps_nominal": src_info.get("src_fps_nominal", FPS),
             "effect": effect, "effect_params": effect_params,
             "warnings": clip_warnings,
         })

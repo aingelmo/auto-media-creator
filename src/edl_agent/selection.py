@@ -83,7 +83,7 @@ def apply_s_checks(
 # 8.6 Fallback de reglas, por rol
 # --------------------------------------------------------------------------
 
-def fallback_hook(candidates: list[dict], slot_indices: list[int], used_ids: set[str]) -> dict | None:
+def fallback_hook(candidates: list[dict], slot_indices: list[int], used_ids: set[str]) -> tuple[dict | None, list[str]]:
     pool = [
         c for c in candidates
         if c["kind"] == "peak" and c["id"] not in used_ids and _admits(c, slot_indices)
@@ -91,11 +91,15 @@ def fallback_hook(candidates: list[dict], slot_indices: list[int], used_ids: set
         and c["sharpness"] >= FALLBACK_HOOK_SHARPNESS_MIN
     ]
     if not pool:
-        return None
+        return None, []
+    # W5: sharpness es relativa a cada clip (#4.2); filtrar por un umbral
+    # global a traves de varias `src` compara valores no comparables.
+    warnings = ["sharpness_cross_clip"] if len({c["src"] for c in pool}) > 1 else []
     single_subject = [c for c in pool if not c["multi_subject"]]
     pool = single_subject or pool
     best = max(pool, key=lambda c: c["kp_speed"])
-    return {"candidate_id": best["id"], "role": "hook", "rank": 1, "exercise": "unknown", "reason": "rules_fallback"}
+    entry = {"candidate_id": best["id"], "role": "hook", "rank": 1, "exercise": "unknown", "reason": "rules_fallback"}
+    return entry, warnings
 
 
 def fallback_close(candidates: list[dict], slot_indices: list[int], used_ids: set[str]) -> tuple[dict | None, list[str]]:
@@ -183,13 +187,14 @@ def build_selected(
     used_ids = {e["candidate_id"] for e in cleaned}
 
     if not any(e["role"] == "hook" for e in cleaned):
-        entry = fallback_hook(candidates, _slot_indices(slots, "hook"), used_ids)
+        entry, hook_warnings = fallback_hook(candidates, _slot_indices(slots, "hook"), used_ids)
         if entry is None:
             # #6.2.5: nada libre admite hook; reclama lo que develop tenga admisible.
             develop_ids = {e["candidate_id"] for e in cleaned if e["role"] == "develop"}
-            entry = fallback_hook(candidates, _slot_indices(slots, "hook"), used_ids - develop_ids)
+            entry, hook_warnings = fallback_hook(candidates, _slot_indices(slots, "hook"), used_ids - develop_ids)
             if entry:
                 cleaned = _preempt_develop(cleaned, entry["candidate_id"], warnings, "hook")
+        warnings.extend(hook_warnings)
         if entry:
             cleaned.append(entry)
             used_ids.add(entry["candidate_id"])

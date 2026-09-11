@@ -201,3 +201,28 @@ def test_fallback_never_reuses_llm_candidate_id():
     assert "close" not in fallback_roles or all(
         e["candidate_id"] != "only_peak" for e in selected if e["role"] == "close"
     )
+
+
+def test_fallback_hook_warns_sharpness_cross_clip_when_pool_spans_sources():
+    # W5: el umbral de sharpness admite candidatos de dos `src` distintas;
+    # sharpness es relativo al clip, comparar entre clips es informativo.
+    candidates_json = {"candidates": [
+        _cand("hook_a", "a.mov", "peak", kp_speed=0.5, sharpness=0.9),
+        _cand("hook_b", "b.mov", "peak", kp_speed=0.9, sharpness=0.6),
+        _cand("close0", "c.mov", "calm"),
+    ]}
+    slots_json = _slots(0)
+    selected, warnings, fallback_roles = build_selected(candidates_json, slots_json, selection=None)
+    assert "sharpness_cross_clip" in warnings
+    assert "hook" in fallback_roles
+
+
+def test_fallback_hook_no_warning_when_pool_is_single_source():
+    candidates_json = {"candidates": [
+        _cand("hook_a", "a.mov", "peak", kp_speed=0.5, sharpness=0.9),
+        _cand("hook_b", "a.mov", "peak", kp_speed=0.9, sharpness=0.6),
+        _cand("close0", "c.mov", "calm"),
+    ]}
+    slots_json = _slots(0)
+    selected, warnings, fallback_roles = build_selected(candidates_json, slots_json, selection=None)
+    assert "sharpness_cross_clip" not in warnings

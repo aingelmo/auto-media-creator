@@ -100,3 +100,102 @@ def test_build_edl_without_music_has_null_audio_paths():
     )
     assert edl["audio"]["music_cut_path"] is None
     assert edl["audio"]["music_src_path"] is None
+
+
+def test_w1_low_framing_quality_from_many_upscaled_clips():
+    from edl_agent.edl import _aggregate_warnings
+
+    clips = [
+        {"role": "develop", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False,
+         "warnings": ["upscale_gt_1.3"]}
+        for _ in range(4)
+    ]
+    agg = _aggregate_warnings(clips, warnings=[])
+    assert "low_framing_quality" in agg
+
+
+def test_w1_low_framing_quality_from_many_cropped_clips():
+    from edl_agent.edl import _aggregate_warnings
+
+    clips = [
+        {"role": "develop", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": True, "warnings": []}
+        for _ in range(4)
+    ]
+    agg = _aggregate_warnings(clips, warnings=[])
+    assert "low_framing_quality" in agg
+
+
+def test_w1_no_warning_below_threshold():
+    from edl_agent.edl import _aggregate_warnings
+
+    clips = [
+        {"role": "develop", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": True, "warnings": []}
+        for _ in range(3)
+    ]
+    agg = _aggregate_warnings(clips, warnings=[])
+    assert "low_framing_quality" not in agg
+
+
+def test_w2_low_material_quality_from_relaxed_warnings():
+    # No hay relajacion real implementada todavia (#6.2.5); se simula
+    # inyectando relaxed_N en la seleccion del LLM via s2 no aplica, asi que
+    # se prueba el agregador directamente a traves de build_edl con clips
+    # que ya traen el warning (compute_in_out no los genera hoy).
+    from edl_agent.edl import _aggregate_warnings
+
+    clips = [
+        {"role": "hook", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False,
+         "warnings": ["relaxed_4"]},
+        {"role": "develop", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False,
+         "warnings": ["relaxed_5"]},
+        {"role": "close", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False, "warnings": []},
+    ]
+    agg = _aggregate_warnings(clips, warnings=[])
+    assert "low_material_quality" in agg
+
+
+def test_w3_weak_rhythm_from_two_peak_off_beat_clips():
+    from edl_agent.edl import _aggregate_warnings
+
+    clips = [
+        {"role": "hook", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False,
+         "warnings": ["peak_off_beat"]},
+        {"role": "develop", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False,
+         "warnings": ["peak_off_beat"]},
+        {"role": "close", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False, "warnings": []},
+    ]
+    agg = _aggregate_warnings(clips, warnings=[])
+    assert "weak_rhythm" in agg
+
+
+def test_w3_weak_rhythm_from_arc_fallback():
+    from edl_agent.edl import _aggregate_warnings
+
+    clips = [
+        {"role": "hook", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False, "warnings": []},
+        {"role": "close", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False, "warnings": []},
+    ]
+    agg = _aggregate_warnings(clips, warnings=["arc_fallback"])
+    assert "weak_rhythm" in agg
+
+
+def test_w4_slowmo_duplicates_from_slow_hook_on_low_fps_source():
+    from edl_agent.edl import _aggregate_warnings
+
+    clips = [
+        {"role": "hook", "speed": 0.5, "src_fps_nominal": 30, "subject_cropped": False, "warnings": []},
+        {"role": "close", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False, "warnings": []},
+    ]
+    agg = _aggregate_warnings(clips, warnings=[])
+    assert "slowmo_duplicates" in agg
+
+
+def test_w4_no_warning_when_hook_source_is_high_fps():
+    from edl_agent.edl import _aggregate_warnings
+
+    clips = [
+        {"role": "hook", "speed": 0.5, "src_fps_nominal": 60, "subject_cropped": False, "warnings": []},
+        {"role": "close", "speed": 1.0, "src_fps_nominal": 30, "subject_cropped": False, "warnings": []},
+    ]
+    agg = _aggregate_warnings(clips, warnings=[])
+    assert "slowmo_duplicates" not in agg
