@@ -68,8 +68,13 @@ def select_develop(
     takes entries that fit a remaining develop slot duration, don't repeat
     the exercise or source of the previously taken entry, and don't
     time-overlap anything already placed on the timeline (respecting
-    `config["adjacency_gap_s"]`). The final temporal order of the taken
-    entries is decided separately by `place_develop_arc` (#6.2.4).
+    `config["adjacency_gap_s"]`). The exercise check is skipped when the
+    exercise is `"unknown"` (the rules-fallback placeholder, #8.6, for "no
+    LLM info") or `"other"` (the selector prompt's own catch-all for "no
+    canonical exercise fits", `selector/prompts.py`) so a run of
+    unlabeled entries doesn't collapse to one taken entry. The final
+    temporal order of the taken entries is decided separately by
+    `place_develop_arc` (#6.2.4).
 
     Args:
         selected: Candidate selections (LLM output reconciled with
@@ -109,7 +114,16 @@ def select_develop(
         )
         if admissible_d_f is None:
             continue
-        if prev_exercise is not None and _norm_exercise(s["exercise"]) == prev_exercise:
+        exercise = _norm_exercise(s["exercise"])
+        # "unknown" (rules-fallback, #8.6) and "other" (selector's own
+        # catch-all, selector/prompts.py) both mean "no real exercise
+        # label"; treating repeats of either as a clash would collapse
+        # the unlabeled pool down to a single entry.
+        if (
+            prev_exercise is not None
+            and exercise == prev_exercise
+            and exercise not in ("unknown", "other")
+        ):
             continue
         if prev_src is not None and cand["src"] == prev_src:
             continue
@@ -129,7 +143,7 @@ def select_develop(
             {"src": cand["src"], "in_s": timing["in_s"], "out_s": timing["out_s"]}
         )
         free_durations.remove(admissible_d_f)
-        prev_exercise = _norm_exercise(s["exercise"])
+        prev_exercise = exercise
         prev_src = cand["src"]
     return taken
 
