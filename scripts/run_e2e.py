@@ -1,9 +1,12 @@
 """Manual end-to-end driver for a session, per arquitectura_edl_agent_v4.md.
 Not part of the library; ad-hoc script for real_test_02 validation.
+
+Usage: uv run scripts/run_e2e.py sessions/real_test_02 [--model qwen3-vl:8b-instruct] [--gemini]
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -21,46 +24,70 @@ from edl_agent.render import (
 from edl_agent.session import run_candidates, run_ingest, run_planner, run_selection
 from edl_agent.slots import slots_from_file
 
-SESSION = Path("sessions/real_test_02")
 POSE_MODEL = "models/yolov8n-pose.pt"
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("session", type=Path, help="Session directory, e.g. sessions/real_test_02")
+    parser.add_argument("--pose-model", default=POSE_MODEL)
+    parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--music-offset-s", type=float, default=15.0)
+    parser.add_argument("--music-max-duration-s", type=float, default=15.0)
+    parser.add_argument("--model", default="qwen3-vl:8b-instruct", help="Selector LLM model")
+    parser.add_argument(
+        "--gemini",
+        action="store_true",
+        help="Use google.genai.Client() instead of local Ollama",
+    )
+    parser.add_argument("--tonemap-chain", default="")
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+    session = args.session
+
     manifest = run_ingest(
-        SESSION, threads=4, music_offset_s=15.0, music_max_duration_s=15.0
+        session,
+        threads=args.threads,
+        music_offset_s=args.music_offset_s,
+        music_max_duration_s=args.music_max_duration_s,
     )
 
-    slots = slots_from_file(str(SESSION / "music" / "track_cut.wav"))
-    (SESSION / "slots.json").write_text(json.dumps(slots, indent=2, ensure_ascii=False))
+    slots = slots_from_file(str(session / "music" / "track_cut.wav"))
+    (session / "slots.json").write_text(json.dumps(slots, indent=2, ensure_ascii=False))
 
-    detector = yolo_pose_detector(POSE_MODEL)
+    detector = yolo_pose_detector(args.pose_model)
     candidates = run_candidates(
-        SESSION, manifest, slots, detector, pose_model_path=POSE_MODEL
+        session, manifest, slots, detector, pose_model_path=args.pose_model
     )
 
+    client = None if args.gemini else OllamaClient()
     selection, selection_meta = run_selection(
-        SESSION,
+        session,
         candidates,
         slots,
-        config={"model": "qwen3-vl:8b-instruct"},
-        client=OllamaClient(),
+        config={"model": args.model},
+        client=client,
     )
-    0 if selection is None else len(selection["selected"])
-    (SESSION / "selection.json").write_text(
+    (session / "selection.json").write_text(
         json.dumps(selection or {}, indent=2, ensure_ascii=False)
     )
 
     edl = run_planner(
-        SESSION, manifest, candidates, slots, selection, selection_meta, threads=4
+        session, manifest, candidates, slots, selection, selection_meta, threads=args.threads
     )
 
-    render_preview_segments(edl, manifest, SESSION, threads=4, tonemap_chain="")
-    render_segments(edl, manifest, SESSION, threads=4, tonemap_chain="")
-    concat_and_audio(edl, SESSION, threads=4)
+    render_preview_segments(
+        edl, manifest, session, threads=args.threads, tonemap_chain=args.tonemap_chain
+    )
+    render_segments(edl, manifest, session, threads=args.threads, tonemap_chain=args.tonemap_chain)
+    concat_and_audio(edl, session, threads=args.threads)
 
-    results = run_render_checks(edl, SESSION)
-    for _r in results:
-        pass
+    results = run_render_checks(edl, session)
+    for r in results:
+        print(r)
 
 
 if __name__ == "__main__":
