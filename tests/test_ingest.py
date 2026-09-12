@@ -15,13 +15,21 @@ import pytest
 
 from edl_agent.ingest import (
     IngestError,
+    _video_stream,
     build_proxy,
     classify_hdr,
+    ffprobe,
     post_rotation_dims,
     probe_video_source,
 )
 from edl_agent.session import run_ingest
-from edl_agent.verify import D0_MAX, _instant_ok, pick_instants, verify_source
+from edl_agent.verify import (
+    D0_MAX,
+    _frame_seek_time,
+    _instant_ok,
+    pick_instants,
+    verify_source,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -144,6 +152,22 @@ def test_start_time_offset_does_not_break_verification(session_dir) -> None:
     assert ok, results
 
 
+# Real footage (A001_08231329_C001.mov, HEVC) showed verify_source falsely
+# rejecting the near-start instant: libx264's default B-frames force
+# -avoid_negative_ts to shift the whole proxy timeline forward by the
+# reorder delay (~2 frames), so the proxy's video pts started at ~0.066s
+# instead of 0 and every early comparison landed 2 frames off. See #4.4.
+def test_proxy_video_pts_starts_at_zero(session_dir) -> None:
+    clip = session_dir / "inputs" / "a.mp4"
+    _make_clip(clip, w=640, h=360, duration=2)
+    info = probe_video_source(clip)
+
+    proxy = session_dir / "proxies" / "a.mp4"
+    build_proxy(info, proxy)
+    start_time = float(_video_stream(ffprobe(proxy))["start_time"])
+    assert start_time == pytest.approx(0.0, abs=1e-3)
+
+
 @pytest.mark.parametrize("fps", [60, 25])
 def test_fps_variants_verify(session_dir, fps) -> None:
     clip = session_dir / "inputs" / f"fps{fps}.mp4"
@@ -200,6 +224,17 @@ def test_instant_ok_rejects_when_gap_to_best_too_large() -> None:
 
 def test_instant_ok_rejects_when_d0_exceeds_threshold() -> None:
     assert not _instant_ok({-2: 0, -1: 0, 0: D0_MAX + 1, 1: 0, 2: 0})
+
+
+# ffmpeg's `-ss` seeks to the first frame with pts >= the requested time
+# (ceiling), not the nearest one. On real HEVC footage this made
+# verify_source compare against the *next* frame instead of the intended
+# one whenever an instant fell just past a frame boundary (#4.4).
+def test_frame_seek_time_snaps_to_nearest_frame_not_next() -> None:
+    # t sits between frame 439 (pts=14.6333) and 440 (pts=14.6667), closer
+    # to 439 - a raw `-ss t` would ceiling-seek to 440 instead.
+    t = 14.640000300000002
+    assert _frame_seek_time(t, fps=30) == pytest.approx(439 / 30, abs=1e-3)
 
 
 def test_run_ingest_end_to_end(session_dir) -> None:

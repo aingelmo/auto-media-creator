@@ -102,6 +102,16 @@ def classify_hdr(stream: dict) -> str:
     return "none"
 
 
+def _fps(stream: dict) -> float:
+    """Parse a video stream's nominal fps from `avg_frame_rate`."""
+    num, den = (
+        (int(x) for x in stream["avg_frame_rate"].split("/"))
+        if "/" in stream.get("avg_frame_rate", "0/1")
+        else (0, 1)
+    )
+    return round(num / den, 3) if den else 0.0
+
+
 def _vfr(stream: dict) -> bool:
     r = stream.get("r_frame_rate")
     a = stream.get("avg_frame_rate")
@@ -172,12 +182,7 @@ def probe_video_source(path: Path) -> VideoSourceInfo:
         stream.get("start_time", probe["format"].get("start_time", 0.0))
     )
 
-    num, den = (
-        (int(x) for x in stream["avg_frame_rate"].split("/"))
-        if "/" in stream.get("avg_frame_rate", "0/1")
-        else (0, 1)
-    )
-    fps_nominal = round(num / den, 3) if den else 0.0
+    fps_nominal = _fps(stream)
     nb_frames_est = (
         round(duration_s * fps_nominal)
         if fps_nominal

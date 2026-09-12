@@ -60,6 +60,19 @@ def pick_instants(
     return instants[:5]
 
 
+# ffmpeg's `-ss` seeks to the first frame whose pts >= the requested time
+# (ceiling), not the nearest one; on an arbitrary (non-frame-aligned) instant
+# this can grab the *next* frame instead of the intended one. Snapping to the
+# exact pts of the target frame on its own fps grid, minus a tiny epsilon,
+# makes the seek land on that exact frame regardless (see #4.4 investigation).
+_SEEK_EPSILON_S = 1e-3
+
+
+def _frame_seek_time(t: float, fps: float) -> float:
+    """Snap `t` to the pts of its nearest frame on an `fps` grid."""
+    return max(round(t * fps) / fps - _SEEK_EPSILON_S, 0.0)
+
+
 def _extract_frame(cmd_extra: list[str], src: str, t: float, out_path: Path) -> None:
     cmd = [
         "ffmpeg",
@@ -120,11 +133,14 @@ def verify_source(
         `InstantResult`s.
     """
     from .ingest import (  # local import: avoids a cycle in unit tests
+        _fps,
         _video_stream,
         ffprobe,
     )
 
-    duration_s = float(_video_stream(ffprobe(Path(proxy)))["duration"])
+    proxy_stream = _video_stream(ffprobe(Path(proxy)))
+    duration_s = float(proxy_stream["duration"])
+    orig_fps = _fps(_video_stream(ffprobe(Path(original))))
     instants = pick_instants(duration_s, extra_instants_s)
 
     orig_vf = f"{tonemap_chain},scale=256:-2" if tonemap_chain else "scale=256:-2"
@@ -134,15 +150,19 @@ def verify_source(
         tmp_path = Path(tmp)
         for t in instants:
             orig_png = tmp_path / f"orig_{t:.3f}.png"
-            _extract_frame(["-vf", orig_vf], original, t, orig_png)
+            _extract_frame(
+                ["-vf", orig_vf], original, _frame_seek_time(t, orig_fps), orig_png
+            )
             orig_hash = _phash(orig_png)
 
+            proxy_frame = round(t * proxy_fps)
             distances: dict[int, int] = {}
             for k in FRAME_OFFSETS:
                 proxy_png = tmp_path / f"proxy_{t:.3f}_{k}.png"
-                _extract_frame(
-                    ["-vf", "scale=256:-2"], proxy, t + k / proxy_fps, proxy_png
+                proxy_t = _frame_seek_time(
+                    (proxy_frame + k) / proxy_fps, proxy_fps
                 )
+                _extract_frame(["-vf", "scale=256:-2"], proxy, proxy_t, proxy_png)
                 distances[k] = orig_hash - _phash(proxy_png)
 
             results.append(

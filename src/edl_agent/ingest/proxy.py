@@ -79,6 +79,12 @@ def build_proxy(info: VideoSourceInfo, out_path: Path, threads: int = 4) -> Path
         "tv",
         "-c:v",
         "libx264",
+        # No B-frames: with them, libx264's negative initial DTS (from frame
+        # reordering) forces -avoid_negative_ts to shift the whole timeline
+        # forward by the reorder delay, skewing frame 0's PTS off zero and
+        # desyncing proxy timestamps from the original (#4.4 false positives).
+        "-bf",
+        "0",
         "-crf",
         "24",
         "-preset",

@@ -11,6 +11,7 @@ from edl_agent.ingest.manifest import build_manifest, write_manifest
 from edl_agent.ingest.media import cut_music, normalize_image
 from edl_agent.ingest.probe import (
     VideoSourceInfo,
+    _fps,
     _rotation,
     _video_stream,
     classify_hdr,
@@ -25,6 +26,7 @@ __all__ = [
     "TONEMAP_CHAIN_HLG",
     "IngestError",
     "VideoSourceInfo",
+    "_fps",
     "_rotation",
     "_video_stream",
     "build_manifest",
