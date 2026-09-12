@@ -3,6 +3,7 @@
 - Run tests: `uv run pytest`
 - Run a single test file/case: `uv run pytest tests/test_planner.py -k <name>`
 - Lint: `uv run ruff check .`
+- Type-check: `uv run ty check`
 - Run the manual e2e driver over a session dir: `uv run python scripts/run_e2e.py <session_dir>`
   (see its `main()` for expected args; adds `src/` to `sys.path` itself).
 - Local LLM selector testing (avoid Gemini API cost): pass `client=OllamaClient()`
