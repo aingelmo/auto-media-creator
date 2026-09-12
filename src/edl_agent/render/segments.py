@@ -5,8 +5,13 @@ from __future__ import annotations
 import subprocess
 from typing import TYPE_CHECKING
 
-from ._common import COLOR_ARGS, FINAL_TARGET, PREVIEW_TARGET, _video_codec_args
-from .crop import crop_to_px
+from edl_agent.render._common import (
+    COLOR_ARGS,
+    FINAL_TARGET,
+    PREVIEW_TARGET,
+    _video_codec_args,
+)
+from edl_agent.render.crop import crop_to_px
 
 if TYPE_CHECKING:
     from pathlib import Path

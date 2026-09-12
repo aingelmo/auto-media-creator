@@ -15,9 +15,8 @@ from edl_agent.ingest import (
     sha256_file,
     write_manifest,
 )
+from edl_agent.session._common import IMAGE_EXTS, VIDEO_EXTS
 from edl_agent.verify import verify_source
-
-from ._common import IMAGE_EXTS, VIDEO_EXTS
 
 
 def run_ingest(

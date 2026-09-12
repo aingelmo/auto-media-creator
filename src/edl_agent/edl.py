@@ -9,9 +9,9 @@ from __future__ import annotations
 import hashlib
 import json
 
-from .planner import DEFAULT_CONFIG, build_clips
-from .render import get_render_profile
-from .selection import build_selected
+from edl_agent.planner import DEFAULT_CONFIG, build_clips
+from edl_agent.render import get_render_profile
+from edl_agent.selection import build_selected
 
 VERSION = 4
 

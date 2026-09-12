@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._common import ROLES, _admits, _slot_indices
+from edl_agent.selection._common import ROLES, _admits, _slot_indices
 
 
 def apply_s_checks(

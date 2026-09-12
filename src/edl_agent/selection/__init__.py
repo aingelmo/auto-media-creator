@@ -9,8 +9,8 @@ fallback.
 
 from __future__ import annotations
 
-from .pipeline import build_selected
-from .s_checks import apply_s_checks
+from edl_agent.selection.pipeline import build_selected
+from edl_agent.selection.s_checks import apply_s_checks
 
 __all__ = [
     "apply_s_checks",

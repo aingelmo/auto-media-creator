@@ -9,8 +9,8 @@ retries on `status: "incomplete"` (#5.6). Saves each attempt as
 
 from __future__ import annotations
 
-from .pipeline import select
-from .prompts import admissible_candidates, build_parts
+from edl_agent.selector.pipeline import select
+from edl_agent.selector.prompts import admissible_candidates, build_parts
 
 __all__ = [
     "admissible_candidates",

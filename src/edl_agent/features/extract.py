@@ -5,7 +5,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from ._common import (
+from edl_agent.features._common import (
     BBOX_EMA_ALPHA,
     MULTI_SUBJECT_AREA_THRESHOLD,
     SAMPLE_STRIDE,
@@ -13,8 +13,8 @@ from ._common import (
     _area,
     features_config_sha256,
 )
-from .series import motion_series, normalize_p5_95, sharpness_series
-from .tracking import principal_track, track_iou, track_kp_speeds
+from edl_agent.features.series import motion_series, normalize_p5_95, sharpness_series
+from edl_agent.features.tracking import principal_track, track_iou, track_kp_speeds
 
 
 def _read_samples(path: str, stride: int) -> list[np.ndarray]:

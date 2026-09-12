@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ._common import (
+from edl_agent.features._common import (
     ACTION_KEYPOINTS,
     IOU_MATCH_THRESHOLD,
     KP_SPEED_EMA_ALPHA,

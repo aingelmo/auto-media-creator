@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._common import (
+from edl_agent.selection._common import (
     FALLBACK_HOOK_MOTION_BG_MAX,
     FALLBACK_HOOK_SHARPNESS_MIN,
     _admits,

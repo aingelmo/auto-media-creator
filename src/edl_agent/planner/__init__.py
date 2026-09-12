@@ -7,18 +7,18 @@ See docs/architecture/arquitectura_edl_agent_v4.md #6. The LLM decides
 
 from __future__ import annotations
 
-from ._common import DEFAULT_CONFIG, FPS, PlannerError, admits
-from .assignment import (
+from edl_agent.planner._common import DEFAULT_CONFIG, FPS, PlannerError, admits
+from edl_agent.planner.assignment import (
     Assignment,
     arc_order,
     assign_slots,
     place_develop_arc,
     select_develop,
 )
-from .crop import compute_crop
-from .effects import effect_for
-from .pipeline import build_clips
-from .timing import compute_in_out
+from edl_agent.planner.crop import compute_crop
+from edl_agent.planner.effects import effect_for
+from edl_agent.planner.pipeline import build_clips
+from edl_agent.planner.timing import compute_in_out
 
 __all__ = [
     "DEFAULT_CONFIG",

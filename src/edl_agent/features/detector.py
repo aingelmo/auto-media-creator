@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from ._common import Detection, Detector
+from edl_agent.features._common import Detection, Detector
 
 
 def yolo_pose_detector(model_path: str = "yolov8n-pose.pt") -> Detector:

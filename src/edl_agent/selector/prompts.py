@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
-from ._common import EXERCISES
+from edl_agent.selector._common import EXERCISES
 
 SYSTEM_PROMPT = """Eres un editor de vídeo profesional especializado en Reels \
 verticales (9:16) de gimnasio.

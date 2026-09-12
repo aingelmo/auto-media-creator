@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._common import FPS
+from edl_agent.candidates._common import FPS
 
 
 def admits_slots(

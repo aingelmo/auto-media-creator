@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from typing import TYPE_CHECKING
 
-from ._common import PEAK_FRAME_OFFSETS_S, PEAK_FRAME_SIDE_PX
+from edl_agent.candidates._common import PEAK_FRAME_OFFSETS_S, PEAK_FRAME_SIDE_PX
 
 if TYPE_CHECKING:
     from pathlib import Path

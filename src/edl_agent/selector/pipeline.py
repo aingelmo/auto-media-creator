@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ._common import DEFAULTS
-from .client import _sdk_version, _usage_dict
-from .pricing import _cost_usd
-from .prompts import (
+from edl_agent.selector._common import DEFAULTS
+from edl_agent.selector.client import _sdk_version, _usage_dict
+from edl_agent.selector.pricing import _cost_usd
+from edl_agent.selector.prompts import (
     REINFORCED_SUFFIX,
     SYSTEM_PROMPT,
     admissible_candidates,

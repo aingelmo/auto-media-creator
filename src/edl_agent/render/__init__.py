@@ -5,8 +5,13 @@ See docs/architecture/arquitectura_edl_agent_v4.md #9, #10.
 
 from __future__ import annotations
 
-from ._common import COLOR_ARGS, FINAL_TARGET, PREVIEW_TARGET, RenderError
-from .checks import (
+from edl_agent.render._common import (
+    COLOR_ARGS,
+    FINAL_TARGET,
+    PREVIEW_TARGET,
+    RenderError,
+)
+from edl_agent.render.checks import (
     CheckResult,
     check_r1_frame_count,
     check_r2_phash,
@@ -16,11 +21,11 @@ from .checks import (
     check_r6_monotonic_dts,
     run_render_checks,
 )
-from .concat import concat_and_audio
-from .crop import crop_to_px, is_916
-from .pipeline import run_render
-from .profile import get_render_profile
-from .segments import (
+from edl_agent.render.concat import concat_and_audio
+from edl_agent.render.crop import crop_to_px, is_916
+from edl_agent.render.pipeline import run_render
+from edl_agent.render.profile import get_render_profile
+from edl_agent.render.segments import (
     render_image_segment,
     render_preview_segments,
     render_segment,

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import itertools
 
-from ._common import FPS, PlannerError
+from edl_agent.planner._common import FPS, PlannerError
 
 
 def assert_invariants(

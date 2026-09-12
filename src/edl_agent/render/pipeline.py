@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ._common import RenderError
-from .checks import CheckResult, run_render_checks
-from .concat import concat_and_audio
-from .segments import render_preview_segments, render_segments
+from edl_agent.render._common import RenderError
+from edl_agent.render.checks import CheckResult, run_render_checks
+from edl_agent.render.concat import concat_and_audio
+from edl_agent.render.segments import render_preview_segments, render_segments
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -7,14 +7,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from edl_agent.planner._common import DEFAULT_CONFIG, FPS
+from edl_agent.planner.assignment import assign_slots
+from edl_agent.planner.crop import compute_crop
+from edl_agent.planner.effects import effect_for
+from edl_agent.planner.invariants import assert_invariants
+from edl_agent.planner.timing import compute_in_out
 from edl_agent.render import crop_to_px
-
-from ._common import DEFAULT_CONFIG, FPS
-from .assignment import assign_slots
-from .crop import compute_crop
-from .effects import effect_for
-from .invariants import assert_invariants
-from .timing import compute_in_out
 
 
 def build_clips(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._common import (
+from edl_agent.candidates._common import (
     CALM_CENTER_X_TOL,
     CALM_CENTER_Y_TOL,
     CALM_KP_SPEED_MAX,

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .calm import find_calm_windows
-from .frames import build_contact_sheet, extract_peak_frames
-from .peaks import find_peak_windows
-from .scoring import admits_slots, score_cv
+from edl_agent.candidates.calm import find_calm_windows
+from edl_agent.candidates.frames import build_contact_sheet, extract_peak_frames
+from edl_agent.candidates.peaks import find_peak_windows
+from edl_agent.candidates.scoring import admits_slots, score_cv
 
 if TYPE_CHECKING:
     from pathlib import Path

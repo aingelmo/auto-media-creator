@@ -6,10 +6,10 @@ See docs/architecture/arquitectura_edl_agent_v4.md #3.
 
 from __future__ import annotations
 
-from ._common import TARGET, IngestError, sha256_file
-from .manifest import build_manifest, write_manifest
-from .media import cut_music, normalize_image
-from .probe import (
+from edl_agent.ingest._common import TARGET, IngestError, sha256_file
+from edl_agent.ingest.manifest import build_manifest, write_manifest
+from edl_agent.ingest.media import cut_music, normalize_image
+from edl_agent.ingest.probe import (
     VideoSourceInfo,
     _rotation,
     _video_stream,
@@ -18,7 +18,7 @@ from .probe import (
     post_rotation_dims,
     probe_video_source,
 )
-from .proxy import TONEMAP_CHAIN_HLG, build_proxy
+from edl_agent.ingest.proxy import TONEMAP_CHAIN_HLG, build_proxy
 
 __all__ = [
     "TARGET",

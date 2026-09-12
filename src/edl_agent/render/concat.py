@@ -7,7 +7,7 @@ import re
 import subprocess
 from typing import TYPE_CHECKING
 
-from ._common import RenderError
+from edl_agent.render._common import RenderError
 
 if TYPE_CHECKING:
     from pathlib import Path

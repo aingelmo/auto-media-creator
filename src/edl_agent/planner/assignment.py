@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ._common import DEFAULT_CONFIG, PlannerError, admits
-from .timing import compute_in_out
+from edl_agent.planner._common import DEFAULT_CONFIG, PlannerError, admits
+from edl_agent.planner.timing import compute_in_out
 
 
 def _norm_exercise(exercise: str) -> str:

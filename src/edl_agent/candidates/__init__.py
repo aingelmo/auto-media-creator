@@ -7,12 +7,12 @@ planner and the LLM selector consume.
 
 from __future__ import annotations
 
-from ._common import FPS, edge_margin_s
-from .build import build_image_candidate, build_video_candidates
-from .calm import find_calm_windows
-from .frames import build_contact_sheet, extract_peak_frames
-from .peaks import find_peak_windows
-from .scoring import admits_slots, score_cv
+from edl_agent.candidates._common import FPS, edge_margin_s
+from edl_agent.candidates.build import build_image_candidate, build_video_candidates
+from edl_agent.candidates.calm import find_calm_windows
+from edl_agent.candidates.frames import build_contact_sheet, extract_peak_frames
+from edl_agent.candidates.peaks import find_peak_windows
+from edl_agent.candidates.scoring import admits_slots, score_cv
 
 __all__ = [
     "FPS",

@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ._common import IngestError, sha256_file
+from edl_agent.ingest._common import IngestError, sha256_file
 
 if TYPE_CHECKING:
     from pathlib import Path

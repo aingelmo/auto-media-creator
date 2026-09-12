@@ -14,7 +14,7 @@ pass per candidate.
 
 from __future__ import annotations
 
-from ._common import (
+from edl_agent.features._common import (
     ACTION_KEYPOINTS,
     FEATURES_CONFIG,
     Detection,
@@ -22,12 +22,12 @@ from ._common import (
     Track,
     features_config_sha256,
 )
-from .detector import yolo_pose_detector
-from .extract import extract_features
-from .io import load_features, save_features
-from .scenes import detect_scene_cuts
-from .series import normalize_p5_95 as _normalize_p5_95
-from .tracking import iou, track_iou
+from edl_agent.features.detector import yolo_pose_detector
+from edl_agent.features.extract import extract_features
+from edl_agent.features.io import load_features, save_features
+from edl_agent.features.scenes import detect_scene_cuts
+from edl_agent.features.series import normalize_p5_95 as _normalize_p5_95
+from edl_agent.features.tracking import iou, track_iou
 
 __all__ = [
     "ACTION_KEYPOINTS",

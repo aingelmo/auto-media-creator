@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ._common import _slot_indices
-from .fallback import fallback_close, fallback_develop, fallback_hook
-from .s_checks import apply_s_checks
+from edl_agent.selection._common import _slot_indices
+from edl_agent.selection.fallback import fallback_close, fallback_develop, fallback_hook
+from edl_agent.selection.s_checks import apply_s_checks
 
 
 def _preempt_develop(

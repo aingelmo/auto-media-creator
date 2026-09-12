@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from typing import TYPE_CHECKING
 
-from ._common import IngestError
+from edl_agent.ingest._common import IngestError
 
 if TYPE_CHECKING:
     from pathlib import Path

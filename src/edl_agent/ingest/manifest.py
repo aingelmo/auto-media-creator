@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from ._common import TARGET
+from edl_agent.ingest._common import TARGET
 
 if TYPE_CHECKING:
     from pathlib import Path

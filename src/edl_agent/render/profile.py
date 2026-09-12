@@ -6,7 +6,7 @@ import hashlib
 import json
 import subprocess
 
-from ._common import _video_codec_args
+from edl_agent.render._common import _video_codec_args
 
 
 def _dpkg_version(package_prefix: str) -> str | None:

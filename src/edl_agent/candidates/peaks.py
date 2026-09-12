@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.signal import find_peaks
 
-from ._common import (
+from edl_agent.candidates._common import (
     PEAK_MIN_DISTANCE_SAMPLES,
     PEAK_MIN_PROMINENCE,
     PEAK_MOTION_BG_MAX,
