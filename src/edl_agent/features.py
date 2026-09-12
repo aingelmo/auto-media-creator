@@ -13,8 +13,8 @@ da el mismo resultado y evita una segunda pasada de tracking por candidato.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 import cv2
 import numpy as np
@@ -76,7 +76,8 @@ def iou(a: tuple[float, float, float, float], b: tuple[float, float, float, floa
 def track_iou(detections_per_sample: list[list[Detection]]) -> list[Track]:
     """Tracker greedy por IoU (#4.2): asigna cada deteccion al track activo mas
     solapado (>= IOU_MATCH_THRESHOLD); un track sobrevive hasta
-    TRACK_MISS_TOLERANCE muestras sin match."""
+    TRACK_MISS_TOLERANCE muestras sin match.
+    """
     tracks: list[Track] = []
     active: dict[int, Track] = {}
     misses: dict[int, int] = {}
@@ -111,7 +112,8 @@ def track_iou(detections_per_sample: list[list[Detection]]) -> list[Track]:
 
 def _track_kp_speeds(tracks: list[Track]) -> dict[int, dict[int, float]]:
     """Velocidad EMA de ACTION_KEYPOINTS por track, normalizada por altura de
-    bbox e independiente de huecos de tracking (#4.2)."""
+    bbox e independiente de huecos de tracking (#4.2).
+    """
     result: dict[int, dict[int, float]] = {}
     for tr in tracks:
         idxs = sorted(tr.samples)
@@ -181,7 +183,8 @@ def _sharpness_series(frames: list[np.ndarray], subject_bbox: list[tuple | None]
                        subject_visible: list[bool]) -> np.ndarray:
     """Varianza del Laplaciano dentro del bbox del sujeto (#4.2); sin sujeto
     visible se usa el frame completo (fallback razonable, no afecta al filtro
-    de candidatos porque subject_visible ya descarta esos instantes)."""
+    de candidatos porque subject_visible ya descarta esos instantes).
+    """
     out = np.zeros(len(frames))
     for i, frame in enumerate(frames):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -215,7 +218,8 @@ def _read_samples(path: str, stride: int) -> list[np.ndarray]:
 def extract_features(proxy_path: str, detector: Detector, stride: int = SAMPLE_STRIDE,
                       source_fps: float = 30.0) -> dict:
     """Orquesta #4.2 sobre un proxy ya generado. `detector` aisla el modelo de
-    pose para poder testear el resto de la logica sin YOLO real."""
+    pose para poder testear el resto de la logica sin YOLO real.
+    """
     frames = _read_samples(proxy_path, stride)
     if not frames:
         raise RuntimeError(f"no frames read from {proxy_path}")
@@ -277,7 +281,8 @@ def detect_scene_cuts(proxy_path: str) -> list[float]:
 
 def yolo_pose_detector(model_path: str = "yolov8n-pose.pt") -> Detector:
     """Detector real (#4.2): ultralytics YOLOv8-pose. Import perezoso para que
-    el resto del modulo no dependa de torch/ultralytics en tests unitarios."""
+    el resto del modulo no dependa de torch/ultralytics en tests unitarios.
+    """
     from ultralytics import YOLO
 
     model = YOLO(model_path)

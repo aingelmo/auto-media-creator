@@ -10,8 +10,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageOps
 import pillow_heif
+from PIL import Image, ImageOps
 
 pillow_heif.register_heif_opener()
 
@@ -82,7 +82,7 @@ def classify_hdr(stream: dict) -> str:
     if is_10bit and transfer in (None, "unknown", ""):
         raise IngestError(
             "10-bit source without color_transfer: refusing to assume SDR "
-            f"(stream={stream.get('index')})"
+            f"(stream={stream.get('index')})",
         )
     return "none"
 
@@ -154,7 +154,7 @@ def probe_video_source(path: Path) -> VideoSourceInfo:
 def build_proxy(info: VideoSourceInfo, out_path: Path, threads: int = 4) -> Path:
     """#3.2. HDR (hlg/dv84) pasa por zscale+tonemap; el resto (none/pq no soportado aun) va directo."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    scale = "scale='if(gt(iw,ih),-2,{s})':'if(gt(iw,ih),{s},-2)'".format(s=PROXY_SHORT_SIDE)
+    scale = f"scale='if(gt(iw,ih),-2,{PROXY_SHORT_SIDE})':'if(gt(iw,ih),{PROXY_SHORT_SIDE},-2)'"
 
     if info.hdr in ("hlg", "dv84"):
         vf = f"fps=30,setpts=PTS-STARTPTS,{TONEMAP_CHAIN_HLG},format=yuv420p,{scale}"

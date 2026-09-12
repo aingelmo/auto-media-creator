@@ -9,8 +9,15 @@ from .candidates import build_image_candidate, build_video_candidates
 from .edl import build_edl
 from .features import Detector, detect_scene_cuts, extract_features, save_features
 from .ingest import (
-    TONEMAP_CHAIN_HLG, IngestError, build_manifest, build_proxy, cut_music,
-    normalize_image, probe_video_source, sha256_file, write_manifest,
+    TONEMAP_CHAIN_HLG,
+    IngestError,
+    build_manifest,
+    build_proxy,
+    cut_music,
+    normalize_image,
+    probe_video_source,
+    sha256_file,
+    write_manifest,
 )
 from .selector import select as selector_select
 from .slots import FRAME_RATE
@@ -48,7 +55,7 @@ def run_ingest(
             if not verified:
                 raise IngestError(
                     f"proxy/original temporal mismatch for {path}: "
-                    f"{[(r.t_s, r.distances) for r in results]}"
+                    f"{[(r.t_s, r.distances) for r in results]}",
                 )
 
             entry = {
@@ -104,7 +111,7 @@ def run_candidates(
     slots_list = slots["slots"]
 
     manifest_sha256 = hashlib.sha256(
-        json.dumps(manifest, sort_keys=True, ensure_ascii=False).encode()
+        json.dumps(manifest, sort_keys=True, ensure_ascii=False).encode(),
     ).hexdigest()
     pose_model_sha256 = sha256_file(Path(pose_model_path)) if pose_model_path else ""
 
@@ -117,7 +124,7 @@ def run_candidates(
         if src_info["type"] == "image":
             image_path = session_dir / src_info.get("normalized", src)
             candidates.append(
-                build_image_candidate(src, f"c{next_id:02d}", slots_list, str(image_path))
+                build_image_candidate(src, f"c{next_id:02d}", slots_list, str(image_path)),
             )
             next_id += 1
             continue
@@ -156,7 +163,8 @@ def run_selection(
 ) -> tuple[dict | None, dict]:
     """#5: llama a Capa 3 con un client real. Por defecto google-genai (API key via env
     GEMINI_API_KEY/GOOGLE_API_KEY); pasa `client=OllamaClient()` (ollama_client.py) para
-    probar en local antes de gastar en Gemini."""
+    probar en local antes de gastar en Gemini.
+    """
     if client is None:
         from google import genai
         client = genai.Client()

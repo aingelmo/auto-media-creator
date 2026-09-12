@@ -157,7 +157,7 @@ def _usage_dict(usage) -> dict | None:
 
 def _sdk_version() -> str | None:
     try:
-        import google.genai as genai
+        from google import genai
         return genai.__version__
     except ImportError:
         return None
@@ -170,7 +170,8 @@ def select(
     """#5.1+#5.6: llama al selector LLM con reintentos, guarda cada intento
     y devuelve (selection, selection_meta) para `session.run_planner`.
     `selection` es `None` si se agotan los reintentos sin un intento completo
-    (queda todo el rol en manos del fallback de reglas, #8.6)."""
+    (queda todo el rol en manos del fallback de reglas, #8.6).
+    """
     config = {**DEFAULTS, **(config or {})}
     session_dir = Path(session_dir)
 

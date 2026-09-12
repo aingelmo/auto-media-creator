@@ -8,7 +8,13 @@ import numpy as np
 import pytest
 
 from edl_agent.features import (
-    Detection, extract_features, load_features, save_features, track_iou, iou, _normalize_p5_95,
+    Detection,
+    _normalize_p5_95,
+    extract_features,
+    iou,
+    load_features,
+    save_features,
+    track_iou,
 )
 
 

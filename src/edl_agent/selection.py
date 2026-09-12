@@ -35,7 +35,8 @@ def apply_s_checks(
 ) -> tuple[list[dict], list[str]]:
     """S2-S5. S1 (status incomplete) se resuelve fuera de esta funcion (cosa
     del llamador del LLM); los huecos por rol que deje S5 los cubre el
-    fallback en `build_selected`."""
+    fallback en `build_selected`.
+    """
     warnings: list[str] = []
     seen: set[str] = set()
     cleaned: list[dict] = []
@@ -164,7 +165,8 @@ def _preempt_develop(cleaned: list[dict], candidate_id: str, warnings: list[str]
     """Un candidato ya asignado a develop pasa a `role` (hook/close): develop
     tiene mas slack (N slots, mas candidatos tipicamente) que hook/close
     (obligatorios, 1 slot). El hueco que deja se rellena luego con
-    `fallback_develop` sobre el pool restante."""
+    `fallback_develop` sobre el pool restante.
+    """
     warnings.append(f"{role}_preempted_develop:{candidate_id}")
     return [e for e in cleaned if not (e["role"] == "develop" and e["candidate_id"] == candidate_id)]
 

@@ -13,7 +13,11 @@ from pathlib import Path
 import pytest
 
 from edl_agent.ingest import (
-    IngestError, build_proxy, classify_hdr, post_rotation_dims, probe_video_source,
+    IngestError,
+    build_proxy,
+    classify_hdr,
+    post_rotation_dims,
+    probe_video_source,
 )
 from edl_agent.session import run_ingest
 from edl_agent.verify import D0_MAX, _instant_ok, pick_instants, verify_source

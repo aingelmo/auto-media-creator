@@ -1,13 +1,20 @@
 """#6 Planner determinista. Property tests P1-P9 (#8.2) sobre candidatos
-sinteticos, con fuentes de varios aspect ratios (16:9, 4:3, 9:16, 9:19.5, 1:1)."""
+sinteticos, con fuentes de varios aspect ratios (16:9, 4:3, 9:16, 9:19.5, 1:1).
+"""
 from __future__ import annotations
 
 import random
 
 import pytest
 
-from edl_agent.planner import DEFAULT_CONFIG, PlannerError, admits, arc_order, build_clips, compute_in_out
-from edl_agent.slots import build_slots
+from edl_agent.planner import (
+    DEFAULT_CONFIG,
+    PlannerError,
+    admits,
+    arc_order,
+    build_clips,
+    compute_in_out,
+)
 
 FPS = 30
 
@@ -114,8 +121,8 @@ def test_planner_invariants(aspect_name, w, h, n_develop):
         assert 0 <= crop["x"] <= 1 and 0 <= crop["y"] <= 1
         assert 0 < crop["w"] <= 1 and 0 < crop["h"] <= 1
         px = c["crop_px"]
-        assert 0 <= px["x"] and px["x"] + px["w"] <= c["src_w"]
-        assert 0 <= px["y"] and px["y"] + px["h"] <= c["src_h"]
+        assert px["x"] >= 0 and px["x"] + px["w"] <= c["src_w"]
+        assert px["y"] >= 0 and px["y"] + px["h"] <= c["src_h"]
         assert px["w"] % 2 == 0 and px["h"] % 2 == 0
         if c["layout"] == "crop":
             assert abs(px["w"] / px["h"] - 9 / 16) * px["h"] <= 2

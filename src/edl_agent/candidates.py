@@ -71,7 +71,8 @@ def _peak_window(features: dict, i: int, scene_cuts_s: list[float]) -> list[floa
     perdida de sujeto es un limite real y corta de inmediato; una racha corta
     de sharpness baja (motion blur del propio movimiento explosivo que hace
     el pico) se tolera sin cortar, pero el limite de la ventana no pasa del
-    ultimo frame nitido."""
+    ultimo frame nitido.
+    """
     t_s = features["t_s"]
     sharpness = features["sharpness"]
     subject_visible = features["subject_visible"]
@@ -147,7 +148,8 @@ def find_calm_windows(features: dict) -> list[dict]:
 
 def admits_slots(window: tuple[float, float], slots: list[dict], speed: float = 1.0, fps: int = FPS) -> list[int]:
     """#4.3 `admits_slots`: mismo calculo que #6.1, precalculado para no
-    enviar al LLM candidatos que no caben en ningun slot."""
+    enviar al LLM candidatos que no caben en ningun slot.
+    """
     out = []
     for s in slots:
         d_f = s["end_f"] - s["start_f"]
@@ -171,7 +173,7 @@ def extract_peak_frames(proxy_path: str, t_peak: float, window: tuple[float, flo
     from .ingest import sha256_file
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    scale = "scale='if(gt(iw,ih),{s},-2)':'if(gt(iw,ih),-2,{s})'".format(s=PEAK_FRAME_SIDE_PX)
+    scale = f"scale='if(gt(iw,ih),{PEAK_FRAME_SIDE_PX},-2)':'if(gt(iw,ih),-2,{PEAK_FRAME_SIDE_PX})'"
     paths, hashes = [], []
     for i, off in enumerate(PEAK_FRAME_OFFSETS_S):
         t = min(max(t_peak + off, window[0]), window[1])
@@ -209,7 +211,8 @@ def build_video_candidates(
     speed: float = 1.0,
 ) -> list[dict]:
     """Ensambla los candidatos `peak`+`calm` de una fuente de video (#4.3).
-    Ids globales `c{NN}` a partir de `id_start`."""
+    Ids globales `c{NN}` a partir de `id_start`.
+    """
     windows = find_peak_windows(features, clip_duration_s, scene_cuts_s) + find_calm_windows(features)
     out = []
     for n, w in enumerate(windows):

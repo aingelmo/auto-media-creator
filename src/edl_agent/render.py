@@ -81,7 +81,7 @@ def get_render_profile(threads: int = 4, tonemap_chain: str = "", tonemap_chain_
         "audio_codec_args": " ".join(["-c:a", "aac", "-b:a", "192k", "-ar", "48000"]),
     }
     profile["profile_sha256"] = hashlib.sha256(
-        json.dumps(profile, sort_keys=True).encode()
+        json.dumps(profile, sort_keys=True).encode(),
     ).hexdigest()
     return profile
 
@@ -264,7 +264,7 @@ def render_preview_segments(
 
 
 def _proxy_wh(proxy_path: Path) -> tuple[int, int]:
-    from .ingest import ffprobe, _video_stream
+    from .ingest import _video_stream, ffprobe
 
     stream = _video_stream(ffprobe(proxy_path))
     return int(stream["width"]), int(stream["height"])
@@ -289,7 +289,7 @@ def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
     duration_s = edl["target"]["duration_f"] / 30
     segments_txt = session_dir / "segments.txt"
     segments_txt.write_text(
-        "".join(f"file 'segments/seg_{c['slot']:02d}.mp4'\n" for c in edl["clips"])
+        "".join(f"file 'segments/seg_{c['slot']:02d}.mp4'\n" for c in edl["clips"]),
     )
     reel_path = session_dir / "reel.mp4"
 
@@ -309,7 +309,7 @@ def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
         "-f", "null", "-",
     ]
     measured = _parse_loudnorm_json(
-        subprocess.run(measure_cmd, capture_output=True, text=True).stderr
+        subprocess.run(measure_cmd, capture_output=True, text=True).stderr,
     )
     audio["loudnorm_measured"] = measured
 

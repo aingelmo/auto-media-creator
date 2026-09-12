@@ -4,8 +4,12 @@ from __future__ import annotations
 import pytest
 
 from edl_agent.candidates import (
-    admits_slots, build_image_candidate, edge_margin_s, find_calm_windows,
-    find_peak_windows, score_cv,
+    admits_slots,
+    build_image_candidate,
+    edge_margin_s,
+    find_calm_windows,
+    find_peak_windows,
+    score_cv,
 )
 
 

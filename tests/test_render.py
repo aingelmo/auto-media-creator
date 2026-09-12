@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from edl_agent.ingest import build_proxy, probe_video_source, sha256_file
-from edl_agent.render import RenderError, crop_to_px, is_916, run_render
+from edl_agent.render import crop_to_px, is_916, run_render
 
 
 def _make_clip(path: Path, *, w=360, h=640, fps=30, duration=3):

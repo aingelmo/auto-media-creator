@@ -41,7 +41,8 @@ _RELAXED_LOW_MATERIAL = ("relaxed_4", "relaxed_5")
 
 def _aggregate_warnings(clips: list[dict], warnings: list[str]) -> list[str]:
     """#8.3 W1-W5: checks compuestos sobre el conjunto de clips, no bloquean
-    pero obligan a revisar el preview."""
+    pero obligan a revisar el preview.
+    """
     agg: list[str] = []
 
     cropped = sum(1 for c in clips if c["subject_cropped"])

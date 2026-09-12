@@ -77,7 +77,8 @@ def select_develop(
     used: list[dict], config: dict,
 ) -> list[dict]:
     """#6.2.3. Devuelve la lista de entradas `selected` tomadas para develop,
-    en orden de rank (r1 = mejor). El orden temporal final lo decide #6.2.4."""
+    en orden de rank (r1 = mejor). El orden temporal final lo decide #6.2.4.
+    """
     k = len(develop_slots)
     free_durations = [s["end_f"] - s["start_f"] for s in develop_slots]
     pool = sorted(
@@ -112,7 +113,8 @@ def select_develop(
 
 def arc_order(k: int) -> list[int]:
     """#6.2.4. Devuelve, para cada slot develop s1..sk (0-indexado), el rank
-    (1-indexado) del candidato que le corresponde."""
+    (1-indexado) del candidato que le corresponde.
+    """
     evens = list(range(2, k + 1, 2))
     odds = list(range(1, k + 1, 2))
     return evens + odds[::-1]
@@ -210,7 +212,7 @@ def assign_slots(slots: list[dict], selected: list[dict], candidates_by_id: dict
     if len(taken) < len(develop_slots):
         raise PlannerError(
             f"not enough develop candidates ({len(taken)}/{len(develop_slots)}); "
-            "fallback de reglas fuera de alcance de este modulo"
+            "fallback de reglas fuera de alcance de este modulo",
         )
 
     placement, arc_fallback = place_develop_arc(taken, hook, close, candidates_by_id)
@@ -267,8 +269,9 @@ def compute_in_out(candidate: dict, slot: dict, role: str, speed: float, config:
 # --------------------------------------------------------------------------
 
 def compute_crop(bbox: tuple[float, float, float, float], w: int, h: int, config: dict) -> dict:
-    """bbox = (x0,y0,x1,y1) normalizado, mediana en [in_s,out_s]. Devuelve
-    crop normalizado + layout + warnings (#6.4)."""
+    """Bbox = (x0,y0,x1,y1) normalizado, mediana en [in_s,out_s]. Devuelve
+    crop normalizado + layout + warnings (#6.4).
+    """
     warnings: list[str] = []
 
     if is_916(w, h):
@@ -352,8 +355,8 @@ def _assert_invariants(
         if not (0 <= crop["x"] <= 1 and 0 <= crop["y"] <= 1 and 0 < crop["w"] <= 1 and 0 < crop["h"] <= 1):
             raise PlannerError(f"P8: crop fuera de [0,1] en slot {c['slot']}")
         px = c["crop_px"]
-        if not (0 <= px["x"] and px["x"] + px["w"] <= c["src_w"]
-                and 0 <= px["y"] and px["y"] + px["h"] <= c["src_h"]):
+        if not (px["x"] >= 0 and px["x"] + px["w"] <= c["src_w"]
+                and px["y"] >= 0 and px["y"] + px["h"] <= c["src_h"]):
             raise PlannerError(f"P8: crop_px fuera de W x H en slot {c['slot']}")
         if px["w"] % 2 != 0 or px["h"] % 2 != 0:
             raise PlannerError(f"P8: crop_px impar en slot {c['slot']}")

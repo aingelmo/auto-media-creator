@@ -71,7 +71,10 @@ def verify_source(
     extra_instants_s: list[float] | None = None,
     proxy_fps: int = 30,
 ) -> tuple[bool, list[InstantResult]]:
-    from .ingest import ffprobe, _video_stream  # local import: evita ciclo en tests unitarios
+    from .ingest import (  # local import: evita ciclo en tests unitarios
+        _video_stream,
+        ffprobe,
+    )
 
     duration_s = float(_video_stream(ffprobe(Path(proxy)))["duration"])
     instants = pick_instants(duration_s, extra_instants_s)

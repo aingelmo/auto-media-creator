@@ -4,7 +4,8 @@ tocarlo y sin gastar en Gemini durante las primeras pruebas de vision (#5).
 
 Solo para uso manual/pruebas: no aplica pricing (#11 no cubre modelos Ollama,
 `_cost_usd` ya devuelve 0.0 para modelos fuera de PRICING_PER_MTOK) y no hay
-"thinking_level" equivalente (se ignora)."""
+"thinking_level" equivalente (se ignora).
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
