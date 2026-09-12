@@ -1,4 +1,30 @@
-# Docstrings
+# AGENTS.md
+
+## Project
+
+`edl-agent`: builds an EDL (edit decision list) for automated video montage —
+ingest → candidate selection → planning (LLM-assisted) → render, plus proxy
+verification. Full design spec: `docs/architecture/arquitectura_edl_agent_v4.md`
+(Spanish; section numbers like `#4.3` referenced throughout the code).
+
+## Setup / commands
+
+- Package manager: `uv` (not pip/poetry). Install: `uv sync`.
+- Run: `uv run python scripts/run_e2e.py ...` or `uv run python -m edl_agent...`.
+- Checks (all must pass before considering a task done):
+  `uv run ruff check .`, `uv run ty check`, `uv run pytest -q`.
+
+## Structure
+
+- `src/edl_agent/` — library code, one subpackage per pipeline stage:
+  `ingest/`, `features/`, `candidates/`, `selection/`, `selector/`,
+  `planner/`, `render/`, `session/`, plus top-level `edl.py`, `slots.py`,
+  `verify.py`, `ollama_client.py`.
+- `scripts/` — CLI entry points (e.g. `run_e2e.py`).
+- `tests/` — mirrors `src/edl_agent/` layout, one `test_*.py` per module.
+- `docs/architecture/` — spec documents referenced by docstrings/comments.
+
+## Docstrings
 
 `src/edl_agent/` is AI-only — no humans read it — so optimize docstrings for
 AI comprehension, not brevity. `tests/**` and `scripts/**` are exempt (see
@@ -25,10 +51,7 @@ fields) stays in Spanish — it's sent to the model, not documentation.
 
 Keep lines ≤88 chars (ruff `E501`).
 
-When done: `uv run ruff check .`, `uv run ty check`, `uv run pytest -q` —
-all must pass.
-
-# File size
+## File size
 
 - Aim for ~150–200 lines of code (excluding docstrings/blanks) per file, one
   responsibility/spec-section each. Verbose docstrings can push total length
