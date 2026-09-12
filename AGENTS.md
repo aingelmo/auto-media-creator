@@ -27,3 +27,12 @@ Keep lines ≤88 chars (ruff `E501`).
 
 When done: `uv run ruff check .`, `uv run ty check`, `uv run pytest -q` —
 all must pass.
+
+# File size
+
+- Aim for ~150–200 lines of code (excluding docstrings/blanks) per file, one
+  responsibility/spec-section each. Verbose docstrings can push total length
+  well past that — don't count against the limit.
+- Split trigger: file covers more than one spec section, or has more than
+  4–5 public functions, not raw line count.
+- Exempt: `tests/**`, `scripts/**`, fixtures/data tables.

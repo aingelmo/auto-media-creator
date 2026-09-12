@@ -1,0 +1,94 @@
+"""render_profile (#7, #10): everything needed to re-render bit-for-bit."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import subprocess
+
+from ._common import _video_codec_args
+
+
+def _dpkg_version(package_prefix: str) -> str | None:
+    # ponytail: only covers Debian/Ubuntu (dpkg-query); on other distros
+    # returns None and zimg_version/libx264_version stay unverified.
+    try:
+        out = subprocess.run(
+            ["dpkg-query", "-W", "-f=${Package} ${Version}\n"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except subprocess.CalledProcessError, FileNotFoundError:
+        return None
+    for line in out.splitlines():
+        pkg, _, version = line.partition(" ")
+        if pkg.startswith(package_prefix):
+            return version
+    return None
+
+
+def _ffmpeg_version_info() -> dict:
+    out = subprocess.run(
+        ["ffmpeg", "-version"], check=True, capture_output=True, text=True
+    ).stdout
+    lines = out.splitlines()
+    version = lines[0].split(" ")[2]
+    config_line = next(
+        (line for line in lines if line.startswith("configuration:")), ""
+    )
+    configuration = config_line.removeprefix("configuration:").strip()
+    return {"ffmpeg_version": version, "ffmpeg_configuration": configuration}
+
+
+def get_render_profile(
+    threads: int = 4, tonemap_chain: str = "", tonemap_chain_pq: str | None = None
+) -> dict:
+    """Describe everything needed to re-render bit-for-bit, per #7/#10.
+
+    Args:
+        threads: ffmpeg thread count used for the render.
+        tonemap_chain: HDR (HLG/DV84) tonemap filter chain applied to
+            proxies/segments during this session.
+        tonemap_chain_pq: HDR (PQ) tonemap filter chain, if applicable;
+            `None` otherwise.
+
+    Returns:
+        Dict with keys `ffmpeg_version`, `ffmpeg_configuration`,
+        `libx264_version`, `zimg_version` (any may be `"unknown"`/`None` if
+        undetectable, see `_dpkg_version`), `threads`, `tonemap_chain`,
+        `tonemap_chain_pq`, `video_codec_args` (str), the ffmpeg filter
+        templates used at render time (`segment_filter_template`,
+        `blur_pad_filter_template`, `image_filter_template`, each a format
+        string with `{...}` placeholders filled in per-clip),
+        `audio_codec_args` (str), and `profile_sha256` (str, hash of the
+        rest of the dict, for reproducibility checks).
+    """
+    profile = {
+        **_ffmpeg_version_info(),
+        "libx264_version": _dpkg_version("libx264") or "unknown",
+        "zimg_version": _dpkg_version("libzimg"),
+        "threads": threads,
+        "tonemap_chain": tonemap_chain,
+        "tonemap_chain_pq": tonemap_chain_pq,
+        "video_codec_args": " ".join(_video_codec_args(threads, preview=False)),
+        "segment_filter_template": (
+            "crop={w}:{h}:{x}:{y},setpts=PTS/{speed},fps=30,"
+            "scale={tw}:{th}:flags=lanczos,{hdr}setsar=1,format=yuv420p"
+        ),
+        "blur_pad_filter_template": (
+            "[0:v]setpts=PTS/{speed},fps=30,scale='if(gt(iw,ih),-2,{tw})':'if(gt(iw,ih),{tw},-2)':flags=lanczos,{hdr}split[a][b];"
+            "[a]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur={blur_radius}:{blur_power},eq=brightness={bg_brightness}[bg];"
+            "[b]scale={tw}:-2:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[v]"
+        ),
+        "image_filter_template": (
+            "crop={w}:{h}:{x}:{y},scale={ptw}:{pth}:flags=lanczos,"
+            "zoompan=z='min(1.0+{zoom_per_frame}*(on-1),{zoom_max})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={tw}x{th}:fps=30,"
+            "setsar=1,format=yuv420p"
+        ),
+        "audio_codec_args": "-c:a aac -b:a 192k -ar 48000",
+    }
+    profile["profile_sha256"] = hashlib.sha256(
+        json.dumps(profile, sort_keys=True).encode(),
+    ).hexdigest()
+    return profile
