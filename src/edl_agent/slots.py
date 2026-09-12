@@ -1,6 +1,6 @@
-"""Capa 2 (parcial) - Audio -> slots.json.
+"""Layer 2 (partial) - Audio -> slots.json.
 
-Ver docs/architecture/arquitectura_edl_agent_v4.md #4.1.
+See docs/architecture/arquitectura_edl_agent_v4.md #4.1.
 """
 
 from __future__ import annotations
@@ -8,12 +8,20 @@ from __future__ import annotations
 import numpy as np
 
 FRAME_RATE = 30
-UNIFORM_GRID_S = 1.6  # 48 frames, usado si beats_confident == False
+UNIFORM_GRID_S = 1.6  # 48 frames, used when beats_confident == False
 MIN_SLOT_FRAMES = 30
 
 
 def detect_beats(path: str) -> tuple[float, list[float]]:
-    """#4.1.1. Devuelve (tempo_bpm, beats_s)."""
+    """Detect tempo and beat timestamps in an audio file, per #4.1.1.
+
+    Args:
+        path: Path to the audio file (e.g. `music/track_cut.wav`).
+
+    Returns:
+        `(tempo_bpm, beats_s)`: estimated tempo in BPM, and a list of beat
+        timestamps in seconds.
+    """
     import librosa
 
     y, sr = librosa.load(path, sr=None, mono=True)
@@ -25,8 +33,23 @@ def detect_beats(path: str) -> tuple[float, list[float]]:
 def beats_confident(
     tempo_bpm: float, y: np.ndarray, sr: float, _beats_s: list[float]
 ) -> bool:
-    """#4.1.2. [validar umbral] autocorrelacion de onset_strength en el lag
-    del tempo.
+    """Decide whether detected beats are reliable enough to build slots from.
+
+    Checks that `tempo_bpm` is in a plausible range and that onset-strength
+    autocorrelation at the tempo's lag is strong, per #4.1.2.
+
+    [validate threshold]
+
+    Args:
+        tempo_bpm: Estimated tempo, in BPM, from `detect_beats`.
+        y: Audio samples (mono), as loaded by `librosa.load`.
+        sr: Sample rate of `y`, in Hz.
+        _beats_s: Beat timestamps from `detect_beats` (unused; kept for
+            interface parity).
+
+    Returns:
+        `True` if beats look reliable enough to drive slot placement;
+        `False` if a uniform grid should be used instead.
     """
     import librosa
 
@@ -48,15 +71,36 @@ def build_slots(
     beats_s: list[float],
     confident: bool,
 ) -> dict:
-    """#4.1.3-4.1.7. Construye slots.json a partir de beats (o grid uniforme)."""
+    """Build `slots.json` from detected beats (or a uniform grid), per #4.1.3-4.1.7.
+
+    Args:
+        duration_s: Target reel duration, in seconds.
+        tempo_bpm: Estimated tempo, in BPM (see `detect_beats`).
+        beats_s: Beat timestamps, in seconds (see `detect_beats`); ignored
+            if `confident` is `False`.
+        confident: Whether to use `beats_s` (`True`) or fall back to a
+            uniform grid (`False`), per `beats_confident`.
+
+    Returns:
+        Dict with `duration_f` (int, total frames), `tempo_bpm` (float),
+        `beats_confident` (bool, echoes `confident`), `beats_per_slot`
+        (int), and `slots` (list of slot dicts, each with `slot` (int,
+        0-based index), `start_f`/`end_f` (int, frame bounds), `role`
+        (`"hook"`, `"develop"`, or `"close"`), and `beats_rel_f` (list of
+        int, beat offsets relative to `start_f`)).
+
+    Raises:
+        ValueError: If fewer than 2 slots result (audio too short to
+            produce hook+close slots).
+    """
     duration_f = round(duration_s * FRAME_RATE)
 
     if confident:
         beats_f = sorted({round(b * FRAME_RATE) for b in beats_s})
         beats_per_slot = max(1, int(np.ceil(tempo_bpm / 60.0)))
     else:
-        # #4.1.2: grid uniforme de 1.6s (48 frames) con beats sinteticos cada
-        # 24 frames (2 por slot) para que la alineacion a beat siga funcionando.
+        # #4.1.2: uniform 1.6s (48-frame) grid with synthetic beats every 24
+        # frames (2 per slot) so beat alignment keeps working downstream.
         synthetic_step_f = round(UNIFORM_GRID_S * FRAME_RATE / 2)  # 24
         beats_f = list(range(0, duration_f, synthetic_step_f))
         beats_per_slot = 2
@@ -64,9 +108,9 @@ def build_slots(
     beats_f = sorted(set(beats_f) | {0, duration_f})
     beats_f = [b for b in beats_f if 0 <= b <= duration_f]
 
-    # Agrupacion: los beats (sin contar el final synthetic duration_f salvo que
-    # coincida con uno real) se agrupan de beats_per_slot en beats_per_slot,
-    # empezando por el primer beat >= 0.
+    # Grouping: beats (excluding the synthetic end duration_f unless it
+    # coincides with a real one) are grouped beats_per_slot at a time,
+    # starting from the first beat >= 0.
     interior_beats = [b for b in beats_f if b < duration_f]
     if not interior_beats or interior_beats[0] != 0:
         interior_beats = [0, *interior_beats]
@@ -75,10 +119,10 @@ def build_slots(
     slot_bounds = [*starts, duration_f]
     slot_bounds = sorted(set(slot_bounds))
 
-    # #4.1.5 Residuo: cualquier slot (interior o el ultimo) < MIN_SLOT_FRAMES se
-    # fusiona con el anterior (el primero, hook, nunca se fusiona hacia atras).
-    # Fusionar el slot j (bounds[j]..bounds[j+1]) con el j-1 anterior es borrar
-    # el limite bounds[j].
+    # #4.1.5 Remainder: any slot (interior or last) shorter than
+    # MIN_SLOT_FRAMES is merged into the previous one (the first slot, hook,
+    # is never merged backward). Merging slot j (bounds[j]..bounds[j+1])
+    # into slot j-1 means deleting boundary bounds[j].
     bounds = list(slot_bounds)
     changed = True
     while changed:
@@ -125,7 +169,19 @@ def build_slots(
 
 
 def slots_from_file(path: str) -> dict:
-    """Orquesta #4.1 completo sobre un WAV (music/track_cut.wav)."""
+    """Run the full #4.1 pipeline over a WAV file.
+
+    Args:
+        path: Path to the audio file (e.g. `music/track_cut.wav`).
+
+    Returns:
+        The `slots.json` dict from `build_slots`, with an added
+        `music_cut` key (str, echoes `path`).
+
+    Raises:
+        ValueError: If fewer than 2 slots result (audio too short to
+            produce hook+close slots); see `build_slots`.
+    """
     import librosa
 
     y, sr = librosa.load(path, sr=None, mono=True)

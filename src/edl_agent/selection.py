@@ -1,9 +1,10 @@
-"""Capa 5 - S-checks (#8.1) y fallback de reglas (#8.6).
+"""Layer 5 - S-checks (#8.1) and rules fallback (#8.6).
 
-Reconcilia una `selection.json` (LLM) contra `candidates.json` y completa,
-rol a rol, los huecos con el fallback de reglas de 0 EUR. Produce la lista
-`selected` que consume `planner.assign_slots`. Si no hay seleccion del LLM
-(``selection is None``), todo el resultado viene del fallback.
+Reconciles a `selection.json` (LLM output) against `candidates.json` and
+fills, role by role, any gaps with the 0-EUR rules fallback. Produces the
+`selected` list consumed by `planner.assign_slots`. If there is no LLM
+selection (``selection is None``), the entire result comes from the
+fallback.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ def _admits(cand: dict, slot_indices: list[int]) -> bool:
 
 
 # --------------------------------------------------------------------------
-# 8.1 S-checks sobre selection.json
+# 8.1 S-checks on selection.json
 # --------------------------------------------------------------------------
 
 
@@ -37,9 +38,34 @@ def apply_s_checks(
     candidates_by_id: dict,
     slots: list[dict],
 ) -> tuple[list[dict], list[str]]:
-    """S2-S5. S1 (status incomplete) se resuelve fuera de esta funcion (cosa
-    del llamador del LLM); los huecos por rol que deje S5 los cubre el
-    fallback en `build_selected`.
+    """Apply checks S2-S5 to `selection`, per #8.1.
+
+    S1 (incomplete status) is resolved outside this function (it's the
+    caller of the LLM's concern); any per-role gaps left by S5 are covered
+    by the fallback in `build_selected`.
+
+    Args:
+        selection: Parsed LLM selection output (see
+            `selector.selection_schema`). Reads `selected` (list of dicts,
+            each with `candidate_id` (str), `role` (str), `exercise` (str),
+            and other fields passed through unchanged).
+        candidates_by_id: Mapping `candidate_id -> candidate dict` (see
+            `candidates.build_video_candidates`). Used to validate
+            candidate ids and to read `kind` (for S4) and `admits_slots`
+            (for S5).
+        slots: Slot dicts, as in `slots.json["slots"]`.
+
+    Returns:
+        `(cleaned, warnings)`:
+        - `cleaned`: surviving entries, grouped by role (`ROLES` order)
+          and re-ranked 1..N within each role (a new `rank` key is
+          assigned/overwritten, ignoring any rank the LLM proposed).
+        - `warnings`: one entry per dropped/moved candidate:
+          `"s2_dropped:{id}"` (unknown or duplicate candidate_id),
+          `"s4_moved:{id}->close"` / `"s4_moved:{id}->develop"` (role
+          reassigned to match the candidate's `kind`: hook must be `peak`,
+          close must not be `peak`), `"s5_dropped:{id}"` (candidate's
+          window doesn't admit any slot of its assigned role).
     """
     warnings: list[str] = []
     seen: set[str] = set()
@@ -62,9 +88,9 @@ def apply_s_checks(
             entry["role"] = "develop"
             warnings.append(f"s4_moved:{entry['candidate_id']}->develop")
 
-    # S5: el LLM no conoce `admits_slots` (no se le envia); descarta aqui lo
-    # que eligio para un rol cuyo(s) slot(s) no caben en su ventana, para que
-    # el fallback de `build_selected` pueda cubrir ese hueco.
+    # S5: the LLM doesn't know `admits_slots` (it isn't sent to it); here we
+    # drop whatever it chose for a role whose slot(s) don't fit its window,
+    # so `build_selected`'s fallback can cover that gap.
     admissible: list[dict] = []
     for entry in cleaned:
         cand = candidates_by_id[entry["candidate_id"]]
@@ -85,13 +111,32 @@ def apply_s_checks(
 
 
 # --------------------------------------------------------------------------
-# 8.6 Fallback de reglas, por rol
+# 8.6 Rules fallback, per role
 # --------------------------------------------------------------------------
 
 
 def fallback_hook(
     candidates: list[dict], slot_indices: list[int], used_ids: set[str]
 ) -> tuple[dict | None, list[str]]:
+    """Pick a `peak` candidate for the hook role by rules, per #8.6.
+
+    Args:
+        candidates: All candidate dicts (from `candidates_json["candidates"]`).
+        slot_indices: Slot indices for the hook role (see `_slot_indices`).
+        used_ids: Candidate ids already claimed by another role; excluded
+            from the pool.
+
+    Returns:
+        `(entry, warnings)`:
+        - `entry`: a selection entry with `candidate_id`, `role="hook"`,
+          `rank=1`, `exercise="unknown"`, `reason="rules_fallback"`; `None`
+          if no `peak` candidate in the pool admits an hook slot while
+          meeting the motion/sharpness thresholds.
+        - `warnings`: `["sharpness_cross_clip"]` (W5) if the pool spans
+          more than one source clip, since sharpness is only comparable
+          within a clip (#4.2); empty otherwise. Empty (`[]`) whenever
+          `entry` is `None`.
+    """
     pool = [
         c
         for c in candidates
@@ -103,8 +148,8 @@ def fallback_hook(
     ]
     if not pool:
         return None, []
-    # W5: sharpness es relativa a cada clip (#4.2); filtrar por un umbral
-    # global a traves de varias `src` compara valores no comparables.
+    # W5: sharpness is relative to each clip (#4.2); filtering by a global
+    # threshold across several `src` values compares non-comparable numbers.
     warnings = ["sharpness_cross_clip"] if len({c["src"] for c in pool}) > 1 else []
     single_subject = [c for c in pool if not c["multi_subject"]]
     pool = single_subject or pool
@@ -122,6 +167,25 @@ def fallback_hook(
 def fallback_close(
     candidates: list[dict], slot_indices: list[int], used_ids: set[str]
 ) -> tuple[dict | None, list[str]]:
+    """Pick a candidate for the close role by rules, per #8.6.
+
+    Prefers `calm`, then `image`, and only falls back to `peak` as a last
+    resort (least-action one, flagged with a warning).
+
+    Args:
+        candidates: All candidate dicts (from `candidates_json["candidates"]`).
+        slot_indices: Slot indices for the close role (see `_slot_indices`).
+        used_ids: Candidate ids already claimed by another role; excluded
+            from the pool.
+
+    Returns:
+        `(entry, warnings)`:
+        - `entry`: a selection entry with `candidate_id`, `role="close"`,
+          `rank=1`, `exercise="unknown"`, `reason="rules_fallback"`; `None`
+          if no `calm`/`image`/`peak` candidate admits a close slot.
+        - `warnings`: `["close_not_calm"]` only when a `peak` candidate had
+          to be used as the last resort; empty otherwise.
+    """
     def admissible(kinds: set[str]) -> list[dict]:
         return [
             c
@@ -170,6 +234,25 @@ def fallback_close(
 def fallback_develop(
     candidates: list[dict], slot_indices: list[int], used_ids: set[str], k: int
 ) -> list[dict]:
+    """Pick up to `k` candidates for the remaining develop slots by rules, per #8.6.
+
+    Ranks eligible `peak` candidates by `score_cv` and round-robins across
+    source clips, so develop shots come from as many different sources as
+    the pool allows rather than piling onto one clip.
+
+    Args:
+        candidates: All candidate dicts (from `candidates_json["candidates"]`).
+        slot_indices: Slot indices for the develop role (see
+            `_slot_indices`).
+        used_ids: Candidate ids already claimed by another role; excluded
+            from the pool.
+        k: Maximum number of entries to return.
+
+    Returns:
+        Up to `k` selection entries, each with `candidate_id`,
+        `role="develop"`, `rank` (1-indexed, in the order chosen),
+        `exercise="unknown"`, `reason="rules_fallback"`.
+    """
     pool = sorted(
         (
             c
@@ -207,17 +290,28 @@ def fallback_develop(
 
 
 # --------------------------------------------------------------------------
-# 8.5 Orquestacion: S-checks + fallback -> `selected` para el planner
+# 8.5 Orchestration: S-checks + fallback -> `selected` for the planner
 # --------------------------------------------------------------------------
 
 
 def _preempt_develop(
     cleaned: list[dict], candidate_id: str, warnings: list[str], role: str
 ) -> list[dict]:
-    """Un candidato ya asignado a develop pasa a `role` (hook/close): develop
-    tiene mas slack (N slots, mas candidatos tipicamente) que hook/close
-    (obligatorios, 1 slot). El hueco que deja se rellena luego con
-    `fallback_develop` sobre el pool restante.
+    """Reclaim for `role` (hook/close) a candidate already assigned to develop.
+
+    Develop has more slack (N slots, typically more candidates) than
+    hook/close (mandatory, 1 slot each). The gap this leaves is later
+    refilled with `fallback_develop` over the remaining pool.
+
+    Args:
+        cleaned: Current selection entries.
+        candidate_id: Candidate id to reclaim from the develop role.
+        warnings: Warnings list, mutated in place with
+            `"{role}_preempted_develop:{candidate_id}"`.
+        role: Role reclaiming the candidate (`"hook"` or `"close"`).
+
+    Returns:
+        `cleaned` with the matching develop entry removed.
     """
     warnings.append(f"{role}_preempted_develop:{candidate_id}")
     return [
@@ -230,9 +324,29 @@ def _preempt_develop(
 def build_selected(
     candidates_json: dict,
     slots_json: dict,
-    selection: dict | None = None,
+    selection: dict | None,
 ) -> tuple[list[dict], list[str], list[str]]:
-    """Devuelve (selected, warnings, fallback_roles)."""
+    """Reconcile `selection` against candidates/slots and fill gaps by rules, per #8.5.
+
+    Args:
+        candidates_json: Parsed `candidates.json`, with a `candidates` key
+            (list of candidate dicts).
+        slots_json: Parsed `slots.json`, with a `slots` key (list of slot
+            dicts).
+        selection: Parsed LLM selection output (see
+            `selector.selection_schema`), or `None` to skip S-checks
+            entirely and let every role come from the rules fallback.
+
+    Returns:
+        `(selected, warnings, fallback_roles)`:
+        - `selected`: final list of selection entries (LLM-derived plus any
+          fallback ones) ready for `planner.assign_slots`.
+        - `warnings`: all warnings accumulated from S-checks and the
+          fallback (see `apply_s_checks`, `fallback_hook`, `fallback_close`,
+          `_preempt_develop`).
+        - `fallback_roles`: which of `"hook"`, `"close"`, `"develop"` needed
+          the rules fallback for at least one slot.
+    """
     candidates = candidates_json["candidates"]
     candidates_by_id = {c["id"]: c for c in candidates}
     slots = slots_json["slots"]
@@ -251,7 +365,8 @@ def build_selected(
             candidates, _slot_indices(slots, "hook"), used_ids
         )
         if entry is None:
-            # #6.2.5: nada libre admite hook; reclama lo que develop tenga admisible.
+            # #6.2.5: nothing free admits hook; reclaim whatever develop
+            # has that's admissible.
             develop_ids = {e["candidate_id"] for e in cleaned if e["role"] == "develop"}
             entry, hook_warnings = fallback_hook(
                 candidates, _slot_indices(slots, "hook"), used_ids - develop_ids

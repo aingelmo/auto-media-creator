@@ -1,5 +1,7 @@
-"""Capa 4 (salida) - Ensambla edl.json (#7) a partir de manifest, candidates.json,
-slots.json y una seleccion (LLM o fallback de reglas, #8.5).
+"""Layer 4 (output) - Assembles edl.json (#7).
+
+Built from manifest, candidates.json, slots.json, and a selection (either
+from the LLM or the rules fallback, #8.5).
 """
 
 from __future__ import annotations
@@ -48,8 +50,34 @@ _RELAXED_LOW_MATERIAL = ("relaxed_4", "relaxed_5")
 
 
 def _aggregate_warnings(clips: list[dict], warnings: list[str]) -> list[str]:
-    """#8.3 W1-W5: checks compuestos sobre el conjunto de clips, no bloquean
-    pero obligan a revisar el preview.
+    """Compute the W1-W5 aggregate warnings over the whole clip set, per #8.3.
+
+    These do not block the render, but they do require reviewing the
+    preview before final render.
+
+    Args:
+        clips: Clip dicts as produced by `planner.build_clips`. Fields read
+            here: `subject_cropped` (bool), `warnings` (list[str]), `role`
+            (str), `speed` (float), `src_fps_nominal` (float).
+        warnings: Warnings already accumulated at the selection/planner
+            level (e.g. from `selection.build_selected`), checked here for
+            `"relaxed_4"`, `"relaxed_5"`, `"arc_fallback"`, and
+            `"sharpness_cross_clip"`.
+
+    Returns:
+        List of aggregate warning strings, any of:
+        - `"low_framing_quality"` (W1): more than 3 clips are cropped or
+          upscaled beyond the configured threshold.
+        - `"low_material_quality"` (W2): more than half the clips (or
+          selection-level warnings) come from relaxed/low-quality material.
+        - `"weak_rhythm"` (W3): the develop arc fell back to rank order, or
+          2+ clips missed their beat alignment.
+        - `"slowmo_duplicates"` (W4): the hook clip is slow-motion (0.5x) on
+          a source with nominal fps <= 30, which can look duplicated rather
+          than slowed down.
+        - `"sharpness_cross_clip"` (W5): forwarded verbatim if already
+          present in `warnings` (sharpness thresholds are not comparable
+          across clips from different sources, #4.2).
     """
     agg: list[str] = []
 
@@ -120,7 +148,52 @@ def build_edl(
     tonemap_chain_pq: str | None = None,
     config: dict | None = None,
 ) -> dict:
-    """#8.5 completo: selection -> S-checks/fallback -> planner -> edl.json."""
+    """Run the full #8.5 pipeline: selection -> S-checks/fallback -> planner -> edl.
+
+    Produces the `edl.json` dict.
+
+    Args:
+        session_id: Identifier of the session, copied into the output.
+        manifest: Parsed `manifest.json`. Must have `sources` (list of
+            source dicts as built by `ingest.py`, keyed by `src`) and,
+            optionally, `music` (dict with `cut`, `cut_sha256`, `src`,
+            `src_sha256`, `offset_s`).
+        candidates_json: Parsed `candidates.json`, with a `candidates`
+            key (list of candidate dicts as built by `candidates.py`) and
+            optional `features_config_sha256`/`pose_model_sha256`.
+        slots_json: Parsed `slots.json`, with `slots` (list of slot dicts,
+            see `slots.build_slots`) and `duration_f` (int, total timeline
+            length in frames).
+        selection: Parsed LLM selection output (see
+            `selector.selection_schema`), or `None` if the LLM step was
+            skipped/failed entirely, in which case every role is filled by
+            the rules fallback (#8.6).
+        selection_meta: Metadata about the LLM call (model, token usage,
+            cost, attempt count), as returned by `selector.select`. Only
+            used to populate `provenance`; irrelevant if `selection` is
+            `None`.
+        manifest_path: Path to the manifest file, recorded verbatim under
+            `inputs.manifest_path` for reproducibility.
+        threads: ffmpeg thread count to record in the render profile.
+        tonemap_chain: HDR (HLG/DV84) tonemap filter chain to record in the
+            render profile.
+        tonemap_chain_pq: HDR (PQ) tonemap filter chain, if supported;
+            `None` if not applicable.
+        config: Planner/audio config overrides, merged over
+            `planner.DEFAULT_CONFIG` and `DEFAULT_AUDIO_TARGETS`.
+
+    Returns:
+        The full `edl.json` dict, with keys `version`, `session_id`,
+        `inputs` (hashes of all inputs, for reproducibility), `render_profile`
+        (see `render.get_render_profile`), `target` (`w`, `h`, `fps`,
+        `duration_f`), `clips` (list, see `planner.build_clips`), `audio`
+        (see `_audio_block`), and `provenance` (see `_provenance`).
+
+    Raises:
+        PlannerError: If no candidate admits a mandatory role (hook/close),
+            or not enough develop candidates are available, or a planner
+            invariant (P1-P9, #8.2) is violated.
+    """
     config = {**DEFAULT_CONFIG, **DEFAULT_AUDIO_TARGETS, **(config or {})}
     slots = slots_json["slots"]
     has_develop = any(s["role"] == "develop" for s in slots)

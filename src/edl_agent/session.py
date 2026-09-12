@@ -1,5 +1,6 @@
-"""Orquestacion de Capa 1 y Capa 2 para una sesion: sessions/<session_id>/
-(ver #1, #4).
+"""Orchestration of Layer 1 and Layer 2 for a session.
+
+Layout under sessions/<session_id>/ (see #1, #4).
 """
 
 from __future__ import annotations
@@ -36,6 +37,28 @@ def run_ingest(
     music_offset_s: float = 0.0,
     music_max_duration_s: float | None = None,
 ) -> dict:
+    """Ingest a full session, per #1/#3.
+
+    Probes and builds proxies for each video source, verifies each proxy
+    against its original, normalizes each image source, and cuts the music
+    track. Writes `manifest.json` to `session_dir`.
+
+    Args:
+        session_dir: Session directory; must already contain `inputs/` (and
+            optionally `music/track.mp3`).
+        threads: ffmpeg thread count for proxy encoding.
+        music_offset_s: Start offset into `music/track.mp3`, in seconds.
+        music_max_duration_s: Max duration of the cut music clip, in
+            seconds. Required if `music/track.mp3` exists.
+
+    Returns:
+        The `manifest.json` dict (see `ingest.build_manifest`).
+
+    Raises:
+        IngestError: If a video proxy fails temporal verification against
+            its original, or if `music/track.mp3` exists but
+            `music_max_duration_s` was not given.
+    """
     session_dir = Path(session_dir)
     inputs = session_dir / "inputs"
     proxies_dir = session_dir / "proxies"
@@ -129,7 +152,29 @@ def run_candidates(
     detector: Detector,
     pose_model_path: str | None = None,
 ) -> dict:
-    """#4.2-#4.3: features + candidates.json sobre los proxies de la sesion."""
+    """Extract features and build `candidates.json` from the session's proxies.
+
+    Per #4.2-#4.3. For each image source, builds a single image candidate.
+    For each video source, extracts per-frame features, saves them, detects
+    scene cuts, and builds peak/calm video candidates.
+
+    Args:
+        session_dir: Session directory; must contain `manifest.json`'s
+            proxies/normalized images.
+        manifest: Parsed `manifest.json` (see `ingest.build_manifest`).
+        slots: Parsed `slots.json`, with a `slots` key (see
+            `slots.build_slots`).
+        detector: Pose detector callable, per `features.Detector`.
+        pose_model_path: Path to the pose model weights, hashed into
+            `pose_model_sha256`; `None` if not applicable.
+
+    Returns:
+        The `candidates.json` dict, with `session_id`, `manifest_sha256`,
+        `features_config_sha256`, `pose_model_sha256`, and `candidates`
+        (list of candidate dicts, see `candidates.build_video_candidates`
+        and `candidates.build_image_candidate`). Also written to
+        `session_dir / "candidates.json"`.
+    """
     session_dir = Path(session_dir)
     peaks_dir = session_dir / "peaks"
     features_dir = session_dir / "features"
@@ -194,9 +239,22 @@ def run_selection(
     config: dict | None = None,
     client: object | None = None,
 ) -> tuple[dict | None, dict]:
-    """#5: llama a Capa 3 con un client real. Por defecto google-genai (API key via env
-    GEMINI_API_KEY/GOOGLE_API_KEY); pasa `client=OllamaClient()` (ollama_client.py) para
-    probar en local antes de gastar en Gemini.
+    """Call Layer 3 (LLM selector) with a real client, per #5.
+
+    Args:
+        session_dir: Session directory to write `selection_attempt_N.json`
+            files to.
+        candidates_json: Parsed `candidates.json`, with a `candidates` key.
+        slots_json: Parsed `slots.json`, with `slots` and `duration_f` keys.
+        config: Overrides merged over `selector.DEFAULTS`; see
+            `selector.select`.
+        client: LLM client to use; defaults to `google.genai.Client()`
+            (API key via env `GEMINI_API_KEY`/`GOOGLE_API_KEY`). Pass
+            `client=OllamaClient()` (`ollama_client.py`) to test locally
+            before spending on Gemini.
+
+    Returns:
+        `(selection, selection_meta)`, as returned by `selector.select`.
     """
     if client is None:
         from google import genai
@@ -219,7 +277,29 @@ def run_planner(
     threads: int = 4,
     config: dict | None = None,
 ) -> dict:
-    """#8.5: selection (LLM, opcional) -> S-checks/fallback -> planner -> edl.json."""
+    """Run selection (LLM, optional) -> S-checks/fallback -> planner -> edl.json.
+
+    Per #8.5. Writes `edl.json` to `session_dir`.
+
+    Args:
+        session_dir: Session directory to write `edl.json` to.
+        manifest: Parsed `manifest.json` (see `ingest.build_manifest`).
+        candidates_json: Parsed `candidates.json`, with a `candidates` key.
+        slots_json: Parsed `slots.json`, with a `slots` key.
+        selection: LLM selection dict (see `selector.selection_schema`), or
+            `None` to rely entirely on the rules fallback (#8.6).
+        selection_meta: Metadata dict from `selector.select` (`model`,
+            `llm_attempts`, `llm_cost_usd`, etc.), or `None`.
+        threads: ffmpeg thread count, forwarded to the planner/render steps.
+        config: Overrides merged over `planner.DEFAULT_CONFIG`.
+
+    Returns:
+        The `edl.json` dict (see `edl.build_edl`).
+
+    Raises:
+        PlannerError: If a planner invariant is violated or a role has no
+            admissible candidate.
+    """
     session_dir = Path(session_dir)
     tonemap_chain = (
         TONEMAP_CHAIN_HLG

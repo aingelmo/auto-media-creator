@@ -1,10 +1,10 @@
-"""Capa 3 - Selector LLM (Gemini), #5.
+"""Layer 3 - LLM selector (Gemini), #5.
 
-Construye la peticion inline-image (#5.1) a partir de los candidatos admisibles
-de candidates.json, la envia con la Interactions API de google-genai y aplica
-los reintentos por `status: "incomplete"` (#5.6). Guarda cada intento como
-`selection_attempt_N.json` en session_dir. El resultado (`selection`,
-`selection_meta`) se pasa directo a `session.run_planner`.
+Builds the inline-image request (#5.1) from the admissible candidates in
+candidates.json, sends it via google-genai's Interactions API, and applies
+retries on `status: "incomplete"` (#5.6). Saves each attempt as
+`selection_attempt_N.json` in session_dir. The result (`selection`,
+`selection_meta`) is passed straight to `session.run_planner`.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ DEFAULTS: dict[str, Any] = {
     "max_attempts": 2,  # #5.6
 }
 
-# Lista canonica de ejercicios, #5.5.
+# Canonical list of exercises, #5.5.
 EXERCISES = [
     "back squat",
     "front squat",
@@ -81,12 +81,24 @@ Reglas:
 
 REINFORCED_SUFFIX = "\n\nreason: máximo 8 palabras."
 
-# #11: USD por 1M tokens, vigente hasta 31/12/2026 (misma tarifa 3.7/3.8-flash).
-# Los tokens de thinking se facturan como salida.
+# #11: USD per 1M tokens, in effect until 2026-12-31 (same rate for
+# 3.7/3.8-flash). Thinking tokens are billed as output.
 PRICING_PER_MTOK = {"gemini-3.7-flash": (0.75, 3.75), "gemini-3.8-flash": (0.75, 3.75)}
 
 
 def _cost_usd(usage: dict | None, model: str) -> float:
+    """Compute the USD cost of one LLM call from its token usage, per #11.
+
+    Args:
+        usage: Usage dict (see `_usage_dict`) with `total_input_tokens`,
+            `total_output_tokens`, `total_thought_tokens`; `None` if usage
+            is unavailable.
+        model: Model name, looked up in `PRICING_PER_MTOK`.
+
+    Returns:
+        Cost in USD; `0.0` if `usage` is `None` or `model` has no entry in
+        `PRICING_PER_MTOK` (e.g. an Ollama model).
+    """
     if usage is None or model not in PRICING_PER_MTOK:
         return 0.0
     input_price, output_price = PRICING_PER_MTOK[model]
@@ -112,7 +124,18 @@ Genera la selección."""
 
 
 def selection_schema() -> dict:
-    """#5.3: schema de salida, structured output de Gemini."""
+    """Build the output schema for Gemini's structured output, per #5.3.
+
+    The `description` strings inside the schema are sent to the model
+    verbatim (they are instructions, not documentation) and are kept in
+    Spanish to match the rest of the prompt.
+
+    Returns:
+        JSON schema dict (draft-agnostic subset understood by Gemini's
+        structured-output feature) requiring `selected` (list of
+        `{candidate_id, role, rank, exercise, reason}`), `rejected` (list
+        of `{candidate_id, reason}`), and `notes` (string).
+    """
     return {
         "type": "object",
         "properties": {
@@ -170,7 +193,21 @@ def selection_schema() -> dict:
 
 
 def admissible_candidates(candidates_json: dict, slots_json: dict) -> list[dict]:
-    """#5.1: solo candidatos que caben en al menos un slot se envian al LLM."""
+    """Filter to candidates that fit at least one slot, per #5.1.
+
+    Only these are sent to the LLM; ones that can't fit anywhere would
+    just waste prompt tokens.
+
+    Args:
+        candidates_json: Parsed `candidates.json`, with a `candidates` key
+            (list of candidate dicts; reads `admits_slots`, list[int]).
+        slots_json: Parsed `slots.json`, with a `slots` key (list of slot
+            dicts; reads `slot`, int).
+
+    Returns:
+        Subset of `candidates_json["candidates"]` whose `admits_slots`
+        intersects the session's slot indices.
+    """
     slot_indices = {s["slot"] for s in slots_json["slots"]}
     return [
         c
@@ -182,6 +219,17 @@ def admissible_candidates(candidates_json: dict, slots_json: dict) -> list[dict]
 def build_user_prompt(
     duration_s: float, slots_json: dict, candidates: list[dict]
 ) -> str:
+    """Fill in `USER_PROMPT_TEMPLATE` with the current session, per #5.1.
+
+    Args:
+        duration_s: Target reel duration, in seconds.
+        slots_json: Parsed `slots.json`, with a `slots` key.
+        candidates: Admissible candidates (see `admissible_candidates`);
+            only their `id`s are used here.
+
+    Returns:
+        Filled-in user prompt text (in Spanish, matching `SYSTEM_PROMPT`).
+    """
     slots = slots_json["slots"]
     n_develop = sum(1 for s in slots if s["role"] == "develop")
     return USER_PROMPT_TEMPLATE.format(
@@ -195,7 +243,26 @@ def build_user_prompt(
 
 
 def build_parts(candidates: list[dict], user_prompt: str) -> list[dict]:
-    """#5.1: partes text+image (base64, resolution low) por candidato + prompt."""
+    """Build the text+image request parts, one set per candidate plus the prompt.
+
+    Per #5.1: a low-resolution base64 image is sent per peak frame, so
+    interactions stay within reasonable token/latency limits for `qwen3-vl`-
+    class vision models.
+
+    Args:
+        candidates: Admissible candidates (see `admissible_candidates`).
+            Reads `id`, `kind`, `src`, `multi_subject`, `peak_frames`
+            (list[str], JPEG paths).
+        user_prompt: Filled-in user prompt text, appended as the final
+            part.
+
+    Returns:
+        List of part dicts, each either `{"type": "text", "text": ...}` or
+        `{"type": "image", "data": <base64 str>, "mime_type": "image/jpeg",
+        "resolution": "low"}`, in order: for each candidate, one text part
+        with its metadata followed by one image part per peak frame; then
+        the user prompt text part last.
+    """
     parts: list[dict] = []
     for c in candidates:
         parts.append(
@@ -221,12 +288,28 @@ def build_parts(candidates: list[dict], user_prompt: str) -> list[dict]:
 
 
 def _usage_dict(usage: Any) -> dict | None:  # noqa: ANN401 (usage is an SDK-specific object, duck-typed)
+    """Normalize an SDK usage object into a plain dict.
+
+    Args:
+        usage: SDK-specific usage object (has `.model_dump()`, e.g. genai's,
+            or is dict-like, e.g. `OllamaClient`'s `_Usage`), or `None`.
+
+    Returns:
+        Dict with `total_input_tokens`, `total_output_tokens`,
+        `total_thought_tokens`, or `None` if `usage` is `None`.
+    """
     if usage is None:
         return None
     return usage.model_dump() if hasattr(usage, "model_dump") else dict(usage)
 
 
 def _sdk_version() -> str | None:
+    """Return the installed `google-genai` SDK version, if available.
+
+    Returns:
+        `genai.__version__`, or `None` if the `google-genai` package isn't
+        installed (e.g. when only `OllamaClient` is used).
+    """
     try:
         from google import genai
     except ImportError:
@@ -243,10 +326,31 @@ def select(
     session_dir: Path,
     config: dict[str, Any] | None = None,
 ) -> tuple[dict | None, dict]:
-    """#5.1+#5.6: llama al selector LLM con reintentos, guarda cada intento
-    y devuelve (selection, selection_meta) para `session.run_planner`.
-    `selection` es `None` si se agotan los reintentos sin un intento completo
-    (queda todo el rol en manos del fallback de reglas, #8.6).
+    """Call the LLM selector with retries, per #5.1+#5.6.
+
+    Args:
+        candidates_json: Parsed `candidates.json`, with a `candidates` key.
+        slots_json: Parsed `slots.json`, with a `slots` key.
+        duration_s: Target reel duration, in seconds.
+        client: A `google.genai.Client`-shaped object (or `OllamaClient`),
+            duck-typed: only `.interactions.create(...)` is called.
+        session_dir: Session directory to write
+            `selection_attempt_N.json` files to.
+        config: Overrides merged over `DEFAULTS` (`model`,
+            `thinking_level`, `thinking_level_many_candidates`,
+            `many_candidates_threshold`, `temperature`,
+            `max_output_tokens`, `max_attempts`).
+
+    Returns:
+        `(selection, meta)`:
+        - `selection`: parsed LLM output (see `selection_schema`), or
+          `None` if every attempt (up to `max_attempts`, #5.6) returned
+          `status == "incomplete"` — in that case the whole role
+          assignment is left to the rules fallback (#8.6).
+        - `meta`: dict with `model`, `sdk_version`, `api_revision` (always
+          `None`; [validate], not exposed by the high-level SDK),
+          `llm_attempts` (int), `llm_usage` (dict from the last attempt, or
+          `None`), `llm_cost_usd` (float, summed over all attempts).
     """
     config = {**DEFAULTS, **(config or {})}
     session_dir = Path(session_dir)
@@ -300,12 +404,12 @@ def select(
         if interaction.status != "incomplete":
             selection = json.loads(interaction.output_text)
             break
-        system_prompt = SYSTEM_PROMPT + REINFORCED_SUFFIX  # #5.6: reintento reforzado
+        system_prompt = SYSTEM_PROMPT + REINFORCED_SUFFIX  # #5.6: reinforced retry
 
     meta = {
         "model": config["model"],
         "sdk_version": _sdk_version(),
-        "api_revision": None,  # [validar] no expuesto por el SDK de alto nivel
+        "api_revision": None,  # [validate] not exposed by the high-level SDK
         "llm_attempts": len(attempts_usage),
         "llm_usage": attempts_usage[-1] if attempts_usage else None,
         "llm_cost_usd": total_cost,

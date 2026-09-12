@@ -1,9 +1,9 @@
-"""Capa 1 - Verificacion temporal proxy <-> original (#4.4).
+"""Layer 1 - Temporal proxy <-> original verification (#4.4).
 
-En Capa 1 (antes de que exista kp_speed, calculado en Capa 2) los instantes de
-prueba son el fallback de percentiles {10%, 50%, 90%} de la duracion. Cuando
-Capa 2 aporte los picos de kp_speed, se pasan como `extra_instants_s` y tienen
-prioridad (se completa con percentiles hasta 5 si hacen falta).
+In Layer 1 (before kp_speed exists, which is computed in Layer 2) the test
+instants are the percentile {10%, 50%, 90%} fallback over the duration. Once
+Layer 2 provides kp_speed peaks, they are passed in as `extra_instants_s` and
+take priority (filled out with percentiles up to 5 if needed).
 """
 
 from __future__ import annotations
@@ -16,18 +16,20 @@ from pathlib import Path
 import imagehash
 from PIL import Image
 
-FRAME_OFFSETS = (-2, -1, 0, 1, 2)  # frames de proxy a comparar, a 30 fps
-D0_MAX = 6  # umbral [validar margen] segun #4.4
-# Margen entre d0 y el minimo de los vecinos: en escenas estaticas/de movimiento
-# lento el ruido de pHash (y el propio tonemap HDR) hace que un vecino puntue
-# unos bits por debajo de d0 sin que haya contenido distinto (ver sesiones
-# reales #4.4). Un desalineamiento real dispara d0 muy por encima de D0_MAX en
-# al menos algun instante, asi que el margen no enmascara errores genuinos.
+FRAME_OFFSETS = (-2, -1, 0, 1, 2)  # proxy frames to compare, at 30 fps
+D0_MAX = 6  # threshold [validate margin] per #4.4
+# Margin between d0 and the neighbors' minimum: in static/slow-motion scenes,
+# pHash noise (and the HDR tonemap itself) can make a neighbor score a few
+# bits below d0 without any actual content difference (see real sessions
+# #4.4). A genuine misalignment drives d0 far above D0_MAX in at least one
+# instant, so this margin doesn't mask real errors.
 BEST_MARGIN = 4
 
 
 @dataclass
 class InstantResult:
+    """Result of #4.4 at one instant: original vs proxy pHash at several offsets."""
+
     t_s: float
     distances: dict[int, int]  # offset -> hamming distance
     ok: bool
@@ -36,6 +38,17 @@ class InstantResult:
 def pick_instants(
     duration_s: float, extra_instants_s: list[float] | None = None
 ) -> list[float]:
+    """Choose instants to verify, per #4.4.
+
+    Args:
+        duration_s: Proxy duration, in seconds.
+        extra_instants_s: Priority instants (e.g. kp_speed peaks from
+            Layer 2), in seconds; filled out with the 10th/50th/90th
+            percentile of `duration_s` up to 5 total instants.
+
+    Returns:
+        Up to 5 instants to verify, in seconds.
+    """
     extra = sorted(set(extra_instants_s or []))
     percentiles = [duration_s * p for p in (0.10, 0.50, 0.90)]
     instants = list(extra)
@@ -71,10 +84,10 @@ def _phash(path: Path) -> imagehash.ImageHash:
 def _instant_ok(distances: dict[int, int]) -> bool:
     d0 = distances[0]
     best = min(distances.values())
-    # #4.4 + riesgo #13: no exigimos que 0 sea el minimo exacto (el ruido de
-    # pHash en escenas estaticas hace perder el empate sin que haya
-    # desalineamiento real); basta con que este cerca del mejor vecino y por
-    # debajo del umbral absoluto.
+    # #4.4 + risk #13: we don't require 0 to be the exact minimum (pHash
+    # noise in static scenes can lose the tie without any real
+    # misalignment); it's enough to be close to the best neighbor and below
+    # the absolute threshold.
     return d0 <= D0_MAX and (d0 - best) <= BEST_MARGIN
 
 
@@ -85,7 +98,28 @@ def verify_source(
     extra_instants_s: list[float] | None = None,
     proxy_fps: int = 30,
 ) -> tuple[bool, list[InstantResult]]:
-    from .ingest import (  # local import: evita ciclo en tests unitarios
+    """Verify that the proxy preserves the original's content, per #4.4.
+
+    At each of `pick_instants`' chosen instants, extracts a frame from the
+    original and, at several frame offsets, from the proxy, then compares
+    pHash distances.
+
+    Args:
+        original: Path to the original video file.
+        proxy: Path to the proxy video file.
+        tonemap_chain: ffmpeg `-vf` filter chain to apply to the original
+            frame before hashing (e.g. an HDR tonemap); `""` for none.
+        extra_instants_s: Priority instants to verify, in seconds; see
+            `pick_instants`.
+        proxy_fps: Proxy frame rate, in fps, used to convert `FRAME_OFFSETS`
+            (in frames) to seconds when extracting proxy frames.
+
+    Returns:
+        `(verified, results)`: `verified` is `True` if every instant passed
+        `_instant_ok`; `results` is the list of per-instant
+        `InstantResult`s.
+    """
+    from .ingest import (  # local import: avoids a cycle in unit tests
         _video_stream,
         ffprobe,
     )

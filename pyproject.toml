@@ -37,11 +37,12 @@ target-version = "py314"
 [tool.ruff.lint]
 # Explicit rule families instead of `select = ["ALL"]` (ruff's own docs advise
 # against ALL: it silently pulls in future rules on upgrade). Omitted on purpose:
-# D/DOC (no mandatory docstrings), CPY (no license headers), FBT (boolean params
-# read fine via keyword args), AIR/FAST/DJ (Airflow/FastAPI/Django: unused here).
+# CPY (no license headers), FBT (boolean params read fine via keyword args),
+# AIR/FAST/DJ (Airflow/FastAPI/Django: unused here).
 select = [
     "E", "W", "F",        # pycodestyle, pyflakes
     "I", "N", "UP",        # isort, pep8-naming, pyupgrade
+    "D",                   # pydocstyle
     "YTT", "ANN", "ASYNC", "S", "BLE", "B", "A", "COM", "C4",
     "DTZ", "T10", "EM", "EXE", "FIX", "FA", "INT", "ISC", "ICN",
     "LOG", "G", "INP", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET",
@@ -54,11 +55,16 @@ ignore = [
     "PLR2004",  # numeric domain constants (fps, pixel bounds, thresholds) read fine inline
     "PLR0912", "PLR0913", "PLR0915", "PLR0917", "C901",  # complexity metrics too strict for this domain
     "COM812",  # conflicts with the formatter (ruff's own recommendation)
+    "D100", "D104", "D105", "D107",  # module/package/dunder/__init__ docstrings add no info here
+    "D203", "D213",  # conflict with D211/D212 (formatter-compatible blank-line placement)
 ]
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S311", "ANN001", "ANN201", "ANN202", "ANN204", "ANN003", "INP001", "PT006", "PT011", "PT018", "ARG001", "ARG005"]
-"scripts/**" = ["T201", "INP001"]
+"tests/**" = ["S101", "S311", "ANN001", "ANN201", "ANN202", "ANN204", "ANN003", "INP001", "PT006", "PT011", "PT018", "ARG001", "ARG005", "D"]
+"scripts/**" = ["T201", "INP001", "D"]
 
 [tool.ty.environment]
 python-version = "3.14"

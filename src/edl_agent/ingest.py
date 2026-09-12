@@ -1,7 +1,7 @@
-"""Capa 1 - Ingesta: manifest.json, proxies, normalizacion de imagenes, recorte
-de musica.
+"""Layer 1 - Ingestion.
 
-Ver docs/architecture/arquitectura_edl_agent_v4.md #3.
+manifest.json, proxies, image normalization, music trimming.
+See docs/architecture/arquitectura_edl_agent_v4.md #3.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ pillow_heif.register_heif_opener()
 TARGET = {"w": 1080, "h": 1920, "fps": 30}
 PROXY_SHORT_SIDE = 720
 
-# Cadena de tonemap para proxy/preview/render; se fija aqui para toda la sesion (#3.2).
+# Tonemap chain for proxy/preview/render; fixed here for the whole session (#3.2).
 TONEMAP_CHAIN_HLG = (
     "zscale=tin=arib-std-b67:t=linear:npl=1000,format=gbrpf32le,"
     "zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv"
@@ -31,10 +31,18 @@ TONEMAP_CHAIN_HLG = (
 
 
 class IngestError(RuntimeError):
-    """Fuente rechazada en ingesta (p.ej. 10 bits sin color_transfer)."""
+    """A source was rejected during ingestion (e.g. 10-bit without color_transfer)."""
 
 
 def sha256_file(path: Path) -> str:
+    """Compute the SHA-256 hash of a file's contents, read in 1 MiB chunks.
+
+    Args:
+        path: Path to the file to hash.
+
+    Returns:
+        SHA-256 hex digest of the file's contents.
+    """
     h = hashlib.sha256()
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -43,6 +51,19 @@ def sha256_file(path: Path) -> str:
 
 
 def ffprobe(path: Path) -> dict:
+    """Run `ffprobe -show_streams -show_format` and return the parsed JSON.
+
+    Args:
+        path: Path to the media file to probe.
+
+    Returns:
+        Parsed ffprobe JSON output, with top-level keys `format` and
+        `streams` (list of stream dicts).
+
+    Raises:
+        subprocess.CalledProcessError: If ffprobe exits with a non-zero
+            status.
+    """
     out = subprocess.run(
         [
             "ffprobe",
@@ -73,13 +94,27 @@ def _rotation(stream: dict) -> int:
     for sd in stream.get("side_data_list", []):
         if "rotation" in sd:
             return int(sd["rotation"])
-    # algunos contenedores exponen la rotacion como tag en lugar de side_data
+    # some containers expose rotation as a tag instead of side_data
     tag = stream.get("tags", {}).get("rotate")
     return int(tag) if tag else 0
 
 
 def classify_hdr(stream: dict) -> str:
-    """`none | hlg | pq | dv84`. Ver #3.1 (regla de deteccion + fallo de ingesta)."""
+    """Classify a video stream's HDR type, per #3.1.
+
+    Args:
+        stream: An ffprobe video stream dict (as returned by
+            `_video_stream`). Reads `color_transfer`, `pix_fmt`, and
+            `side_data_list`.
+
+    Returns:
+        One of `"none"`, `"hlg"`, `"pq"`, `"dv84"`.
+
+    Raises:
+        IngestError: If the stream is 10-bit with no `color_transfer` tag
+            (#3.1's ingestion-failure rule: refuses to silently assume SDR
+            rather than mis-tonemap the footage).
+    """
     transfer = stream.get("color_transfer")
     is_10bit = "10" in stream.get("pix_fmt", "") or "p10" in stream.get("pix_fmt", "")
 
@@ -112,6 +147,8 @@ def _vfr(stream: dict) -> bool:
 
 @dataclass
 class VideoSourceInfo:
+    """Normalized metadata for one video source, for the manifest (#3.1)."""
+
     src: str
     sha256: str
     type: str
@@ -130,10 +167,34 @@ class VideoSourceInfo:
 
 
 def post_rotation_dims(raw_w: int, raw_h: int, rotation: int) -> tuple[int, int]:
+    """Compute dimensions after applying the container rotation.
+
+    Args:
+        raw_w: Raw (unrotated) width, in pixels.
+        raw_h: Raw (unrotated) height, in pixels.
+        rotation: Rotation, in degrees (e.g. 0, 90, 180, 270, or negative
+            equivalents).
+
+    Returns:
+        `(w, h)`: `(raw_h, raw_w)` if `rotation` is +-90/270 (swapped),
+        otherwise `(raw_w, raw_h)` unchanged.
+    """
     return (raw_h, raw_w) if abs(rotation) in (90, 270) else (raw_w, raw_h)
 
 
 def probe_video_source(path: Path) -> VideoSourceInfo:
+    """Build a `VideoSourceInfo` from `ffprobe`, per #3.1.
+
+    Args:
+        path: Path to the video source file.
+
+    Returns:
+        Populated `VideoSourceInfo` for this source.
+
+    Raises:
+        IngestError: If the file has no video stream, or its HDR
+            classification fails (see `classify_hdr`).
+    """
     probe = ffprobe(path)
     stream = _video_stream(probe)
 
@@ -187,8 +248,24 @@ def probe_video_source(path: Path) -> VideoSourceInfo:
 
 
 def build_proxy(info: VideoSourceInfo, out_path: Path, threads: int = 4) -> Path:
-    """#3.2. HDR (hlg/dv84) pasa por zscale+tonemap; el resto (none/pq no
-    soportado aun) va directo.
+    """Generate the working proxy for a video source, per #3.2.
+
+    HDR sources (hlg/dv84) are tonemapped via zscale+tonemap; the rest
+    (none; pq not yet supported) go through untouched aside from scaling.
+
+    Args:
+        info: Probed source info, as returned by `probe_video_source`. Uses
+            `.hdr` and `.src`.
+        out_path: Output proxy path (parent directory created if missing).
+        threads: ffmpeg thread count. Defaults to 4.
+
+    Returns:
+        `out_path`, unchanged, for convenient chaining.
+
+    Raises:
+        IngestError: If `info.hdr` is a value not yet supported by proxy
+            generation (currently `"pq"`; see [validate] in #3.2).
+        subprocess.CalledProcessError: If the ffmpeg invocation fails.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     scale = (
@@ -203,7 +280,7 @@ def build_proxy(info: VideoSourceInfo, out_path: Path, threads: int = 4) -> Path
     else:
         msg = (
             f"proxy generation for hdr={info.hdr!r} not implemented "
-            "(see [validar] in #3.2)"
+            "(see [validate] in #3.2)"
         )
         raise IngestError(msg)
 
@@ -244,7 +321,15 @@ def build_proxy(info: VideoSourceInfo, out_path: Path, threads: int = 4) -> Path
 
 
 def normalize_image(path: Path, out_path: Path) -> tuple[int, int]:
-    """#3.3. Devuelve (w, h) de la imagen normalizada."""
+    """Normalize an image source, per #3.3 (EXIF transpose, convert to RGB JPEG).
+
+    Args:
+        path: Path to the source image (may be HEIC/HEIF, JPEG, PNG, etc.).
+        out_path: Output JPEG path (parent directory created if missing).
+
+    Returns:
+        `(w, h)` of the normalized image, in pixels.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     im = Image.open(path)
     im = ImageOps.exif_transpose(im)
@@ -256,8 +341,22 @@ def normalize_image(path: Path, out_path: Path) -> tuple[int, int]:
 def cut_music(
     src: Path, out_path: Path, offset_s: float, max_duration_s: float
 ) -> Path:
-    """#3.4. Recorte unico a WAV; todo lo demas (beats, loudnorm, render) usa
-    este fichero.
+    """Trim the music track once, to WAV, per #3.4.
+
+    Everything downstream (beat detection, loudnorm, render) uses this
+    single trimmed file.
+
+    Args:
+        src: Path to the source music file.
+        out_path: Output WAV path (parent directory created if missing).
+        offset_s: Start offset into `src`, in seconds.
+        max_duration_s: Maximum duration to keep, in seconds.
+
+    Returns:
+        `out_path`, unchanged, for convenient chaining.
+
+    Raises:
+        subprocess.CalledProcessError: If the ffmpeg invocation fails.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
@@ -284,6 +383,21 @@ def cut_music(
 def build_manifest(
     session_id: str, sources: list[dict], music: dict | None = None
 ) -> dict:
+    """Assemble the manifest.json dict from already-probed sources.
+
+    Args:
+        session_id: Identifier of the session, copied into the manifest.
+        sources: Per-source entries as built by `session.run_ingest` (each
+            a dict with at least `src`, `sha256`, `type`, plus
+            video-specific or image-specific fields).
+        music: Music entry, or `None` if no music track was provided. Keys:
+            `src`, `src_sha256`, `offset_s`, `max_duration_s`, `cut`,
+            `cut_sha256`.
+
+    Returns:
+        Manifest dict with keys `session_id`, `target` (copy of `TARGET`),
+        `sources`, and `music` (only present if `music` was given).
+    """
     manifest = {
         "session_id": session_id,
         "target": dict(TARGET),
@@ -295,5 +409,11 @@ def build_manifest(
 
 
 def write_manifest(manifest: dict, path: Path) -> None:
+    """Write manifest.json to `path`, creating the parent directory if missing.
+
+    Args:
+        manifest: Manifest dict, as returned by `build_manifest`.
+        path: Output path for the JSON file.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))

@@ -1,14 +1,15 @@
-"""Capa 2 - Features locales por frame sobre proxies (#4.2).
+"""Layer 2 - Per-frame local features over proxies (#4.2).
 
-Tracking multi-persona + series de accion (kp_speed, motion_bg, sharpness) que
-alimentan los candidatos `peak`/`calm` de #4.3.
+Multi-person tracking plus action series (`kp_speed`, `motion_bg`,
+`sharpness`) that feed the `peak`/`calm` candidates of #4.3.
 
-Simplificacion deliberada: el "sujeto principal" se elige una vez por clip
-(track con mayor Sum(kp_speed*area) en todo el clip), no recalculado por
-ventana de candidato como sugiere #4.2. Para gimnasio con un atleta por clip
-da el mismo resultado y evita una segunda pasada de tracking por candidato.
-# ponytail: sujeto unico por clip; recalcular por ventana si aparecen sesiones
-# con relevos/varios atletas alternando protagonismo dentro del mismo clip.
+Deliberate simplification: the "principal subject" is chosen once per clip
+(the track with the highest Sum(kp_speed*area) over the whole clip), rather
+than recomputed per candidate window as #4.2 suggests. For gym footage with
+one athlete per clip this gives the same result and avoids a second tracking
+pass per candidate.
+# ponytail: single subject per clip; recompute per window if sessions appear
+# with relays/several athletes alternating who is the focus within one clip.
 """
 
 from __future__ import annotations
@@ -24,13 +25,13 @@ import numpy as np
 if TYPE_CHECKING:
     from pathlib import Path
 
-SAMPLE_STRIDE = 3  # proxy a 30fps -> muestreo a 10fps (#4.2)
+SAMPLE_STRIDE = 3  # 30fps proxy -> sampled at 10fps (#4.2)
 IOU_MATCH_THRESHOLD = 0.3
 TRACK_MISS_TOLERANCE = 5
 BBOX_EMA_ALPHA = 0.3
 KP_SPEED_EMA_ALPHA = 0.5
 MULTI_SUBJECT_AREA_THRESHOLD = 0.20
-# COCO-17: munecas, codos, caderas, rodillas (#4.2)
+# COCO-17: wrists, elbows, hips, knees (#4.2)
 ACTION_KEYPOINTS = (9, 10, 7, 8, 11, 12, 13, 14)
 
 FEATURES_CONFIG = {
@@ -45,13 +46,20 @@ FEATURES_CONFIG = {
 
 
 def features_config_sha256() -> str:
+    """Hash `FEATURES_CONFIG` to invalidate cached features when params change.
+
+    Returns:
+        SHA-256 hex digest of the sorted `FEATURES_CONFIG` items' repr.
+    """
     return hashlib.sha256(repr(sorted(FEATURES_CONFIG.items())).encode()).hexdigest()
 
 
 @dataclass
 class Detection:
-    bbox: tuple[float, float, float, float]  # x0,y0,x1,y1 normalizado 0-1
-    keypoints: np.ndarray  # (17,3): x,y normalizados + confianza
+    """A single pose detection in one frame: bbox plus COCO-17 keypoints."""
+
+    bbox: tuple[float, float, float, float]  # x0,y0,x1,y1, normalized to 0-1
+    keypoints: np.ndarray  # (17,3): x,y normalized, plus confidence
 
 
 Detector = Callable[[np.ndarray], list["Detection"]]
@@ -59,6 +67,8 @@ Detector = Callable[[np.ndarray], list["Detection"]]
 
 @dataclass
 class Track:
+    """A sequence of `Detection`s for the same subject across samples (by index)."""
+
     track_id: int
     samples: dict[int, Detection] = field(default_factory=dict)
 
@@ -71,6 +81,15 @@ def _area(bbox: tuple[float, float, float, float]) -> float:
 def iou(
     a: tuple[float, float, float, float], b: tuple[float, float, float, float]
 ) -> float:
+    """Compute intersection-over-union between two normalized bboxes.
+
+    Args:
+        a: `(x0, y0, x1, y1)`, normalized to [0, 1].
+        b: `(x0, y0, x1, y1)`, normalized to [0, 1].
+
+    Returns:
+        IoU in [0, 1]; 0.0 if the union has zero area.
+    """
     ax0, ay0, ax1, ay1 = a
     bx0, by0, bx1, by1 = b
     ix0, iy0 = max(ax0, bx0), max(ay0, by0)
@@ -81,9 +100,20 @@ def iou(
 
 
 def track_iou(detections_per_sample: list[list[Detection]]) -> list[Track]:
-    """Tracker greedy por IoU (#4.2): asigna cada deteccion al track activo mas
-    solapado (>= IOU_MATCH_THRESHOLD); un track sobrevive hasta
-    TRACK_MISS_TOLERANCE muestras sin match.
+    """Run a greedy IoU-based multi-object tracker, per #4.2.
+
+    Assigns each detection to the most-overlapping active track (IoU
+    >= `IOU_MATCH_THRESHOLD`); a track survives up to
+    `TRACK_MISS_TOLERANCE` samples without a match before being dropped.
+
+    Args:
+        detections_per_sample: One list of `Detection`s per sampled frame,
+            in chronological order.
+
+    Returns:
+        All tracks created during the run (including ones that ended
+        early), each with its `samples` dict mapping sample index to
+        `Detection`.
     """
     tracks: list[Track] = []
     active: dict[int, Track] = {}
@@ -118,8 +148,19 @@ def track_iou(detections_per_sample: list[list[Detection]]) -> list[Track]:
 
 
 def _track_kp_speeds(tracks: list[Track]) -> dict[int, dict[int, float]]:
-    """Velocidad EMA de ACTION_KEYPOINTS por track, normalizada por altura de
-    bbox e independiente de huecos de tracking (#4.2).
+    """Compute the EMA speed of `ACTION_KEYPOINTS` per track, per #4.2.
+
+    Normalized by bbox height and robust to tracking gaps (the sample-index
+    delta is used as the time step, so a missed sample does not distort the
+    velocity estimate).
+
+    Args:
+        tracks: Tracks as returned by `track_iou`.
+
+    Returns:
+        Mapping `track_id -> {sample_index: ema_speed}`; a track's map only
+        has entries from its second sample onward (a speed needs two
+        samples).
     """
     result: dict[int, dict[int, float]] = {}
     for tr in tracks:
@@ -176,7 +217,20 @@ def _normalize_p5_95(values: np.ndarray) -> np.ndarray:
 def _motion_series(
     frames: list[np.ndarray], detections: list[list[Detection]]
 ) -> tuple[np.ndarray, np.ndarray]:
-    """motion_bg (fuera de bboxes de personas) y motion (global, diagnostico), #4.2."""
+    """Compute per-frame motion series, per #4.2.
+
+    Args:
+        frames: Sampled BGR frames, in chronological order.
+        detections: One list of `Detection`s per frame, aligned with
+            `frames`.
+
+    Returns:
+        `(motion_bg, motion)`: two arrays of the same length as `frames`.
+        `motion_bg` is mean frame-diff magnitude outside all detected
+        person bboxes (used for candidate scoring); `motion` is the same
+        computed over the whole frame (diagnostic only, not consumed
+        downstream).
+    """
     n = len(frames)
     motion_bg, motion = np.zeros(n), np.zeros(n)
     prev_gray = None
@@ -202,9 +256,21 @@ def _sharpness_series(
     subject_bbox: list[tuple | None],
     subject_visible: list[bool],
 ) -> np.ndarray:
-    """Varianza del Laplaciano dentro del bbox del sujeto (#4.2); sin sujeto
-    visible se usa el frame completo (fallback razonable, no afecta al filtro
-    de candidatos porque subject_visible ya descarta esos instantes).
+    """Compute per-frame sharpness, per #4.2.
+
+    Args:
+        frames: Sampled BGR frames, in chronological order.
+        subject_bbox: Principal subject bbox per frame (see
+            `extract_features`), or `None` if untracked at that frame.
+        subject_visible: Whether the principal subject was tracked at each
+            frame, aligned with `frames`.
+
+    Returns:
+        Array of the same length as `frames` holding the Laplacian variance
+        computed inside the subject bbox (or over the full frame when no
+        subject is visible, a reasonable fallback since `subject_visible`
+        already excludes those instants from the candidate filters that
+        consume this series).
     """
     out = np.zeros(len(frames))
     for i, frame in enumerate(frames):
@@ -244,8 +310,44 @@ def extract_features(
     stride: int = SAMPLE_STRIDE,
     source_fps: float = 30.0,
 ) -> dict:
-    """Orquesta #4.2 sobre un proxy ya generado. `detector` aisla el modelo de
-    pose para poder testear el resto de la logica sin YOLO real.
+    """Orchestrate the full #4.2 pipeline over an already-generated proxy.
+
+    `detector` isolates the pose model so the rest of the logic can be
+    tested without a real YOLO model.
+
+    Args:
+        proxy_path: Path to the proxy video to read frames from.
+        detector: Callable that takes a BGR frame (`np.ndarray`) and
+            returns a list of `Detection`s.
+        stride: Sample every `stride`-th frame. Defaults to `SAMPLE_STRIDE`
+            (3, i.e. 10fps from a 30fps proxy).
+        source_fps: Frame rate of `proxy_path`, used to convert sample
+            indices to seconds. Defaults to 30.0.
+
+    Returns:
+        Feature series dict with keys:
+        - `t_s` (list[float]): sample timestamps, in seconds.
+        - `subject_bbox` (list[tuple | None]): principal subject bbox
+          `(x0, y0, x1, y1)`, normalized, per sample (EMA-smoothed); `None`
+          where untracked.
+        - `subject_visible` (list[bool]): whether the principal subject was
+          tracked at each sample.
+        - `kp_speed` (list[float]): principal subject's EMA action speed,
+          normalized to [0, 1] via 5th/95th percentile clipping.
+        - `motion_bg` (list[float]): background motion, normalized the same
+          way.
+        - `motion` (list[float]): whole-frame motion (diagnostic),
+          normalized the same way.
+        - `sharpness` (list[float]): subject-region sharpness, normalized
+          the same way.
+        - `multi_subject` (list[bool]): whether >=2 large detections
+          coexist at that sample.
+        - `n_tracks` (int): total number of tracks created by `track_iou`.
+        - `features_config_sha256` (str): see `features_config_sha256`.
+
+    Raises:
+        RuntimeError: If `proxy_path` cannot be opened, or no frames are
+            read from it.
     """
     frames = _read_samples(proxy_path, stride)
     if not frames:
@@ -300,7 +402,16 @@ def extract_features(
 
 
 def detect_scene_cuts(proxy_path: str) -> list[float]:
-    """#4.2 PySceneDetect ContentDetector, umbral por defecto [validar]."""
+    """Detect scene cuts with PySceneDetect's `ContentDetector`, per #4.2.
+
+    Args:
+        proxy_path: Path to the proxy video to scan.
+
+    Returns:
+        Timestamps (seconds) of each detected scene cut (i.e. the start
+        time of every scene after the first), using PySceneDetect's default
+        detection threshold [validate].
+    """
     from scenedetect import SceneManager, open_video
     from scenedetect.detectors import ContentDetector
 
@@ -313,8 +424,19 @@ def detect_scene_cuts(proxy_path: str) -> list[float]:
 
 
 def yolo_pose_detector(model_path: str = "yolov8n-pose.pt") -> Detector:
-    """Detector real (#4.2): ultralytics YOLOv8-pose. Import perezoso para que
-    el resto del modulo no dependa de torch/ultralytics en tests unitarios.
+    """Build the real pose `Detector`, per #4.2: ultralytics YOLOv8-pose.
+
+    Uses a lazy import so the rest of the module does not depend on
+    torch/ultralytics in unit tests.
+
+    Args:
+        model_path: Path or model name to load with `ultralytics.YOLO`.
+            Defaults to `"yolov8n-pose.pt"`.
+
+    Returns:
+        A `Detector` callable: takes a BGR frame and returns a list of
+        `Detection`s with bbox and keypoints normalized to the frame's
+        width/height. Keypoints are all-zero if the model returns none.
     """
     from ultralytics import YOLO
 
@@ -349,6 +471,13 @@ def yolo_pose_detector(model_path: str = "yolov8n-pose.pt") -> Detector:
 
 
 def save_features(features: dict, path: Path) -> None:
+    """Serialize a `features` dict (from `extract_features`) to Parquet.
+
+    Args:
+        features: Feature series dict, as returned by `extract_features`.
+        path: Output `.parquet` path (parent directory created if
+            missing).
+    """
     import pandas as pd
 
     bbox = features["subject_bbox"]
@@ -374,6 +503,20 @@ def save_features(features: dict, path: Path) -> None:
 
 
 def load_features(path: Path) -> dict:
+    """Deserialize the feature dict saved by `save_features`.
+
+    Args:
+        path: Input `.parquet` path.
+
+    Returns:
+        Feature series dict with keys `t_s`, `kp_speed`, `motion_bg`,
+        `motion`, `sharpness`, `subject_visible`, `multi_subject`,
+        `subject_bbox` (reconstructed as `(x0, y0, x1, y1)` tuples, or
+        `None` where any coordinate was `NaN`). Does not restore
+        `features_config_sha256`/`n_tracks` (only used by `save_features`
+        for storage metadata, not by downstream consumers of the returned
+        dict).
+    """
     import pandas as pd
 
     df = pd.read_parquet(path)
