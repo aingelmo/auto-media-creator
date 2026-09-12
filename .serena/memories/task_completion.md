@@ -9,3 +9,6 @@ Before considering a coding task done:
    change is an intentional spec change; otherwise the code is wrong, not the doc).
 5. If touching `src/edl_agent/`, follow `AGENTS.md`: English Google-style docstrings,
    ~150-200 LOC/file, one spec-section per file (see `mem:conventions`).
+6. If the task changed structure/conventions that a memory describes (module
+   layout, lint/type config, docstring rules, etc.), update the relevant
+   memory before finishing — memories don't update themselves.
