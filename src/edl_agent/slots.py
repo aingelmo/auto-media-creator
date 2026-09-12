@@ -2,6 +2,7 @@
 
 Ver docs/architecture/arquitectura_edl_agent_v4.md #4.1.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -21,15 +22,19 @@ def detect_beats(path: str) -> tuple[float, list[float]]:
     return float(np.asarray(tempo).item()), beats_s
 
 
-def beats_confident(tempo_bpm: float, y: np.ndarray, sr: int, beats_s: list[float]) -> bool:
-    """#4.1.2. [validar umbral] autocorrelacion de onset_strength en el lag del tempo."""
+def beats_confident(
+    tempo_bpm: float, y: np.ndarray, sr: float, _beats_s: list[float]
+) -> bool:
+    """#4.1.2. [validar umbral] autocorrelacion de onset_strength en el lag
+    del tempo.
+    """
     import librosa
 
     if not (50 <= tempo_bpm <= 200):
         return False
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
     hop_length = 512
-    lag_frames = int(round((60.0 / tempo_bpm) * sr / hop_length))
+    lag_frames = round((60.0 / tempo_bpm) * sr / hop_length)
     if lag_frames <= 0 or lag_frames >= len(onset_env):
         return False
     ac = librosa.autocorrelate(onset_env, max_size=lag_frames + 1)
@@ -64,10 +69,10 @@ def build_slots(
     # empezando por el primer beat >= 0.
     interior_beats = [b for b in beats_f if b < duration_f]
     if not interior_beats or interior_beats[0] != 0:
-        interior_beats = [0] + interior_beats
+        interior_beats = [0, *interior_beats]
 
     starts = interior_beats[::beats_per_slot]
-    slot_bounds = starts + [duration_f]
+    slot_bounds = [*starts, duration_f]
     slot_bounds = sorted(set(slot_bounds))
 
     # #4.1.5 Residuo: cualquier slot (interior o el ultimo) < MIN_SLOT_FRAMES se
@@ -93,14 +98,22 @@ def build_slots(
             role = "close"
         else:
             role = "develop"
-        beats_rel_f = sorted({b - start_f for b in beats_f if start_f <= b < end_f} | {0})
-        slots.append({
-            "slot": i, "start_f": start_f, "end_f": end_f, "role": role,
-            "beats_rel_f": beats_rel_f,
-        })
+        beats_rel_f = sorted(
+            {b - start_f for b in beats_f if start_f <= b < end_f} | {0}
+        )
+        slots.append(
+            {
+                "slot": i,
+                "start_f": start_f,
+                "end_f": end_f,
+                "role": role,
+                "beats_rel_f": beats_rel_f,
+            }
+        )
 
     if len(slots) < 2:
-        raise ValueError("audio too short to produce hook+close slots")
+        msg = "audio too short to produce hook+close slots"
+        raise ValueError(msg)
 
     return {
         "duration_f": duration_f,

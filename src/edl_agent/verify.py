@@ -5,6 +5,7 @@ prueba son el fallback de percentiles {10%, 50%, 90%} de la duracion. Cuando
 Capa 2 aporte los picos de kp_speed, se pasan como `extra_instants_s` y tienen
 prioridad (se completa con percentiles hasta 5 si hacen falta).
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -32,7 +33,9 @@ class InstantResult:
     ok: bool
 
 
-def pick_instants(duration_s: float, extra_instants_s: list[float] | None = None) -> list[float]:
+def pick_instants(
+    duration_s: float, extra_instants_s: list[float] | None = None
+) -> list[float]:
     extra = sorted(set(extra_instants_s or []))
     percentiles = [duration_s * p for p in (0.10, 0.50, 0.90)]
     instants = list(extra)
@@ -45,7 +48,18 @@ def pick_instants(duration_s: float, extra_instants_s: list[float] | None = None
 
 
 def _extract_frame(cmd_extra: list[str], src: str, t: float, out_path: Path) -> None:
-    cmd = ["ffmpeg", "-y", "-ss", str(max(t, 0.0)), "-i", src, "-frames:v", "1", *cmd_extra, str(out_path)]
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-ss",
+        str(max(t, 0.0)),
+        "-i",
+        src,
+        "-frames:v",
+        "1",
+        *cmd_extra,
+        str(out_path),
+    ]
     subprocess.run(cmd, check=True, capture_output=True, text=True)
 
 
@@ -92,9 +106,13 @@ def verify_source(
             distances: dict[int, int] = {}
             for k in FRAME_OFFSETS:
                 proxy_png = tmp_path / f"proxy_{t:.3f}_{k}.png"
-                _extract_frame(["-vf", "scale=256:-2"], proxy, t + k / proxy_fps, proxy_png)
+                _extract_frame(
+                    ["-vf", "scale=256:-2"], proxy, t + k / proxy_fps, proxy_png
+                )
                 distances[k] = orig_hash - _phash(proxy_png)
 
-            results.append(InstantResult(t_s=t, distances=distances, ok=_instant_ok(distances)))
+            results.append(
+                InstantResult(t_s=t, distances=distances, ok=_instant_ok(distances))
+            )
 
     return all(r.ok for r in results), results

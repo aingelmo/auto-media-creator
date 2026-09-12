@@ -2,6 +2,7 @@
 
 Ver docs/architecture/arquitectura_edl_agent_v4.md #9, #10.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -19,8 +20,14 @@ FINAL_TARGET = {"w": 1080, "h": 1920}
 PREVIEW_TARGET = {"w": 540, "h": 960}
 
 COLOR_ARGS = [
-    "-color_primaries", "bt709", "-color_trc", "bt709",
-    "-colorspace", "bt709", "-color_range", "tv",
+    "-color_primaries",
+    "bt709",
+    "-color_trc",
+    "bt709",
+    "-colorspace",
+    "bt709",
+    "-color_range",
+    "tv",
 ]
 
 
@@ -32,15 +39,18 @@ class RenderError(RuntimeError):
 # render_profile (#7, #10): todo lo que hace falta para re-renderizar bit a bit.
 # --------------------------------------------------------------------------
 
+
 def _dpkg_version(package_prefix: str) -> str | None:
     # ponytail: solo cubre Debian/Ubuntu (dpkg-query); en otras distros
     # devuelve None y zimg_version/libx264_version quedan sin verificar.
     try:
         out = subprocess.run(
             ["dpkg-query", "-W", "-f=${Package} ${Version}\n"],
-            check=True, capture_output=True, text=True,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return None
     for line in out.splitlines():
         pkg, _, version = line.partition(" ")
@@ -50,15 +60,21 @@ def _dpkg_version(package_prefix: str) -> str | None:
 
 
 def _ffmpeg_version_info() -> dict:
-    out = subprocess.run(["ffmpeg", "-version"], check=True, capture_output=True, text=True).stdout
+    out = subprocess.run(
+        ["ffmpeg", "-version"], check=True, capture_output=True, text=True
+    ).stdout
     lines = out.splitlines()
     version = lines[0].split(" ")[2]
-    config_line = next((l for l in lines if l.startswith("configuration:")), "")
+    config_line = next(
+        (line for line in lines if line.startswith("configuration:")), ""
+    )
     configuration = config_line.removeprefix("configuration:").strip()
     return {"ffmpeg_version": version, "ffmpeg_configuration": configuration}
 
 
-def get_render_profile(threads: int = 4, tonemap_chain: str = "", tonemap_chain_pq: str | None = None) -> dict:
+def get_render_profile(
+    threads: int = 4, tonemap_chain: str = "", tonemap_chain_pq: str | None = None
+) -> dict:
     profile = {
         **_ffmpeg_version_info(),
         "libx264_version": _dpkg_version("libx264") or "unknown",
@@ -67,7 +83,10 @@ def get_render_profile(threads: int = 4, tonemap_chain: str = "", tonemap_chain_
         "tonemap_chain": tonemap_chain,
         "tonemap_chain_pq": tonemap_chain_pq,
         "video_codec_args": " ".join(_video_codec_args(threads, preview=False)),
-        "segment_filter_template": "crop={w}:{h}:{x}:{y},setpts=PTS/{speed},fps=30,scale={tw}:{th}:flags=lanczos,{hdr}setsar=1,format=yuv420p",
+        "segment_filter_template": (
+            "crop={w}:{h}:{x}:{y},setpts=PTS/{speed},fps=30,"
+            "scale={tw}:{th}:flags=lanczos,{hdr}setsar=1,format=yuv420p"
+        ),
         "blur_pad_filter_template": (
             "[0:v]setpts=PTS/{speed},fps=30,scale='if(gt(iw,ih),-2,{tw})':'if(gt(iw,ih),{tw},-2)':flags=lanczos,{hdr}split[a][b];"
             "[a]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur={blur_radius}:{blur_power},eq=brightness={bg_brightness}[bg];"
@@ -78,7 +97,7 @@ def get_render_profile(threads: int = 4, tonemap_chain: str = "", tonemap_chain_
             "zoompan=z='min(1.0+{zoom_per_frame}*(on-1),{zoom_max})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={tw}x{th}:fps=30,"
             "setsar=1,format=yuv420p"
         ),
-        "audio_codec_args": " ".join(["-c:a", "aac", "-b:a", "192k", "-ar", "48000"]),
+        "audio_codec_args": "-c:a aac -b:a 192k -ar 48000",
     }
     profile["profile_sha256"] = hashlib.sha256(
         json.dumps(profile, sort_keys=True).encode(),
@@ -89,9 +108,26 @@ def get_render_profile(threads: int = 4, tonemap_chain: str = "", tonemap_chain_
 def _video_codec_args(threads: int, preview: bool) -> list[str]:
     crf, preset = ("30", "ultrafast") if preview else ("18", "medium")
     return [
-        "-c:v", "libx264", "-crf", crf, "-preset", preset, "-profile:v", "high",
-        "-pix_fmt", "yuv420p", "-video_track_timescale", "30000", "-g", "60",
-        "-keyint_min", "60", "-sc_threshold", "0", "-threads", str(threads),
+        "-c:v",
+        "libx264",
+        "-crf",
+        crf,
+        "-preset",
+        preset,
+        "-profile:v",
+        "high",
+        "-pix_fmt",
+        "yuv420p",
+        "-video_track_timescale",
+        "30000",
+        "-g",
+        "60",
+        "-keyint_min",
+        "60",
+        "-sc_threshold",
+        "0",
+        "-threads",
+        str(threads),
     ]
 
 
@@ -99,6 +135,7 @@ def _video_codec_args(threads: int, preview: bool) -> list[str]:
 # Crop normalizado -> pixeles (#6.5). Funcion pura; la usa el planner (parte 3)
 # y aqui la preview para recalcular sobre las dims del proxy.
 # --------------------------------------------------------------------------
+
 
 def is_916(w: int, h: int) -> bool:
     return abs(w / h - 9 / 16) < 0.01
@@ -128,13 +165,19 @@ def crop_to_px(crop: dict, w: int, h: int, layout: str) -> dict:
 # Segmentos (#10.1-10.3, #9)
 # --------------------------------------------------------------------------
 
+
 def _hdr_prefix(hdr: str, tonemap_chain: str) -> str:
     return f"{tonemap_chain}," if hdr in ("hlg", "dv84") and tonemap_chain else ""
 
 
 def render_video_segment(
-    clip: dict, src_path: str, crop_px: dict, out_path: Path,
-    threads: int, tonemap_chain: str, preview: bool = False,
+    clip: dict,
+    src_path: str,
+    crop_px: dict,
+    out_path: Path,
+    threads: int,
+    tonemap_chain: str,
+    preview: bool = False,
 ) -> None:
     target = PREVIEW_TARGET if preview else FINAL_TARGET
     n_frames = clip["n_frames"]
@@ -155,9 +198,23 @@ def render_video_segment(
             f"{hdr_prefix}setsar=1,format=yuv420p"
         )
         cmd = [
-            "ffmpeg", "-y", "-ss", str(clip["in_s"]), "-t", str(t_safety), "-i", src_path,
-            "-vf", vf, "-fps_mode", "cfr", "-frames:v", str(n_frames),
-            *COLOR_ARGS, "-an", *_video_codec_args(threads, preview),
+            "ffmpeg",
+            "-y",
+            "-ss",
+            str(clip["in_s"]),
+            "-t",
+            str(t_safety),
+            "-i",
+            src_path,
+            "-vf",
+            vf,
+            "-fps_mode",
+            "cfr",
+            "-frames:v",
+            str(n_frames),
+            *COLOR_ARGS,
+            "-an",
+            *_video_codec_args(threads, preview),
             str(out_path),
         ]
     else:  # blur_pad
@@ -174,18 +231,37 @@ def render_video_segment(
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[v]"
         )
         cmd = [
-            "ffmpeg", "-y", "-ss", str(clip["in_s"]), "-t", str(t_safety), "-i", src_path,
-            "-filter_complex", filter_complex, "-map", "[v]",
-            "-fps_mode", "cfr", "-frames:v", str(n_frames),
-            *COLOR_ARGS, "-an", *_video_codec_args(threads, preview),
+            "ffmpeg",
+            "-y",
+            "-ss",
+            str(clip["in_s"]),
+            "-t",
+            str(t_safety),
+            "-i",
+            src_path,
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[v]",
+            "-fps_mode",
+            "cfr",
+            "-frames:v",
+            str(n_frames),
+            *COLOR_ARGS,
+            "-an",
+            *_video_codec_args(threads, preview),
             str(out_path),
         ]
     subprocess.run(cmd, check=True, capture_output=True, text=True)
 
 
 def render_image_segment(
-    clip: dict, image_path: str, crop_px: dict, out_path: Path,
-    threads: int, preview: bool = False,
+    clip: dict,
+    image_path: str,
+    crop_px: dict,
+    out_path: Path,
+    threads: int,
+    preview: bool = False,
 ) -> None:
     target = PREVIEW_TARGET if preview else FINAL_TARGET
     n_frames = clip["n_frames"]
@@ -207,16 +283,33 @@ def render_image_segment(
             f"scale={target['w']}:{target['h']}:flags=lanczos,setsar=1,format=yuv420p"
         )
     cmd = [
-        "ffmpeg", "-y", "-framerate", "30", "-loop", "1", "-i", image_path,
-        "-vf", vf, "-fps_mode", "cfr", "-frames:v", str(n_frames),
-        *COLOR_ARGS, "-an", *_video_codec_args(threads, preview),
+        "ffmpeg",
+        "-y",
+        "-framerate",
+        "30",
+        "-loop",
+        "1",
+        "-i",
+        image_path,
+        "-vf",
+        vf,
+        "-fps_mode",
+        "cfr",
+        "-frames:v",
+        str(n_frames),
+        *COLOR_ARGS,
+        "-an",
+        *_video_codec_args(threads, preview),
         str(out_path),
     ]
     subprocess.run(cmd, check=True, capture_output=True, text=True)
 
 
 def _src_path_and_dims(
-    clip: dict, sources_by_src: dict, session_dir: Path, preview: bool,
+    clip: dict,
+    sources_by_src: dict,
+    session_dir: Path,
+    preview: bool,
 ) -> tuple[str, int, int]:
     if clip["type"] == "image":
         normalized = session_dir / sources_by_src[clip["src"]]["normalized"]
@@ -229,36 +322,69 @@ def _src_path_and_dims(
 
 
 def render_segment(
-    clip: dict, sources_by_src: dict, session_dir: Path, out_dir: Path,
-    threads: int, tonemap_chain: str, preview: bool = False,
+    clip: dict,
+    sources_by_src: dict,
+    session_dir: Path,
+    out_dir: Path,
+    threads: int,
+    tonemap_chain: str,
+    preview: bool = False,
 ) -> Path:
     src_path, w, h = _src_path_and_dims(clip, sources_by_src, session_dir, preview)
     out_path = out_dir / f"seg_{clip['slot']:02d}.mp4"
-    crop_px = crop_to_px(clip["crop"], w, h, clip["layout"]) if preview else clip["crop_px"]
+    crop_px = (
+        crop_to_px(clip["crop"], w, h, clip["layout"]) if preview else clip["crop_px"]
+    )
 
     if clip["type"] == "image":
-        render_image_segment(clip, src_path, crop_px, out_path, threads, preview=preview)
+        render_image_segment(
+            clip, src_path, crop_px, out_path, threads, preview=preview
+        )
     else:
-        render_video_segment(clip, src_path, crop_px, out_path, threads, tonemap_chain, preview=preview)
+        render_video_segment(
+            clip, src_path, crop_px, out_path, threads, tonemap_chain, preview=preview
+        )
     return out_path
 
 
-def render_segments(edl: dict, manifest: dict, session_dir: Path, threads: int, tonemap_chain: str = "") -> list[Path]:
+def render_segments(
+    edl: dict, manifest: dict, session_dir: Path, threads: int, tonemap_chain: str = ""
+) -> list[Path]:
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
     out_dir = session_dir / "segments"
     return [
-        render_segment(clip, sources_by_src, session_dir, out_dir, threads, tonemap_chain, preview=False)
+        render_segment(
+            clip,
+            sources_by_src,
+            session_dir,
+            out_dir,
+            threads,
+            tonemap_chain,
+            preview=False,
+        )
         for clip in edl["clips"]
     ]
 
 
 def render_preview_segments(
-    edl: dict, manifest: dict, session_dir: Path, threads: int, tonemap_chain: str = "",
+    edl: dict,
+    manifest: dict,
+    session_dir: Path,
+    threads: int,
+    tonemap_chain: str = "",
 ) -> list[Path]:
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
     out_dir = session_dir / "preview_segments"
     return [
-        render_segment(clip, sources_by_src, session_dir, out_dir, threads, tonemap_chain, preview=True)
+        render_segment(
+            clip,
+            sources_by_src,
+            session_dir,
+            out_dir,
+            threads,
+            tonemap_chain,
+            preview=True,
+        )
         for clip in edl["clips"]
     ]
 
@@ -280,7 +406,8 @@ _LOUDNORM_JSON_RE = re.compile(r"\{[^{}]*\"input_i\"[^{}]*\}")
 def _parse_loudnorm_json(stderr: str) -> dict:
     match = _LOUDNORM_JSON_RE.search(stderr)
     if not match:
-        raise RenderError(f"no loudnorm JSON found in ffmpeg output:\n{stderr}")
+        msg = f"no loudnorm JSON found in ffmpeg output:\n{stderr}"
+        raise RenderError(msg)
     return json.loads(match.group(0))
 
 
@@ -295,8 +422,20 @@ def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
 
     if audio["music_cut_path"] is None:
         cmd = [
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(segments_txt),
-            "-c:v", "copy", "-an", "-movflags", "+faststart", str(reel_path),
+            "ffmpeg",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(segments_txt),
+            "-c:v",
+            "copy",
+            "-an",
+            "-movflags",
+            "+faststart",
+            str(reel_path),
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         return reel_path
@@ -304,12 +443,19 @@ def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
     music_path = session_dir / audio["music_cut_path"]
 
     measure_cmd = [
-        "ffmpeg", "-t", str(duration_s), "-i", str(music_path),
-        "-af", f"loudnorm=I={audio['target_lufs']}:TP={audio['target_tp']}:LRA={audio['target_lra']}:print_format=json",
-        "-f", "null", "-",
+        "ffmpeg",
+        "-t",
+        str(duration_s),
+        "-i",
+        str(music_path),
+        "-af",
+        f"loudnorm=I={audio['target_lufs']}:TP={audio['target_tp']}:LRA={audio['target_lra']}:print_format=json",
+        "-f",
+        "null",
+        "-",
     ]
     measured = _parse_loudnorm_json(
-        subprocess.run(measure_cmd, capture_output=True, text=True).stderr,
+        subprocess.run(measure_cmd, capture_output=True, text=True, check=False).stderr,
     )
     audio["loudnorm_measured"] = measured
 
@@ -322,16 +468,42 @@ def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
         f"afade=t=out:st={duration_s - audio['fade_out_s']}:d={audio['fade_out_s']}"
     )
     render_cmd = [
-        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(segments_txt),
-        "-t", str(duration_s), "-i", str(music_path),
-        "-map", "0:v", "-map", "1:a", "-c:v", "copy",
-        "-af", render_af,
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-threads", str(threads),
-        "-movflags", "+faststart", str(reel_path),
+        "ffmpeg",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(segments_txt),
+        "-t",
+        str(duration_s),
+        "-i",
+        str(music_path),
+        "-map",
+        "0:v",
+        "-map",
+        "1:a",
+        "-c:v",
+        "copy",
+        "-af",
+        render_af,
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-ar",
+        "48000",
+        "-threads",
+        str(threads),
+        "-movflags",
+        "+faststart",
+        str(reel_path),
     ]
-    result = subprocess.run(render_cmd, capture_output=True, text=True)
+    result = subprocess.run(render_cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        raise RenderError(f"concat/audio render failed:\n{result.stderr}")
+        msg = f"concat/audio render failed:\n{result.stderr}"
+        raise RenderError(msg)
     audio["loudnorm_applied"] = _parse_loudnorm_json(result.stderr)
     return reel_path
 
@@ -339,6 +511,7 @@ def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
 # --------------------------------------------------------------------------
 # Checks R1-R6 (#10.5)
 # --------------------------------------------------------------------------
+
 
 @dataclass
 class CheckResult:
@@ -349,9 +522,22 @@ class CheckResult:
 
 def _nb_read_frames(path: Path) -> int:
     out = subprocess.run(
-        ["ffprobe", "-v", "quiet", "-count_frames", "-select_streams", "v:0",
-         "-show_entries", "stream=nb_read_frames", "-print_format", "json", str(path)],
-        check=True, capture_output=True, text=True,
+        [
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-count_frames",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-print_format",
+            "json",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
     return int(json.loads(out)["streams"][0]["nb_read_frames"])
 
@@ -359,40 +545,78 @@ def _nb_read_frames(path: Path) -> int:
 def check_r1_frame_count(segment_path: Path, n_frames: int) -> CheckResult:
     actual = _nb_read_frames(segment_path)
     ok = actual == n_frames
-    return CheckResult("R1", ok, f"{segment_path.name}: expected {n_frames}, got {actual}")
+    return CheckResult(
+        "R1", ok, f"{segment_path.name}: expected {n_frames}, got {actual}"
+    )
 
 
 def _phash_frame(path: Path, frame_index: int, tmp_dir: Path) -> imagehash.ImageHash:
     out_png = tmp_dir / f"{path.stem}_{frame_index}.png"
     subprocess.run(
-        ["ffmpeg", "-y", "-i", str(path), "-vf", f"select='eq(n\\,{frame_index})',scale=256:-2",
-         "-vsync", "0", "-frames:v", "1", str(out_png)],
-        check=True, capture_output=True, text=True,
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(path),
+            "-vf",
+            f"select='eq(n\\,{frame_index})',scale=256:-2",
+            "-vsync",
+            "0",
+            "-frames:v",
+            "1",
+            str(out_png),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     )
     with Image.open(out_png) as im:
         return imagehash.phash(im)
 
 
-def check_r2_phash(final_seg: Path, preview_seg: Path, n_frames: int, threshold: int = 8) -> CheckResult:
+def check_r2_phash(
+    final_seg: Path, preview_seg: Path, n_frames: int, threshold: int = 8
+) -> CheckResult:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         indices = sorted({0, n_frames // 2, n_frames - 1})
         for idx in indices:
-            d = _phash_frame(final_seg, idx, tmp_path) - _phash_frame(preview_seg, idx, tmp_path)
+            d = _phash_frame(final_seg, idx, tmp_path) - _phash_frame(
+                preview_seg, idx, tmp_path
+            )
             if d > threshold:
-                return CheckResult("R2", False, f"{final_seg.name} frame {idx}: hamming {d} > {threshold}")
+                return CheckResult(
+                    "R2",
+                    False,
+                    f"{final_seg.name} frame {idx}: hamming {d} > {threshold}",
+                )
     return CheckResult("R2", True)
 
 
 def check_r3_reel_duration(reel_path: Path, duration_f: int) -> CheckResult:
     actual_frames = _nb_read_frames(reel_path)
     if actual_frames != duration_f:
-        return CheckResult("R3", False, f"reel frames: expected {duration_f}, got {actual_frames}")
+        return CheckResult(
+            "R3", False, f"reel frames: expected {duration_f}, got {actual_frames}"
+        )
 
-    probe = json.loads(subprocess.run(
-        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", str(reel_path)],
-        check=True, capture_output=True, text=True,
-    ).stdout)
+    probe = json.loads(
+        subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                str(reel_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
     duration_s = duration_f / 30
     streams = {s["codec_type"]: s for s in probe["streams"]}
     for kind in ("video", "audio"):
@@ -401,22 +625,55 @@ def check_r3_reel_duration(reel_path: Path, duration_f: int) -> CheckResult:
             continue
         actual_s = float(stream.get("duration") or probe["format"]["duration"])
         if not (duration_s - 1 / 30 <= actual_s <= duration_s + 1 / 30):
-            return CheckResult("R3", False, f"{kind} duration {actual_s} outside [{duration_s - 1/30}, {duration_s + 1/30}]")
+            return CheckResult(
+                "R3",
+                False,
+                f"{kind} duration {actual_s} outside "
+                f"[{duration_s - 1 / 30}, {duration_s + 1 / 30}]",
+            )
     return CheckResult("R3", True)
 
 
 def check_r4_color(path: Path) -> CheckResult:
-    stream = json.loads(subprocess.run(
-        ["ffprobe", "-v", "quiet", "-print_format", "json", "-select_streams", "v:0", "-show_streams", str(path)],
-        check=True, capture_output=True, text=True,
-    ).stdout)["streams"][0]
+    stream = json.loads(
+        subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-select_streams",
+                "v:0",
+                "-show_streams",
+                str(path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )["streams"][0]
     ok = (
         stream.get("color_primaries") == "bt709"
         and stream.get("color_transfer") == "bt709"
         and stream.get("color_space") == "bt709"
         and stream.get("color_range") == "tv"
     )
-    return CheckResult("R4", ok, str({k: stream.get(k) for k in ("color_primaries", "color_transfer", "color_space", "color_range")}))
+    return CheckResult(
+        "R4",
+        ok,
+        str(
+            {
+                k: stream.get(k)
+                for k in (
+                    "color_primaries",
+                    "color_transfer",
+                    "color_space",
+                    "color_range",
+                )
+            }
+        ),
+    )
 
 
 def check_r5_loudnorm_linear(audio: dict, allow_dynamic: bool = False) -> CheckResult:
@@ -431,36 +688,57 @@ def check_r5_loudnorm_linear(audio: dict, allow_dynamic: bool = False) -> CheckR
 
 def check_r6_monotonic_dts(reel_path: Path) -> CheckResult:
     out = subprocess.run(
-        ["ffprobe", "-v", "quiet", "-select_streams", "v:0", "-show_entries", "packet=dts,pts",
-         "-print_format", "json", str(reel_path)],
-        check=True, capture_output=True, text=True,
+        [
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "packet=dts,pts",
+            "-print_format",
+            "json",
+            str(reel_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
     packets = json.loads(out)["packets"]
     prev_dts = None
     for i, p in enumerate(packets):
         dts = int(p["dts"])
         if prev_dts is not None and dts <= prev_dts:
-            return CheckResult("R6", False, f"non-monotonic DTS at packet {i}: {dts} <= {prev_dts}")
+            return CheckResult(
+                "R6", False, f"non-monotonic DTS at packet {i}: {dts} <= {prev_dts}"
+            )
         prev_dts = dts
     return CheckResult("R6", True)
 
 
 def run_render_checks(
-    edl: dict, session_dir: Path, allow_dynamic_loudnorm: bool = False, run_r2: bool = True,
+    edl: dict,
+    session_dir: Path,
+    allow_dynamic_loudnorm: bool = False,
+    run_r2: bool = True,
 ) -> list[CheckResult]:
     results: list[CheckResult] = []
     for clip in edl["clips"]:
         final_seg = session_dir / "segments" / f"seg_{clip['slot']:02d}.mp4"
         results.append(check_r1_frame_count(final_seg, clip["n_frames"]))
         if run_r2:
-            preview_seg = session_dir / "preview_segments" / f"seg_{clip['slot']:02d}.mp4"
+            preview_seg = (
+                session_dir / "preview_segments" / f"seg_{clip['slot']:02d}.mp4"
+            )
             results.append(check_r2_phash(final_seg, preview_seg, clip["n_frames"]))
         results.append(check_r4_color(final_seg))
 
     reel_path = session_dir / "reel.mp4"
     results.append(check_r3_reel_duration(reel_path, edl["target"]["duration_f"]))
     results.append(check_r4_color(reel_path))
-    results.append(check_r5_loudnorm_linear(edl["audio"], allow_dynamic=allow_dynamic_loudnorm))
+    results.append(
+        check_r5_loudnorm_linear(edl["audio"], allow_dynamic=allow_dynamic_loudnorm)
+    )
     results.append(check_r6_monotonic_dts(reel_path))
     return results
 
@@ -469,14 +747,21 @@ def run_render_checks(
 # Orquestacion (#8.5, #14 paso 2): render + preview + concat + checks.
 # --------------------------------------------------------------------------
 
+
 def run_render(
-    edl: dict, manifest: dict, session_dir: Path,
-    threads: int = 4, tonemap_chain: str = "", allow_dynamic_loudnorm: bool = False,
+    edl: dict,
+    manifest: dict,
+    session_dir: Path,
+    threads: int = 4,
+    tonemap_chain: str = "",
+    allow_dynamic_loudnorm: bool = False,
 ) -> list[CheckResult]:
     render_segments(edl, manifest, session_dir, threads, tonemap_chain)
     render_preview_segments(edl, manifest, session_dir, threads, tonemap_chain)
     concat_and_audio(edl, session_dir, threads)
-    results = run_render_checks(edl, session_dir, allow_dynamic_loudnorm=allow_dynamic_loudnorm)
+    results = run_render_checks(
+        edl, session_dir, allow_dynamic_loudnorm=allow_dynamic_loudnorm
+    )
     failed = [r for r in results if not r.ok]
     if failed:
         raise RenderError("; ".join(f"{r.name}: {r.detail}" for r in failed))

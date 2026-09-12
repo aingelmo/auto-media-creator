@@ -1,6 +1,7 @@
 """Capa 4 (salida) - Ensambla edl.json (#7) a partir de manifest, candidates.json,
 slots.json y una seleccion (LLM o fallback de reglas, #8.5).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -12,11 +13,18 @@ from .selection import build_selected
 
 VERSION = 4
 
-DEFAULT_AUDIO_TARGETS = {"target_lufs": -14.0, "target_tp": -1.0, "target_lra": 11.0, "fade_out_s": 0.5}
+DEFAULT_AUDIO_TARGETS = {
+    "target_lufs": -14.0,
+    "target_tp": -1.0,
+    "target_lra": 11.0,
+    "fade_out_s": 0.5,
+}
 
 
 def _hash(obj: dict) -> str:
-    return hashlib.sha256(json.dumps(obj, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(obj, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
 
 
 def _audio_block(manifest: dict, config: dict) -> dict:
@@ -51,7 +59,9 @@ def _aggregate_warnings(clips: list[dict], warnings: list[str]) -> list[str]:
         agg.append("low_framing_quality")
 
     relaxed = sum(1 for w in warnings if w in _RELAXED_LOW_MATERIAL)
-    relaxed += sum(1 for c in clips for w in c["warnings"] if w in _RELAXED_LOW_MATERIAL)
+    relaxed += sum(
+        1 for c in clips for w in c["warnings"] if w in _RELAXED_LOW_MATERIAL
+    )
     if relaxed > len(clips) / 2:
         agg.append("low_material_quality")
 
@@ -69,7 +79,12 @@ def _aggregate_warnings(clips: list[dict], warnings: list[str]) -> list[str]:
     return agg
 
 
-def _provenance(fallback_roles: list[str], has_develop: bool, warnings: list[str], selection_meta: dict | None) -> dict:
+def _provenance(
+    fallback_roles: list[str],
+    has_develop: bool,
+    warnings: list[str],
+    selection_meta: dict | None,
+) -> dict:
     roles_in_use = {"hook", "close"} | ({"develop"} if has_develop else set())
     if not fallback_roles:
         planner_mode = "llm"
@@ -110,11 +125,15 @@ def build_edl(
     slots = slots_json["slots"]
     has_develop = any(s["role"] == "develop" for s in slots)
 
-    selected, warnings, fallback_roles = build_selected(candidates_json, slots_json, selection)
+    selected, warnings, fallback_roles = build_selected(
+        candidates_json, slots_json, selection
+    )
 
     candidates_by_id = {c["id"]: c for c in candidates_json["candidates"]}
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
-    clips, clip_warnings = build_clips(slots, selected, candidates_by_id, sources_by_src, config)
+    clips, clip_warnings = build_clips(
+        slots, selected, candidates_by_id, sources_by_src, config
+    )
     warnings = warnings + clip_warnings
     warnings = warnings + _aggregate_warnings(clips, warnings)
 
@@ -133,8 +152,15 @@ def build_edl(
             "pose_model_sha256": candidates_json.get("pose_model_sha256", ""),
         },
         "render_profile": render_profile,
-        "target": {"w": 1080, "h": 1920, "fps": 30, "duration_f": slots_json["duration_f"]},
+        "target": {
+            "w": 1080,
+            "h": 1920,
+            "fps": 30,
+            "duration_f": slots_json["duration_f"],
+        },
         "clips": clips,
         "audio": _audio_block(manifest, config),
-        "provenance": _provenance(fallback_roles, has_develop, warnings, selection_meta),
+        "provenance": _provenance(
+            fallback_roles, has_develop, warnings, selection_meta
+        ),
     }

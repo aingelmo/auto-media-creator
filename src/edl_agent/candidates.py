@@ -3,6 +3,7 @@
 Consume las series de `features.py` (una por fuente de video) y produce los
 candidatos `peak`/`calm`/`image` que el planner y el selector LLM consumen.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -17,7 +18,9 @@ PEAK_MIN_PROMINENCE = 0.2  # [validar]
 SHARPNESS_MIN = 0.35  # [validar]
 PEAK_MOTION_BG_MAX = 0.6  # [validar]
 PEAK_WINDOW_MAX_S = 6.0
-PEAK_WINDOW_SHARPNESS_TOLERANCE = 3  # frames de sharpness baja tolerados sin cortar la ventana (motion blur transitorio en el pico); subir si sigue cortando ventanas cerca de picos reales
+PEAK_WINDOW_SHARPNESS_TOLERANCE = 3
+# frames de sharpness baja tolerados sin cortar la ventana (motion blur
+# transitorio en el pico); subir si sigue cortando ventanas cerca de picos reales
 
 CALM_MIN_DURATION_S = 2.0
 CALM_KP_SPEED_MAX = 0.25
@@ -36,7 +39,9 @@ def edge_margin_s(clip_duration_s: float) -> float:
     return 0.5 if clip_duration_s >= 5.0 else 0.25
 
 
-def find_peak_windows(features: dict, clip_duration_s: float, scene_cuts_s: list[float]) -> list[dict]:
+def find_peak_windows(
+    features: dict, clip_duration_s: float, scene_cuts_s: list[float]
+) -> list[dict]:
     """#4.3 `peak`: picos locales de kp_speed con descarte y ventana."""
     kp_speed = np.asarray(features["kp_speed"])
     t_s = features["t_s"]
@@ -44,20 +49,28 @@ def find_peak_windows(features: dict, clip_duration_s: float, scene_cuts_s: list
     subject_visible = features["subject_visible"]
     motion_bg = features["motion_bg"]
 
-    idxs, _ = find_peaks(kp_speed, distance=PEAK_MIN_DISTANCE_SAMPLES, prominence=PEAK_MIN_PROMINENCE)
+    idxs, _ = find_peaks(
+        kp_speed, distance=PEAK_MIN_DISTANCE_SAMPLES, prominence=PEAK_MIN_PROMINENCE
+    )
     margin = edge_margin_s(clip_duration_s)
 
     out = []
     for i in idxs:
         t_peak = t_s[i]
-        if sharpness[i] < SHARPNESS_MIN or not subject_visible[i] or motion_bg[i] > PEAK_MOTION_BG_MAX:
+        if (
+            sharpness[i] < SHARPNESS_MIN
+            or not subject_visible[i]
+            or motion_bg[i] > PEAK_MOTION_BG_MAX
+        ):
             continue
         if t_peak < margin or (clip_duration_s - t_peak) < margin:
             continue
         if any(abs(t_peak - c) < margin for c in scene_cuts_s):
             continue
         window = _peak_window(features, int(i), scene_cuts_s)
-        out.append({"kind": "peak", "t_peak": t_peak, "window": window, "index": int(i)})
+        out.append(
+            {"kind": "peak", "t_peak": t_peak, "window": window, "index": int(i)}
+        )
     return out
 
 
@@ -142,11 +155,15 @@ def find_calm_windows(features: dict) -> list[dict]:
     out = []
     for a, b in runs:
         center_i = (a + b) // 2
-        out.append({"kind": "calm", "t_peak": t_s[center_i], "window": [t_s[a], t_s[b]]})
+        out.append(
+            {"kind": "calm", "t_peak": t_s[center_i], "window": [t_s[a], t_s[b]]}
+        )
     return out
 
 
-def admits_slots(window: tuple[float, float], slots: list[dict], speed: float = 1.0, fps: int = FPS) -> list[int]:
+def admits_slots(
+    window: tuple[float, float], slots: list[dict], speed: float = 1.0, fps: int = FPS
+) -> list[int]:
     """#4.3 `admits_slots`: mismo calculo que #6.1, precalculado para no
     enviar al LLM candidatos que no caben en ningun slot.
     """
@@ -167,20 +184,39 @@ def score_cv(kp_speed: float, sharpness: float, bbox: tuple | None, kind: str) -
     return action_term + 0.3 * sharpness + 0.2 * centrality
 
 
-def extract_peak_frames(proxy_path: str, t_peak: float, window: tuple[float, float],
-                         out_dir: Path, cand_id: str) -> tuple[list[str], list[str]]:
+def extract_peak_frames(
+    proxy_path: str,
+    t_peak: float,
+    window: tuple[float, float],
+    out_dir: Path,
+    cand_id: str,
+) -> tuple[list[str], list[str]]:
     """#4.3 `peak_frames`: 3 JPEG (t-0.3, t, t+0.3, clamp a la ventana)."""
     from .ingest import sha256_file
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    scale = f"scale='if(gt(iw,ih),{PEAK_FRAME_SIDE_PX},-2)':'if(gt(iw,ih),-2,{PEAK_FRAME_SIDE_PX})'"
+    scale = (
+        f"scale='if(gt(iw,ih),{PEAK_FRAME_SIDE_PX},-2)':"
+        f"'if(gt(iw,ih),-2,{PEAK_FRAME_SIDE_PX})'"
+    )
     paths, hashes = [], []
     for i, off in enumerate(PEAK_FRAME_OFFSETS_S):
         t = min(max(t_peak + off, window[0]), window[1])
         out_path = out_dir / f"{cand_id}_{i}.jpg"
         cmd = [
-            "ffmpeg", "-y", "-ss", str(max(t, 0.0)), "-i", str(proxy_path),
-            "-frames:v", "1", "-vf", scale, "-q:v", "4", str(out_path),
+            "ffmpeg",
+            "-y",
+            "-ss",
+            str(max(t, 0.0)),
+            "-i",
+            str(proxy_path),
+            "-frames:v",
+            "1",
+            "-vf",
+            scale,
+            "-q:v",
+            "4",
+            str(out_path),
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
         paths.append(str(out_path))
@@ -206,39 +242,75 @@ def build_contact_sheet(peak_frame_paths: list[str], out_path: Path) -> Path:
 
 
 def build_video_candidates(
-    src: str, id_start: int, features: dict, clip_duration_s: float,
-    scene_cuts_s: list[float], slots: list[dict], proxy_path: str, peaks_dir: Path,
+    src: str,
+    id_start: int,
+    features: dict,
+    clip_duration_s: float,
+    scene_cuts_s: list[float],
+    slots: list[dict],
+    proxy_path: str,
+    peaks_dir: Path,
     speed: float = 1.0,
 ) -> list[dict]:
     """Ensambla los candidatos `peak`+`calm` de una fuente de video (#4.3).
     Ids globales `c{NN}` a partir de `id_start`.
     """
-    windows = find_peak_windows(features, clip_duration_s, scene_cuts_s) + find_calm_windows(features)
+    windows = find_peak_windows(
+        features, clip_duration_s, scene_cuts_s
+    ) + find_calm_windows(features)
     out = []
     for n, w in enumerate(windows):
         cand_id = f"c{id_start + n:02d}"
         i = w.get("index")
-        bbox = features["subject_bbox"][i] if i is not None else _bbox_at(features, w["t_peak"])
-        kp_speed = features["kp_speed"][i] if i is not None else _value_at(features, "kp_speed", w["t_peak"])
-        sharpness = features["sharpness"][i] if i is not None else _value_at(features, "sharpness", w["t_peak"])
-        motion_bg = features["motion_bg"][i] if i is not None else _value_at(features, "motion_bg", w["t_peak"])
+        bbox = (
+            features["subject_bbox"][i]
+            if i is not None
+            else _bbox_at(features, w["t_peak"])
+        )
+        kp_speed = (
+            features["kp_speed"][i]
+            if i is not None
+            else _value_at(features, "kp_speed", w["t_peak"])
+        )
+        sharpness = (
+            features["sharpness"][i]
+            if i is not None
+            else _value_at(features, "sharpness", w["t_peak"])
+        )
+        motion_bg = (
+            features["motion_bg"][i]
+            if i is not None
+            else _value_at(features, "motion_bg", w["t_peak"])
+        )
         multi_subject = features["multi_subject"][i] if i is not None else False
 
         peak_frames, peak_frames_sha256 = extract_peak_frames(
-            proxy_path, w["t_peak"], tuple(w["window"]), peaks_dir, cand_id,
+            proxy_path,
+            w["t_peak"],
+            tuple(w["window"]),
+            peaks_dir,
+            cand_id,
         )
         build_contact_sheet(peak_frames, peaks_dir / f"{cand_id}_contact.jpg")
 
-        out.append({
-            "id": cand_id, "src": src, "kind": w["kind"],
-            "t_peak": w["t_peak"], "window": w["window"],
-            "kp_speed": kp_speed, "motion_bg": motion_bg, "sharpness": sharpness,
-            "subject_bbox": list(bbox) if bbox else [0.0, 0.0, 1.0, 1.0],
-            "multi_subject": bool(multi_subject),
-            "score_cv": score_cv(kp_speed, sharpness, bbox, w["kind"]),
-            "admits_slots": admits_slots(tuple(w["window"]), slots, speed),
-            "peak_frames": peak_frames, "peak_frames_sha256": peak_frames_sha256,
-        })
+        out.append(
+            {
+                "id": cand_id,
+                "src": src,
+                "kind": w["kind"],
+                "t_peak": w["t_peak"],
+                "window": w["window"],
+                "kp_speed": kp_speed,
+                "motion_bg": motion_bg,
+                "sharpness": sharpness,
+                "subject_bbox": list(bbox) if bbox else [0.0, 0.0, 1.0, 1.0],
+                "multi_subject": bool(multi_subject),
+                "score_cv": score_cv(kp_speed, sharpness, bbox, w["kind"]),
+                "admits_slots": admits_slots(tuple(w["window"]), slots, speed),
+                "peak_frames": peak_frames,
+                "peak_frames_sha256": peak_frames_sha256,
+            }
+        )
     return out
 
 
@@ -247,29 +319,39 @@ def _nearest_index(features: dict, t: float) -> int:
     return min(range(len(t_s)), key=lambda i: abs(t_s[i] - t))
 
 
-def _bbox_at(features: dict, t: float):
+def _bbox_at(features: dict, t: float) -> tuple | None:
     return features["subject_bbox"][_nearest_index(features, t)]
 
 
-def _value_at(features: dict, key: str, t: float):
+def _value_at(features: dict, key: str, t: float) -> float:
     return features[key][_nearest_index(features, t)]
 
 
-def build_image_candidate(src: str, cand_id: str, slots: list[dict], peak_frame: str) -> dict:
-    """#4.3 candidato `image`: t_peak=0, ventana [0, 1e9], se admite en todos los slots."""
+def build_image_candidate(
+    src: str, cand_id: str, slots: list[dict], peak_frame: str
+) -> dict:
+    """#4.3 candidato `image`: t_peak=0, ventana [0, 1e9], admitido en todos
+    los slots.
+    """
     import hashlib
 
     from .ingest import sha256_file
 
     return {
-        "id": cand_id, "src": src, "kind": "image",
-        "t_peak": 0.0, "window": [0.0, 1e9],
-        "kp_speed": 0.0, "motion_bg": 0.0, "sharpness": 0.85,
+        "id": cand_id,
+        "src": src,
+        "kind": "image",
+        "t_peak": 0.0,
+        "window": [0.0, 1e9],
+        "kp_speed": 0.0,
+        "motion_bg": 0.0,
+        "sharpness": 0.85,
         "subject_bbox": [0.25, 0.10, 0.75, 0.90],
         "multi_subject": False,
         "score_cv": score_cv(0.0, 0.85, (0.25, 0.10, 0.75, 0.90), "image"),
         "admits_slots": [s["slot"] for s in slots],
         "peak_frames": [peak_frame],
-        "peak_frames_sha256": [sha256_file(Path(peak_frame))] if Path(peak_frame).exists()
+        "peak_frames_sha256": [sha256_file(Path(peak_frame))]
+        if Path(peak_frame).exists()
         else [hashlib.sha256(b"").hexdigest()],
     }

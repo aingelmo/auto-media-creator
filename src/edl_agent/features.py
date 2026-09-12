@@ -10,14 +10,19 @@ da el mismo resultado y evita una segunda pasada de tracking por candidato.
 # ponytail: sujeto unico por clip; recalcular por ventana si aparecen sesiones
 # con relevos/varios atletas alternando protagonismo dentro del mismo clip.
 """
+
 from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 import cv2
 import numpy as np
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SAMPLE_STRIDE = 3  # proxy a 30fps -> muestreo a 10fps (#4.2)
 IOU_MATCH_THRESHOLD = 0.3
@@ -63,7 +68,9 @@ def _area(bbox: tuple[float, float, float, float]) -> float:
     return max(0.0, x1 - x0) * max(0.0, y1 - y0)
 
 
-def iou(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+def iou(
+    a: tuple[float, float, float, float], b: tuple[float, float, float, float]
+) -> float:
     ax0, ay0, ax1, ay1 = a
     bx0, by0, bx1, by1 = b
     ix0, iy0 = max(ax0, bx0), max(ay0, by0)
@@ -131,17 +138,26 @@ def _track_kp_speeds(tracks: list[Track]) -> dict[int, dict[int, float]]:
                 ]
                 bbox_h = max(tr.samples[i].bbox[3] - tr.samples[i].bbox[1], 1e-6)
                 raw = (sum(dists) / len(dists) / bbox_h / gap) if dists else 0.0
-                ema = raw if ema is None else KP_SPEED_EMA_ALPHA * raw + (1 - KP_SPEED_EMA_ALPHA) * ema
+                ema = (
+                    raw
+                    if ema is None
+                    else KP_SPEED_EMA_ALPHA * raw + (1 - KP_SPEED_EMA_ALPHA) * ema
+                )
                 speeds[i] = ema
             prev_i = i
         result[tr.track_id] = speeds
     return result
 
 
-def _principal_track(tracks: list[Track], speeds: dict[int, dict[int, float]]) -> int | None:
+def _principal_track(
+    tracks: list[Track], speeds: dict[int, dict[int, float]]
+) -> int | None:
     best_id, best_score = None, -1.0
     for tr in tracks:
-        score = sum(speeds[tr.track_id].get(i, 0.0) * _area(tr.samples[i].bbox) for i in tr.samples)
+        score = sum(
+            speeds[tr.track_id].get(i, 0.0) * _area(tr.samples[i].bbox)
+            for i in tr.samples
+        )
         if score > best_score:
             best_score, best_id = score, tr.track_id
     return best_id
@@ -157,7 +173,9 @@ def _normalize_p5_95(values: np.ndarray) -> np.ndarray:
     return np.clip((values - lo) / (hi - lo), 0.0, 1.0)
 
 
-def _motion_series(frames: list[np.ndarray], detections: list[list[Detection]]) -> tuple[np.ndarray, np.ndarray]:
+def _motion_series(
+    frames: list[np.ndarray], detections: list[list[Detection]]
+) -> tuple[np.ndarray, np.ndarray]:
     """motion_bg (fuera de bboxes de personas) y motion (global, diagnostico), #4.2."""
     n = len(frames)
     motion_bg, motion = np.zeros(n), np.zeros(n)
@@ -171,7 +189,7 @@ def _motion_series(frames: list[np.ndarray], detections: list[list[Detection]]) 
             mask = np.ones_like(diff, dtype=bool)
             for d in detections[i]:
                 x0, y0, x1, y1 = d.bbox
-                mask[int(y0 * h):int(y1 * h), int(x0 * w):int(x1 * w)] = False
+                mask[int(y0 * h) : int(y1 * h), int(x0 * w) : int(x1 * w)] = False
             motion_bg[i] = float(diff[mask].mean()) if mask.any() else motion[i]
         prev_gray = gray
     if n > 1:
@@ -179,8 +197,11 @@ def _motion_series(frames: list[np.ndarray], detections: list[list[Detection]]) 
     return motion_bg, motion
 
 
-def _sharpness_series(frames: list[np.ndarray], subject_bbox: list[tuple | None],
-                       subject_visible: list[bool]) -> np.ndarray:
+def _sharpness_series(
+    frames: list[np.ndarray],
+    subject_bbox: list[tuple | None],
+    subject_visible: list[bool],
+) -> np.ndarray:
     """Varianza del Laplaciano dentro del bbox del sujeto (#4.2); sin sujeto
     visible se usa el frame completo (fallback razonable, no afecta al filtro
     de candidatos porque subject_visible ya descarta esos instantes).
@@ -189,9 +210,10 @@ def _sharpness_series(frames: list[np.ndarray], subject_bbox: list[tuple | None]
     for i, frame in enumerate(frames):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         roi = gray
-        if subject_visible[i] and subject_bbox[i] is not None:
+        bbox = subject_bbox[i]
+        if subject_visible[i] and bbox is not None:
             h, w = gray.shape
-            x0, y0, x1, y1 = subject_bbox[i]
+            x0, y0, x1, y1 = bbox
             x0i, y0i = int(x0 * w), int(y0 * h)
             x1i, y1i = max(x0i + 1, int(x1 * w)), max(y0i + 1, int(y1 * h))
             roi = gray[y0i:y1i, x0i:x1i]
@@ -202,7 +224,8 @@ def _sharpness_series(frames: list[np.ndarray], subject_bbox: list[tuple | None]
 def _read_samples(path: str, stride: int) -> list[np.ndarray]:
     cap = cv2.VideoCapture(str(path))
     if not cap.isOpened():
-        raise RuntimeError(f"cannot open {path}")
+        msg = f"cannot open {path}"
+        raise RuntimeError(msg)
     frames = []
     idx = 0
     ok, frame = cap.read()
@@ -215,14 +238,19 @@ def _read_samples(path: str, stride: int) -> list[np.ndarray]:
     return frames
 
 
-def extract_features(proxy_path: str, detector: Detector, stride: int = SAMPLE_STRIDE,
-                      source_fps: float = 30.0) -> dict:
+def extract_features(
+    proxy_path: str,
+    detector: Detector,
+    stride: int = SAMPLE_STRIDE,
+    source_fps: float = 30.0,
+) -> dict:
     """Orquesta #4.2 sobre un proxy ya generado. `detector` aisla el modelo de
     pose para poder testear el resto de la logica sin YOLO real.
     """
     frames = _read_samples(proxy_path, stride)
     if not frames:
-        raise RuntimeError(f"no frames read from {proxy_path}")
+        msg = f"no frames read from {proxy_path}"
+        raise RuntimeError(msg)
     n = len(frames)
 
     detections = [detector(f) for f in frames]
@@ -238,8 +266,13 @@ def extract_features(proxy_path: str, detector: Detector, stride: int = SAMPLE_S
         ema_bbox = None
         for i in sorted(track.samples):
             bbox = track.samples[i].bbox
-            ema_bbox = bbox if ema_bbox is None else tuple(
-                BBOX_EMA_ALPHA * b + (1 - BBOX_EMA_ALPHA) * e for b, e in zip(bbox, ema_bbox)
+            ema_bbox = (
+                bbox
+                if ema_bbox is None
+                else tuple(
+                    BBOX_EMA_ALPHA * b + (1 - BBOX_EMA_ALPHA) * e
+                    for b, e in zip(bbox, ema_bbox, strict=False)
+                )
             )
             subject_bbox[i] = ema_bbox
             subject_visible[i] = True
@@ -289,12 +322,17 @@ def yolo_pose_detector(model_path: str = "yolov8n-pose.pt") -> Detector:
 
     def _detect(frame_bgr: np.ndarray) -> list[Detection]:
         h, w = frame_bgr.shape[:2]
-        result = model.predict(frame_bgr, verbose=False)[0]
+        predictions: Any = model.predict(frame_bgr, verbose=False)
+        result = predictions[0]
         dets: list[Detection] = []
         if result.boxes is None:
             return dets
         boxes = result.boxes.xyxy.cpu().numpy()
-        kpts = result.keypoints.data.cpu().numpy() if result.keypoints is not None else None
+        kpts = (
+            result.keypoints.data.cpu().numpy()
+            if result.keypoints is not None
+            else None
+        )
         for i, box in enumerate(boxes):
             x0, y0, x1, y1 = (float(v) for v in box)
             bbox = (x0 / w, y0 / h, x1 / w, y1 / h)
@@ -310,37 +348,44 @@ def yolo_pose_detector(model_path: str = "yolov8n-pose.pt") -> Detector:
     return _detect
 
 
-def save_features(features: dict, path) -> None:
+def save_features(features: dict, path: Path) -> None:
     import pandas as pd
 
-    n = len(features["t_s"])
     bbox = features["subject_bbox"]
-    df = pd.DataFrame({
-        "t_s": features["t_s"],
-        "kp_speed": features["kp_speed"],
-        "motion_bg": features["motion_bg"],
-        "motion": features["motion"],
-        "sharpness": features["sharpness"],
-        "subject_visible": features["subject_visible"],
-        "multi_subject": features["multi_subject"],
-        "bbox_x0": [b[0] if b else np.nan for b in bbox],
-        "bbox_y0": [b[1] if b else np.nan for b in bbox],
-        "bbox_x1": [b[2] if b else np.nan for b in bbox],
-        "bbox_y1": [b[3] if b else np.nan for b in bbox],
-    })
+    df = pd.DataFrame(
+        {
+            "t_s": features["t_s"],
+            "kp_speed": features["kp_speed"],
+            "motion_bg": features["motion_bg"],
+            "motion": features["motion"],
+            "sharpness": features["sharpness"],
+            "subject_visible": features["subject_visible"],
+            "multi_subject": features["multi_subject"],
+            "bbox_x0": [b[0] if b else np.nan for b in bbox],
+            "bbox_y0": [b[1] if b else np.nan for b in bbox],
+            "bbox_x1": [b[2] if b else np.nan for b in bbox],
+            "bbox_y1": [b[3] if b else np.nan for b in bbox],
+        }
+    )
     df.attrs["features_config_sha256"] = features["features_config_sha256"]
     df.attrs["n_tracks"] = features["n_tracks"]
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(path)
 
 
-def load_features(path) -> dict:
+def load_features(path: Path) -> dict:
     import pandas as pd
 
     df = pd.read_parquet(path)
     bbox = [
-        None if np.isnan(row.bbox_x0) else (row.bbox_x0, row.bbox_y0, row.bbox_x1, row.bbox_y1)
-        for row in df.itertuples()
+        None if np.isnan(x0) else (x0, y0, x1, y1)
+        for x0, y0, x1, y1 in zip(
+            df["bbox_x0"],
+            df["bbox_y0"],
+            df["bbox_x1"],
+            df["bbox_y1"],
+            strict=True,
+        )
     ]
     return {
         "t_s": df["t_s"].tolist(),

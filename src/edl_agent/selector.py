@@ -6,13 +6,15 @@ los reintentos por `status: "incomplete"` (#5.6). Guarda cada intento como
 `selection_attempt_N.json` en session_dir. El resultado (`selection`,
 `selection_meta`) se pasa directo a `session.run_planner`.
 """
+
 from __future__ import annotations
 
 import base64
 import json
 from pathlib import Path
+from typing import Any
 
-DEFAULTS = {
+DEFAULTS: dict[str, Any] = {
     "model": "gemini-3.7-flash",
     "thinking_level": "low",
     "thinking_level_many_candidates": "medium",  # #5.1: >=30 candidatos
@@ -24,26 +26,54 @@ DEFAULTS = {
 
 # Lista canonica de ejercicios, #5.5.
 EXERCISES = [
-    "back squat", "front squat", "overhead squat", "deadlift", "clean", "snatch",
-    "jerk", "thruster", "pull-up", "muscle-up", "push-up", "burpee", "box jump",
-    "wall ball", "kettlebell swing", "rowing", "bike", "ski erg", "run",
-    "rope climb", "handstand", "double-under", "other",
+    "back squat",
+    "front squat",
+    "overhead squat",
+    "deadlift",
+    "clean",
+    "snatch",
+    "jerk",
+    "thruster",
+    "pull-up",
+    "muscle-up",
+    "push-up",
+    "burpee",
+    "box jump",
+    "wall ball",
+    "kettlebell swing",
+    "rowing",
+    "bike",
+    "ski erg",
+    "run",
+    "rope climb",
+    "handstand",
+    "double-under",
+    "other",
 ]
 
-SYSTEM_PROMPT = """Eres un editor de vídeo profesional especializado en Reels verticales (9:16) de gimnasio.
+SYSTEM_PROMPT = """Eres un editor de vídeo profesional especializado en Reels \
+verticales (9:16) de gimnasio.
 
-Recibes una lista de MOMENTOS CANDIDATOS. Cada candidato tiene un id, un tipo (peak = momento de acción, calm = momento estable, image = foto) y uno o tres fotogramas: justo antes del pico, el pico y justo después. Recibes también los SLOTS del montaje con su rol narrativo y una LISTA CANÓNICA DE EJERCICIOS.
+Recibes una lista de MOMENTOS CANDIDATOS. Cada candidato tiene un id, un tipo \
+(peak = momento de acción, calm = momento estable, image = foto) y uno o tres \
+fotogramas: justo antes del pico, el pico y justo después. Recibes también los \
+SLOTS del montaje con su rol narrativo y una LISTA CANÓNICA DE EJERCICIOS.
 
 Tu tarea es juzgar contenido, no calcular tiempos, coordenadas ni orden temporal.
 
-1. RECHAZA los candidatos con: desenfoque en el fotograma central, sujeto fuera de encuadre o tapado, encuadre que no permite ver la ejecución, o contenido idéntico a otro candidato mejor del mismo clip.
+1. RECHAZA los candidatos con: desenfoque en el fotograma central, sujeto fuera \
+de encuadre o tapado, encuadre que no permite ver la ejecución, o contenido \
+idéntico a otro candidato mejor del mismo clip.
 2. SELECCIONA todos los demás y asigna a cada uno UN rol:
    - hook: máxima explosividad o impacto visual. Solo tipo peak.
    - close: sujeto estable, centrado, final limpio. Solo tipo calm o image.
-   - develop: el resto. Prioriza variedad de ejercicios y planos donde se ve bien la técnica.
-3. Asigna rank dentro de cada rol: 1 = mejor calidad. Sin huecos (1, 2, 3, …). El orden en el montaje lo decide otro sistema.
+   - develop: el resto. Prioriza variedad de ejercicios y planos donde se ve \
+bien la técnica.
+3. Asigna rank dentro de cada rol: 1 = mejor calidad. Sin huecos (1, 2, 3, …). \
+El orden en el montaje lo decide otro sistema.
 4. exercise: usa exactamente un nombre de la lista canónica; si no encaja, "other".
-5. Si hay menos de 3 candidatos válidos para develop o ninguno para hook o close, explícalo en notes. No inventes candidatos ni fuerces rechazos para cumplir cuotas.
+5. Si hay menos de 3 candidatos válidos para develop o ninguno para hook o close, \
+explícalo en notes. No inventes candidatos ni fuerces rechazos para cumplir cuotas.
 
 Reglas:
 - Usa solo candidate_id existentes. No emitas tiempos ni coordenadas.
@@ -61,17 +91,22 @@ def _cost_usd(usage: dict | None, model: str) -> float:
         return 0.0
     input_price, output_price = PRICING_PER_MTOK[model]
     input_tokens = usage.get("total_input_tokens", 0) or 0
-    output_tokens = (usage.get("total_output_tokens", 0) or 0) + (usage.get("total_thought_tokens", 0) or 0)
+    output_tokens = (usage.get("total_output_tokens", 0) or 0) + (
+        usage.get("total_thought_tokens", 0) or 0
+    )
     return input_tokens * input_price / 1e6 + output_tokens * output_price / 1e6
 
-USER_PROMPT_TEMPLATE = """OBJETIVO: Reel de {duration_s} s. Temática: resumen dinámico de entrenamiento.
+
+USER_PROMPT_TEMPLATE = """OBJETIVO: Reel de {duration_s} s. Temática: resumen \
+dinámico de entrenamiento.
 
 SLOTS (N_SLOTS = {n_slots}): 1 hook, {n_develop} develop, 1 close.
 
 LISTA CANÓNICA DE EJERCICIOS:
 {exercises}
 
-CANDIDATOS: {n_cand} (ids: {ids}). Los fotogramas de cada uno preceden a este mensaje, etiquetados con su id.
+CANDIDATOS: {n_cand} (ids: {ids}). Los fotogramas de cada uno preceden a este \
+mensaje, etiquetados con su id.
 
 Genera la selección."""
 
@@ -87,11 +122,23 @@ def selection_schema() -> dict:
                     "type": "object",
                     "properties": {
                         "candidate_id": {"type": "string"},
-                        "role": {"type": "string", "enum": ["hook", "develop", "close"]},
-                        "rank": {"type": "integer", "minimum": 1,
-                                 "description": "Calidad dentro de su rol. 1 = mejor. Sin huecos. No es orden temporal."},
+                        "role": {
+                            "type": "string",
+                            "enum": ["hook", "develop", "close"],
+                        },
+                        "rank": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": (
+                                "Calidad dentro de su rol. 1 = mejor. Sin huecos. "
+                                "No es orden temporal."
+                            ),
+                        },
                         "exercise": {"type": "string", "enum": EXERCISES},
-                        "reason": {"type": "string", "description": "Máximo 12 palabras."},
+                        "reason": {
+                            "type": "string",
+                            "description": "Máximo 12 palabras.",
+                        },
                     },
                     "required": ["candidate_id", "role", "rank", "exercise", "reason"],
                 },
@@ -102,13 +149,21 @@ def selection_schema() -> dict:
                     "type": "object",
                     "properties": {
                         "candidate_id": {"type": "string"},
-                        "reason": {"type": "string", "description": "Máximo 8 palabras."},
+                        "reason": {
+                            "type": "string",
+                            "description": "Máximo 8 palabras.",
+                        },
                     },
                     "required": ["candidate_id", "reason"],
                 },
             },
-            "notes": {"type": "string",
-                       "description": "Vacío salvo problemas globales (pocos candidatos válidos, todo el material repetido, etc.)."},
+            "notes": {
+                "type": "string",
+                "description": (
+                    "Vacío salvo problemas globales (pocos candidatos válidos, "
+                    "todo el material repetido, etc.)."
+                ),
+            },
         },
         "required": ["selected", "rejected", "notes"],
     }
@@ -117,39 +172,55 @@ def selection_schema() -> dict:
 def admissible_candidates(candidates_json: dict, slots_json: dict) -> list[dict]:
     """#5.1: solo candidatos que caben en al menos un slot se envian al LLM."""
     slot_indices = {s["slot"] for s in slots_json["slots"]}
-    return [c for c in candidates_json["candidates"] if set(c["admits_slots"]) & slot_indices]
+    return [
+        c
+        for c in candidates_json["candidates"]
+        if set(c["admits_slots"]) & slot_indices
+    ]
 
 
-def build_user_prompt(duration_s: float, slots_json: dict, candidates: list[dict]) -> str:
+def build_user_prompt(
+    duration_s: float, slots_json: dict, candidates: list[dict]
+) -> str:
     slots = slots_json["slots"]
     n_develop = sum(1 for s in slots if s["role"] == "develop")
     return USER_PROMPT_TEMPLATE.format(
-        duration_s=duration_s, n_slots=len(slots), n_develop=n_develop,
-        exercises=", ".join(EXERCISES), n_cand=len(candidates),
+        duration_s=duration_s,
+        n_slots=len(slots),
+        n_develop=n_develop,
+        exercises=", ".join(EXERCISES),
+        n_cand=len(candidates),
         ids=", ".join(c["id"] for c in candidates),
     )
 
 
 def build_parts(candidates: list[dict], user_prompt: str) -> list[dict]:
-    """#5.1: partes text+image (base64, resolution low) por candidato + prompt de usuario."""
+    """#5.1: partes text+image (base64, resolution low) por candidato + prompt."""
     parts: list[dict] = []
     for c in candidates:
-        parts.append({
-            "type": "text",
-            "text": f"id={c['id']} kind={c['kind']} src={c['src']} multi_subject={c['multi_subject']}",
-        })
-        for jpg in c["peak_frames"]:
-            parts.append({
+        parts.append(
+            {
+                "type": "text",
+                "text": (
+                    f"id={c['id']} kind={c['kind']} src={c['src']} "
+                    f"multi_subject={c['multi_subject']}"
+                ),
+            }
+        )
+        parts.extend(
+            {
                 "type": "image",
                 "data": base64.b64encode(Path(jpg).read_bytes()).decode("ascii"),
                 "mime_type": "image/jpeg",
                 "resolution": "low",
-            })
+            }
+            for jpg in c["peak_frames"]
+        )
     parts.append({"type": "text", "text": user_prompt})
     return parts
 
 
-def _usage_dict(usage) -> dict | None:
+def _usage_dict(usage: Any) -> dict | None:  # noqa: ANN401 (usage is an SDK-specific object, duck-typed)
     if usage is None:
         return None
     return usage.model_dump() if hasattr(usage, "model_dump") else dict(usage)
@@ -158,14 +229,19 @@ def _usage_dict(usage) -> dict | None:
 def _sdk_version() -> str | None:
     try:
         from google import genai
-        return genai.__version__
     except ImportError:
         return None
+    else:
+        return genai.__version__
 
 
 def select(
-    candidates_json: dict, slots_json: dict, duration_s: float, client,
-    session_dir: Path, config: dict | None = None,
+    candidates_json: dict,
+    slots_json: dict,
+    duration_s: float,
+    client: Any,  # noqa: ANN401 (duck-typed: google-genai Client or OllamaClient)
+    session_dir: Path,
+    config: dict[str, Any] | None = None,
 ) -> tuple[dict | None, dict]:
     """#5.1+#5.6: llama al selector LLM con reintentos, guarda cada intento
     y devuelve (selection, selection_meta) para `session.run_planner`.
@@ -179,7 +255,8 @@ def select(
     user_prompt = build_user_prompt(duration_s, slots_json, candidates)
     parts = build_parts(candidates, user_prompt)
     thinking_level = (
-        config["thinking_level_many_candidates"] if len(candidates) >= config["many_candidates_threshold"]
+        config["thinking_level_many_candidates"]
+        if len(candidates) >= config["many_candidates_threshold"]
         else config["thinking_level"]
     )
 
@@ -193,7 +270,11 @@ def select(
             model=config["model"],
             system_instruction=system_prompt,
             input=parts,
-            response_format={"type": "text", "mime_type": "application/json", "schema": selection_schema()},
+            response_format={
+                "type": "text",
+                "mime_type": "application/json",
+                "schema": selection_schema(),
+            },
             generation_config={
                 "thinking_level": thinking_level,
                 "temperature": config["temperature"],
@@ -205,10 +286,15 @@ def select(
         cost = _cost_usd(usage, config["model"])
         total_cost += cost
 
-        attempt_record = {"attempt": attempt, "status": interaction.status, "usage": usage, "cost_usd": cost}
+        attempt_record = {
+            "attempt": attempt,
+            "status": interaction.status,
+            "usage": usage,
+            "cost_usd": cost,
+        }
         if interaction.status != "incomplete":
             attempt_record["output"] = json.loads(interaction.output_text)
-        with open(session_dir / f"selection_attempt_{attempt}.json", "w") as f:
+        with (session_dir / f"selection_attempt_{attempt}.json").open("w") as f:
             json.dump(attempt_record, f, indent=2, ensure_ascii=False)
 
         if interaction.status != "incomplete":

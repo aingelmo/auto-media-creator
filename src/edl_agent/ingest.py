@@ -1,17 +1,22 @@
-"""Capa 1 - Ingesta: manifest.json, proxies, normalizacion de imagenes, recorte de musica.
+"""Capa 1 - Ingesta: manifest.json, proxies, normalizacion de imagenes, recorte
+de musica.
 
 Ver docs/architecture/arquitectura_edl_agent_v4.md #3.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pillow_heif
 from PIL import Image, ImageOps
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 pillow_heif.register_heif_opener()
 
@@ -31,7 +36,7 @@ class IngestError(RuntimeError):
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
-    with open(path, "rb") as f:
+    with path.open("rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
@@ -40,10 +45,18 @@ def sha256_file(path: Path) -> str:
 def ffprobe(path: Path) -> dict:
     out = subprocess.run(
         [
-            "ffprobe", "-v", "quiet", "-print_format", "json",
-            "-show_format", "-show_streams", str(path),
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            str(path),
         ],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     return json.loads(out.stdout)
 
@@ -52,7 +65,8 @@ def _video_stream(probe: dict) -> dict:
     for s in probe["streams"]:
         if s["codec_type"] == "video":
             return s
-    raise IngestError(f"no video stream in probe: {probe}")
+    msg = f"no video stream in probe: {probe}"
+    raise IngestError(msg)
 
 
 def _rotation(stream: dict) -> int:
@@ -80,9 +94,12 @@ def classify_hdr(stream: dict) -> str:
     if transfer == "smpte2084":
         return "pq"
     if is_10bit and transfer in (None, "unknown", ""):
-        raise IngestError(
+        msg = (
             "10-bit source without color_transfer: refusing to assume SDR "
-            f"(stream={stream.get('index')})",
+            f"(stream={stream.get('index')})"
+        )
+        raise IngestError(
+            msg,
         )
     return "none"
 
@@ -90,9 +107,7 @@ def classify_hdr(stream: dict) -> str:
 def _vfr(stream: dict) -> bool:
     r = stream.get("r_frame_rate")
     a = stream.get("avg_frame_rate")
-    if r and a and r != a:
-        return True
-    return False
+    return bool(r and a and r != a)
 
 
 @dataclass
@@ -129,11 +144,21 @@ def probe_video_source(path: Path) -> VideoSourceInfo:
     hdr = classify_hdr(stream)
 
     duration_s = float(stream.get("duration") or probe["format"]["duration"])
-    start_time_s = float(stream.get("start_time", probe["format"].get("start_time", 0.0)))
+    start_time_s = float(
+        stream.get("start_time", probe["format"].get("start_time", 0.0))
+    )
 
-    num, den = (int(x) for x in stream["avg_frame_rate"].split("/")) if "/" in stream.get("avg_frame_rate", "0/1") else (0, 1)
+    num, den = (
+        (int(x) for x in stream["avg_frame_rate"].split("/"))
+        if "/" in stream.get("avg_frame_rate", "0/1")
+        else (0, 1)
+    )
     fps_nominal = round(num / den, 3) if den else 0.0
-    nb_frames_est = int(round(duration_s * fps_nominal)) if fps_nominal else int(stream.get("nb_frames", 0))
+    nb_frames_est = (
+        round(duration_s * fps_nominal)
+        if fps_nominal
+        else int(stream.get("nb_frames", 0))
+    )
 
     color = {
         "primaries": stream.get("color_primaries", "unknown"),
@@ -143,34 +168,75 @@ def probe_video_source(path: Path) -> VideoSourceInfo:
     }
 
     return VideoSourceInfo(
-        src=str(path), sha256=sha256_file(path), type="video",
-        raw_w=raw_w, raw_h=raw_h, rotation=rotation, w=w, h=h,
-        duration_s=duration_s, start_time_s=start_time_s,
-        nb_frames_est=nb_frames_est, vfr=_vfr(stream),
-        src_fps_nominal=fps_nominal, hdr=hdr, color=color,
+        src=str(path),
+        sha256=sha256_file(path),
+        type="video",
+        raw_w=raw_w,
+        raw_h=raw_h,
+        rotation=rotation,
+        w=w,
+        h=h,
+        duration_s=duration_s,
+        start_time_s=start_time_s,
+        nb_frames_est=nb_frames_est,
+        vfr=_vfr(stream),
+        src_fps_nominal=fps_nominal,
+        hdr=hdr,
+        color=color,
     )
 
 
 def build_proxy(info: VideoSourceInfo, out_path: Path, threads: int = 4) -> Path:
-    """#3.2. HDR (hlg/dv84) pasa por zscale+tonemap; el resto (none/pq no soportado aun) va directo."""
+    """#3.2. HDR (hlg/dv84) pasa por zscale+tonemap; el resto (none/pq no
+    soportado aun) va directo.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    scale = f"scale='if(gt(iw,ih),-2,{PROXY_SHORT_SIDE})':'if(gt(iw,ih),{PROXY_SHORT_SIDE},-2)'"
+    scale = (
+        f"scale='if(gt(iw,ih),-2,{PROXY_SHORT_SIDE})':"
+        f"'if(gt(iw,ih),{PROXY_SHORT_SIDE},-2)'"
+    )
 
     if info.hdr in ("hlg", "dv84"):
         vf = f"fps=30,setpts=PTS-STARTPTS,{TONEMAP_CHAIN_HLG},format=yuv420p,{scale}"
     elif info.hdr == "none":
         vf = f"fps=30,setpts=PTS-STARTPTS,{scale},format=yuv420p"
     else:
-        raise IngestError(f"proxy generation for hdr={info.hdr!r} not implemented (see [validar] in #3.2)")
+        msg = (
+            f"proxy generation for hdr={info.hdr!r} not implemented "
+            "(see [validar] in #3.2)"
+        )
+        raise IngestError(msg)
 
     cmd = [
-        "ffmpeg", "-y", "-i", info.src,
-        "-vf", vf,
-        "-fps_mode", "cfr", "-avoid_negative_ts", "make_zero",
-        "-color_primaries", "bt709", "-color_trc", "bt709",
-        "-colorspace", "bt709", "-color_range", "tv",
-        "-c:v", "libx264", "-crf", "24", "-preset", "veryfast",
-        "-g", "30", "-threads", str(threads), "-an",
+        "ffmpeg",
+        "-y",
+        "-i",
+        info.src,
+        "-vf",
+        vf,
+        "-fps_mode",
+        "cfr",
+        "-avoid_negative_ts",
+        "make_zero",
+        "-color_primaries",
+        "bt709",
+        "-color_trc",
+        "bt709",
+        "-colorspace",
+        "bt709",
+        "-color_range",
+        "tv",
+        "-c:v",
+        "libx264",
+        "-crf",
+        "24",
+        "-preset",
+        "veryfast",
+        "-g",
+        "30",
+        "-threads",
+        str(threads),
+        "-an",
         str(out_path),
     ]
     subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -187,19 +253,37 @@ def normalize_image(path: Path, out_path: Path) -> tuple[int, int]:
     return im.size
 
 
-def cut_music(src: Path, out_path: Path, offset_s: float, max_duration_s: float) -> Path:
-    """#3.4. Recorte unico a WAV; todo lo demas (beats, loudnorm, render) usa este fichero."""
+def cut_music(
+    src: Path, out_path: Path, offset_s: float, max_duration_s: float
+) -> Path:
+    """#3.4. Recorte unico a WAV; todo lo demas (beats, loudnorm, render) usa
+    este fichero.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
-        "ffmpeg", "-y", "-ss", str(offset_s), "-t", str(max_duration_s),
-        "-i", str(src), "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le",
+        "ffmpeg",
+        "-y",
+        "-ss",
+        str(offset_s),
+        "-t",
+        str(max_duration_s),
+        "-i",
+        str(src),
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "-c:a",
+        "pcm_s16le",
         str(out_path),
     ]
     subprocess.run(cmd, check=True, capture_output=True, text=True)
     return out_path
 
 
-def build_manifest(session_id: str, sources: list[dict], music: dict | None = None) -> dict:
+def build_manifest(
+    session_id: str, sources: list[dict], music: dict | None = None
+) -> dict:
     manifest = {
         "session_id": session_id,
         "target": dict(TARGET),
