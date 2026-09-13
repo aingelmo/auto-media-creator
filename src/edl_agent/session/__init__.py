@@ -45,18 +45,19 @@ def run_selection(
         slots_json: Parsed `slots.json`, with `slots` and `duration_f` keys.
         config: Overrides merged over `selector.DEFAULTS`; see
             `selector.select`.
-        client: LLM client to use; defaults to `google.genai.Client()`
-            (API key via env `GEMINI_API_KEY`/`GOOGLE_API_KEY`). Pass
-            `client=OllamaClient()` (`ollama_client.py`) to test locally
-            before spending on Gemini.
+        client: LLM client to use; defaults to
+            `edl_agent.llm.get_client("gemini")` (API key via env
+            `GEMINI_API_KEY`/`GOOGLE_API_KEY`). Pass e.g.
+            `client=get_client("ollama")` to test locally before spending
+            on a paid provider.
 
     Returns:
         `(selection, selection_meta)`, as returned by `selector.select`.
     """
     if client is None:
-        from google import genai
+        from edl_agent.llm import get_client
 
-        client = genai.Client()
+        client = get_client("gemini")
 
     duration_s = slots_json["duration_f"] / FRAME_RATE
     return selector_select(

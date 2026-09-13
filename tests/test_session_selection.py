@@ -21,6 +21,7 @@ def test_run_selection_computes_duration_s_and_builds_client(
             made_clients.append(self)
 
     cast("Any", fake_genai).Client = _FakeClient
+    cast("Any", fake_genai).__version__ = "0.0.0-fake"
     fake_google = types.ModuleType("google")
     cast("Any", fake_google).genai = fake_genai
     monkeypatch.setitem(sys.modules, "google", fake_google)

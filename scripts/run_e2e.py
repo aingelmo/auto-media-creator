@@ -1,7 +1,8 @@
 """Manual end-to-end driver for a session, per arquitectura_edl_agent_v4.md.
 Not part of the library; ad-hoc script for real_test_02 validation.
 
-Usage: uv run scripts/run_e2e.py sessions/real_test_02 [--model qwen3-vl:8b-instruct] [--gemini]
+Usage: uv run scripts/run_e2e.py sessions/real_test_02 [--provider ollama]
+    [--model qwen3-vl:8b-instruct]
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from edl_agent.features import yolo_pose_detector
-from edl_agent.ollama_client import OllamaClient
+from edl_agent.llm import PROVIDERS, get_client
 from edl_agent.render import (
     concat_and_audio,
     render_preview_segments,
@@ -26,6 +27,13 @@ from edl_agent.slots import slots_from_file
 
 POSE_MODEL = "models/yolov8n-pose.pt"
 
+DEFAULT_MODELS = {
+    "gemini": "gemini-3.8-flash",
+    "anthropic": "claude-sonnet-5",
+    "deepseek": "deepseek-flash",
+    "ollama": "qwen3-vl:8b-instruct",
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -34,14 +42,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--music-offset-s", type=float, default=15.0)
     parser.add_argument("--music-max-duration-s", type=float, default=15.0)
-    parser.add_argument("--model", default="qwen3-vl:8b-instruct", help="Selector LLM model")
     parser.add_argument(
-        "--gemini",
-        action="store_true",
-        help="Use google.genai.Client() instead of local Ollama",
+        "--provider", choices=PROVIDERS, default="ollama", help="Selector LLM provider"
+    )
+    parser.add_argument(
+        "--model", default=None, help="Selector LLM model; defaults per --provider"
     )
     parser.add_argument("--tonemap-chain", default="")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.model is None:
+        args.model = DEFAULT_MODELS[args.provider]
+    return args
 
 
 def main() -> None:
@@ -63,7 +74,7 @@ def main() -> None:
         session, manifest, slots, detector, pose_model_path=args.pose_model
     )
 
-    client = None if args.gemini else OllamaClient()
+    client = get_client(args.provider)
     selection, selection_meta = run_selection(
         session,
         candidates,

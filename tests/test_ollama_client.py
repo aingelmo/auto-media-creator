@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
-from edl_agent.ollama_client import OllamaClient
+from edl_agent.llm.ollama_client import OllamaClient
 
 
 def _fake_response(json_data):
@@ -33,7 +33,7 @@ def test_create_maps_ollama_chat_response_to_interaction_shape() -> None:
         "done_reason": "stop",
     }
     with patch(
-        "edl_agent.ollama_client.requests.post", return_value=_fake_response(data)
+        "edl_agent.llm.ollama_client.requests.post", return_value=_fake_response(data)
     ) as post:
         interaction = client.interactions.create(
             model="qwen3-vl:8b-instruct",
@@ -67,7 +67,7 @@ def test_create_marks_incomplete_on_length_truncation() -> None:
     client = OllamaClient()
     data = {"message": {"content": "{}"}, "done_reason": "length"}
     with patch(
-        "edl_agent.ollama_client.requests.post", return_value=_fake_response(data)
+        "edl_agent.llm.ollama_client.requests.post", return_value=_fake_response(data)
     ):
         interaction = client.interactions.create(
             model="m",

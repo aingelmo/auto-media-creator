@@ -1,4 +1,4 @@
-"""SDK-shaped helpers, duck-typed over google-genai and OllamaClient."""
+"""SDK-shaped helpers, duck-typed over all `edl_agent.llm` clients."""
 
 from __future__ import annotations
 
@@ -9,8 +9,9 @@ def _usage_dict(usage: Any) -> dict | None:  # noqa: ANN401 (usage is an SDK-spe
     """Normalize an SDK usage object into a plain dict.
 
     Args:
-        usage: SDK-specific usage object (has `.model_dump()`, e.g. genai's,
-            or is dict-like, e.g. `OllamaClient`'s `_Usage`), or `None`.
+        usage: SDK-specific usage object (has `.model_dump()`, e.g. genai's
+            or the `anthropic`-backed adapters', or is dict-like, e.g.
+            `OllamaClient`'s `_Usage`), or `None`.
 
     Returns:
         Dict with `total_input_tokens`, `total_output_tokens`,
@@ -19,18 +20,3 @@ def _usage_dict(usage: Any) -> dict | None:  # noqa: ANN401 (usage is an SDK-spe
     if usage is None:
         return None
     return usage.model_dump() if hasattr(usage, "model_dump") else dict(usage)
-
-
-def _sdk_version() -> str | None:
-    """Return the installed `google-genai` SDK version, if available.
-
-    Returns:
-        `genai.__version__`, or `None` if the `google-genai` package isn't
-        installed (e.g. when only `OllamaClient` is used).
-    """
-    try:
-        from google import genai
-    except ImportError:
-        return None
-    else:
-        return genai.__version__

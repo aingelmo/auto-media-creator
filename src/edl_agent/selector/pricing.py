@@ -4,7 +4,17 @@ from __future__ import annotations
 
 # #11: USD per 1M tokens, in effect until 2026-12-31 (same rate for
 # 3.7/3.8-flash). Thinking tokens are billed as output.
-PRICING_PER_MTOK = {"gemini-3.7-flash": (0.75, 3.75), "gemini-3.8-flash": (0.75, 3.75)}
+# claude-sonnet-5/claude-haiku-4-5: platform.claude.com/docs/en/about-claude/pricing, checked 2026-09-13.
+# deepseek-flash: api-docs.deepseek.com/quick_start/pricing (deepseek-v4-flash row),
+# checked 2026-09-13. Off-peak (all hours except 01:00-04:00 & 06:00-10:00 UTC)
+# cache-miss rate used as default; peak rate is exactly double.
+PRICING_PER_MTOK = {
+    "gemini-3.7-flash": (0.75, 3.75),
+    "gemini-3.8-flash": (0.75, 3.75),
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+    "deepseek-flash": (0.22, 0.66),
+}
 
 
 def _cost_usd(usage: dict | None, model: str) -> float:

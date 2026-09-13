@@ -9,7 +9,7 @@ from typing import Any
 import requests
 
 from edl_agent.selector._common import DEFAULTS
-from edl_agent.selector.client import _sdk_version, _usage_dict
+from edl_agent.selector.client import _usage_dict
 from edl_agent.selector.pricing import _cost_usd
 from edl_agent.selector.prompts import (
     REINFORCED_SUFFIX,
@@ -35,8 +35,10 @@ def select(
         candidates_json: Parsed `candidates.json`, with a `candidates` key.
         slots_json: Parsed `slots.json`, with a `slots` key.
         duration_s: Target reel duration, in seconds.
-        client: A `google.genai.Client`-shaped object (or `OllamaClient`),
-            duck-typed: only `.interactions.create(...)` is called.
+        client: A `google.genai.Client`-shaped object, as built by
+            `edl_agent.llm.get_client`, duck-typed: only
+            `.interactions.create(...)` is called (and `.sdk_version`, read
+            via `getattr`, for `meta`).
         session_dir: Session directory to write
             `selection_attempt_N.json` files to.
         config: Overrides merged over `DEFAULTS` (`model`,
@@ -122,7 +124,7 @@ def select(
 
     meta = {
         "model": config["model"],
-        "sdk_version": _sdk_version(),
+        "sdk_version": getattr(client, "sdk_version", None),
         "api_revision": None,  # [validate] not exposed by the high-level SDK
         "llm_attempts": len(attempts_usage),
         "llm_usage": attempts_usage[-1] if attempts_usage else None,
