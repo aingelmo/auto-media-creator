@@ -8,7 +8,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from edl_agent.selector import select as selector_select
-from edl_agent.session._common import IMAGE_EXTS, VIDEO_EXTS
+from edl_agent.session._common import (
+    IMAGE_EXTS,
+    VIDEO_EXTS,
+    tonemap_chain_for_manifest,
+)
 from edl_agent.session.candidates import run_candidates
 from edl_agent.session.ingest import run_ingest
 from edl_agent.session.planner import run_planner
@@ -21,6 +25,7 @@ __all__ = [
     "run_ingest",
     "run_planner",
     "run_selection",
+    "tonemap_chain_for_manifest",
 ]
 
 

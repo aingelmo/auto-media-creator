@@ -1,11 +1,15 @@
 """6.2 Assignment: pick one candidate per slot (hook/develop/close).
 
-6.2.5 Relaxation is implemented in selection.build_selected: if hook/close
-have no admissible free candidate, one already assigned to develop is
-preempted (reclaimed) -- develop is more flexible (N slots, typically more
-candidates) -- and the resulting gap is refilled from the remaining
-fallback pool. Only covers develop -> hook/close; if develop itself falls
-short with nothing left to fill it, this module still raises PlannerError.
+6.2.5 Relaxation, stages 1-2 (allow repeated exercise, then also allow a
+repeated source with a wider anti-overlap gap) are implemented in this
+module's `select_develop`. Stages 3-5 (reclaiming a candidate from another
+role, pulling in a candidate outside `selected`, filling with images) are
+not: `selection.build_selected` covers the reverse direction instead --
+if hook/close have no admissible free candidate, one already assigned to
+develop is preempted (reclaimed) -- develop is more flexible (N slots,
+typically more candidates) -- and the resulting gap is refilled from the
+remaining fallback pool. If develop itself still falls short after its own
+relaxation stages, this module raises PlannerError.
 """
 
 from __future__ import annotations
@@ -55,53 +59,28 @@ def _overlaps_used(
     return False
 
 
-def select_develop(
-    selected: list[dict],
+def _take_develop_pool(
+    pool: list[dict],
     candidates_by_id: dict,
-    develop_slots: list[dict],
+    free_durations: list[int],
     used: list[dict],
     config: dict,
+    k: int,
+    *,
+    allow_exercise_repeat: bool,
+    allow_src_repeat: bool,
+    gap_s: float,
 ) -> list[dict]:
-    """Pick the `selected` entries taken for develop slots, per #6.2.3.
+    """One greedy pass over `pool`, honoring the given relaxation level.
 
-    Walks the develop-role pool in rank order (r1 = best) and greedily
-    takes entries that fit a remaining develop slot duration, don't repeat
-    the exercise or source of the previously taken entry, and don't
-    time-overlap anything already placed on the timeline (respecting
-    `config["adjacency_gap_s"]`). The exercise check is skipped when the
-    exercise is `"unknown"` (the rules-fallback placeholder, #8.6, for "no
-    LLM info") or `"other"` (the selector prompt's own catch-all for "no
-    canonical exercise fits", `selector/prompts.py`) so a run of
-    unlabeled entries doesn't collapse to one taken entry. The final
-    temporal order of the taken entries is decided separately by
-    `place_develop_arc` (#6.2.4).
-
-    Args:
-        selected: Candidate selections (LLM output reconciled with
-            fallback, see `selection.build_selected`). Each entry has
-            `candidate_id` (str), `role` (str), `rank` (int, 1 = best),
-            `exercise` (str).
-        candidates_by_id: Mapping `candidate_id -> candidate dict` (see
-            `candidates.build_video_candidates` for the candidate shape).
-        develop_slots: Slot dicts with `role == "develop"`, each with
-            `start_f`/`end_f` (int, frame bounds).
-        used: Timeline segments already claimed by other roles (hook so
-            far), each a dict with `src` (str), `in_s`/`out_s` (float,
-            seconds). Not mutated in place for entries added here; new
-            entries are appended as develop candidates are taken.
-        config: Planner config (see `DEFAULT_CONFIG`); reads
-            `adjacency_gap_s` and whatever `compute_in_out` needs.
-
-    Returns:
-        Subset of `selected` (role `"develop"`) taken, in rank order —
-        not yet placed into slot order (see `place_develop_arc` for that).
+    Same admission rules as `select_develop`'s docstring, except the
+    exercise/source distinctness checks are skipped per
+    `allow_exercise_repeat`/`allow_src_repeat`, and the anti-overlap
+    margin used against `used` is `gap_s` instead of
+    `config["adjacency_gap_s"]`.
     """
-    k = len(develop_slots)
-    free_durations = [s["end_f"] - s["start_f"] for s in develop_slots]
-    pool = sorted(
-        (s for s in selected if s["role"] == "develop"),
-        key=lambda s: s["rank"],
-    )
+    free_durations = list(free_durations)
+    used = list(used)
     taken: list[dict] = []
     prev_exercise: str | None = None
     prev_src: str | None = None
@@ -120,12 +99,13 @@ def select_develop(
         # label"; treating repeats of either as a clash would collapse
         # the unlabeled pool down to a single entry.
         if (
-            prev_exercise is not None
+            not allow_exercise_repeat
+            and prev_exercise is not None
             and exercise == prev_exercise
             and exercise not in ("unknown", "other")
         ):
             continue
-        if prev_src is not None and cand["src"] == prev_src:
+        if not allow_src_repeat and prev_src is not None and cand["src"] == prev_src:
             continue
         timing = compute_in_out(
             cand,
@@ -134,9 +114,7 @@ def select_develop(
             speed=1.0,
             config=config,
         )
-        if _overlaps_used(
-            cand, timing["in_s"], timing["out_s"], used, config["adjacency_gap_s"]
-        ):
+        if _overlaps_used(cand, timing["in_s"], timing["out_s"], used, gap_s):
             continue
         taken.append(s)
         used.append(
@@ -145,6 +123,88 @@ def select_develop(
         free_durations.remove(admissible_d_f)
         prev_exercise = exercise
         prev_src = cand["src"]
+    return taken
+
+
+def select_develop(
+    selected: list[dict],
+    candidates_by_id: dict,
+    develop_slots: list[dict],
+    used: list[dict],
+    config: dict,
+) -> list[dict]:
+    """Pick the `selected` entries taken for develop slots, per #6.2.3+#6.2.5.
+
+    Walks the develop-role pool in rank order (r1 = best) and greedily
+    takes entries that fit a remaining develop slot duration, don't repeat
+    the exercise or source of the previously taken entry, and don't
+    time-overlap anything already placed on the timeline (respecting
+    `config["adjacency_gap_s"]`).
+
+    If that strict pass doesn't fill all `k` slots, retries with the
+    first two relaxation stages of #6.2.5 (in order, keeping whichever
+    pass took the most entries): allow repeated exercises, then also
+    allow a repeated source between adjacent develops (with the
+    anti-overlap margin raised to at least 1s, since a same-source cut
+    needs more separation to not read as a jump cut). Relaxation stages
+    3-5 (reclaiming candidates from other roles, pulling in unused
+    candidates outside `selected`, filling with images) are out of this
+    function's scope — see the module docstring.
+
+    The final temporal order of the taken entries is decided separately
+    by `place_develop_arc` (#6.2.4).
+
+    Args:
+        selected: Candidate selections (LLM output reconciled with
+            fallback, see `selection.build_selected`). Each entry has
+            `candidate_id` (str), `role` (str), `rank` (int, 1 = best),
+            `exercise` (str).
+        candidates_by_id: Mapping `candidate_id -> candidate dict` (see
+            `candidates.build_video_candidates` for the candidate shape).
+        develop_slots: Slot dicts with `role == "develop"`, each with
+            `start_f`/`end_f` (int, frame bounds).
+        used: Timeline segments already claimed by other roles (hook so
+            far), each a dict with `src` (str), `in_s`/`out_s` (float,
+            seconds). Not mutated in place; each relaxation pass starts
+            fresh from this list.
+        config: Planner config (see `DEFAULT_CONFIG`); reads
+            `adjacency_gap_s` and whatever `compute_in_out` needs.
+
+    Returns:
+        Subset of `selected` (role `"develop"`) taken, in rank order —
+        not yet placed into slot order (see `place_develop_arc` for that).
+    """
+    k = len(develop_slots)
+    free_durations = [s["end_f"] - s["start_f"] for s in develop_slots]
+    pool = sorted(
+        (s for s in selected if s["role"] == "develop"),
+        key=lambda s: s["rank"],
+    )
+    default_gap_s = config["adjacency_gap_s"]
+    relaxed_gap_s = max(default_gap_s, 1.0)  # #6.2.5 stage 2: same-src needs more room
+    # (allow_exercise_repeat, allow_src_repeat, gap_s), in #6.2.5 order.
+    levels: list[tuple[bool, bool, float]] = [
+        (False, False, default_gap_s),
+        (True, False, default_gap_s),  # #6.2.5 stage 1
+        (True, True, relaxed_gap_s),  # #6.2.5 stage 2
+    ]
+    taken: list[dict] = []
+    for allow_exercise_repeat, allow_src_repeat, gap_s in levels:
+        candidate_taken = _take_develop_pool(
+            pool,
+            candidates_by_id,
+            free_durations,
+            used,
+            config,
+            k,
+            allow_exercise_repeat=allow_exercise_repeat,
+            allow_src_repeat=allow_src_repeat,
+            gap_s=gap_s,
+        )
+        if len(candidate_taken) > len(taken):
+            taken = candidate_taken
+        if len(taken) >= k:
+            break
     return taken
 
 
@@ -230,21 +290,30 @@ def place_develop_arc(
     for _ in range(3):
         chain = [hook, *placement, close]
         violations = _adjacency_violations(chain, candidates_by_id)
-        # +1 because chain includes hook at position 0
-        dev_violations = [i for i in violations if 0 < i < len(chain) - 1]
         if not violations:
             return placement, False
-        if not dev_violations:
-            # violation only against hook/close: can't be fixed by
-            # swapping develops
-            break
-        i = dev_violations[0]
-        dev_i = i - 1  # index within `placement`
-        if dev_i + 1 < len(placement):
+        i = violations[0]
+        # Every violation index touches a develop entry (chain is
+        # hook, dev0..dev{k-1}, close), so map it to the develop-side
+        # neighbor to swap with: the hook boundary (i == 0) swaps the
+        # first develop with the second, the close boundary
+        # (i == len(chain) - 2) swaps the last develop with the
+        # second-to-last, and internal violations swap the two
+        # develops directly.
+        if i == 0:
+            dev_i = 0
+        elif i == len(chain) - 2:
+            dev_i = len(placement) - 2
+        else:
+            dev_i = i - 1
+        if dev_i >= 0 and dev_i + 1 < len(placement):
             placement[dev_i], placement[dev_i + 1] = (
                 placement[dev_i + 1],
                 placement[dev_i],
             )
+        else:
+            # only one develop slot: no develop-side neighbor to swap with
+            break
 
     chain = [hook, *placement, close]
     if _adjacency_violations(chain, candidates_by_id):

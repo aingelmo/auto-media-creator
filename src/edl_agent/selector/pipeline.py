@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import requests
+
 from edl_agent.selector._common import DEFAULTS
 from edl_agent.selector.client import _sdk_version, _usage_dict
 from edl_agent.selector.pricing import _cost_usd
@@ -71,39 +73,50 @@ def select(
     system_prompt = SYSTEM_PROMPT
 
     for attempt in range(1, config["max_attempts"] + 1):
-        interaction = client.interactions.create(
-            model=config["model"],
-            system_instruction=system_prompt,
-            input=parts,
-            response_format={
-                "type": "text",
-                "mime_type": "application/json",
-                "schema": selection_schema(),
-            },
-            generation_config={
-                "thinking_level": thinking_level,
-                "temperature": config["temperature"],
-                "max_output_tokens": config["max_output_tokens"],
-            },
-        )
-        usage = _usage_dict(getattr(interaction, "usage", None))
+        try:
+            interaction = client.interactions.create(
+                model=config["model"],
+                system_instruction=system_prompt,
+                input=parts,
+                response_format={
+                    "type": "text",
+                    "mime_type": "application/json",
+                    "schema": selection_schema(),
+                },
+                generation_config={
+                    "thinking_level": thinking_level,
+                    "temperature": config["temperature"],
+                    "max_output_tokens": config["max_output_tokens"],
+                },
+            )
+            usage = _usage_dict(getattr(interaction, "usage", None))
+            cost = _cost_usd(usage, config["model"])
+            attempt_record = {
+                "attempt": attempt,
+                "status": interaction.status,
+                "usage": usage,
+                "cost_usd": cost,
+            }
+            if interaction.status != "incomplete":
+                attempt_record["output"] = json.loads(interaction.output_text)
+        except (requests.RequestException, json.JSONDecodeError) as exc:
+            usage, cost = None, 0.0
+            attempt_record = {
+                "attempt": attempt,
+                "status": "error",
+                "error": f"{type(exc).__name__}: {exc}",
+                "usage": None,
+                "cost_usd": 0.0,
+            }
+
         attempts_usage.append(usage)
-        cost = _cost_usd(usage, config["model"])
         total_cost += cost
 
-        attempt_record = {
-            "attempt": attempt,
-            "status": interaction.status,
-            "usage": usage,
-            "cost_usd": cost,
-        }
-        if interaction.status != "incomplete":
-            attempt_record["output"] = json.loads(interaction.output_text)
         with (session_dir / f"selection_attempt_{attempt}.json").open("w") as f:
             json.dump(attempt_record, f, indent=2, ensure_ascii=False)
 
-        if interaction.status != "incomplete":
-            selection = json.loads(interaction.output_text)
+        if attempt_record["status"] not in ("incomplete", "error"):
+            selection = attempt_record["output"]
             break
         system_prompt = SYSTEM_PROMPT + REINFORCED_SUFFIX  # #5.6: reinforced retry
 

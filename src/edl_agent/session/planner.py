@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from edl_agent.edl import build_edl
-from edl_agent.ingest import TONEMAP_CHAIN_HLG
+from edl_agent.session._common import tonemap_chain_for_manifest
 
 
 def run_planner(
@@ -43,15 +43,7 @@ def run_planner(
             admissible candidate.
     """
     session_dir = Path(session_dir)
-    tonemap_chain = (
-        TONEMAP_CHAIN_HLG
-        if any(
-            s.get("hdr") in ("hlg", "dv84")
-            for s in manifest["sources"]
-            if s["type"] == "video"
-        )
-        else ""
-    )
+    tonemap_chain = tonemap_chain_for_manifest(manifest)
 
     edl = build_edl(
         session_id=manifest["session_id"],

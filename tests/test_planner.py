@@ -14,8 +14,11 @@ from edl_agent.planner import (
     PlannerError,
     admits,
     arc_order,
+    assign_slots,
     build_clips,
     compute_in_out,
+    place_develop_arc,
+    select_develop,
 )
 
 FPS = 30
@@ -113,19 +116,22 @@ def _build_scenario(n_develop: int, aspect_dims: tuple[int, int], seed: int):
     candidates_by_id = {}
     selected = []
 
+    # Distinct exercise labels from the develop cycle below (#6.2.4 arc
+    # repair is exercised separately, in test_place_develop_arc_*), so this
+    # scenario has no adjacency violations to begin with.
     hook_id = "hook0"
     sources_by_src["hook.mov"] = _source("hook.mov", w, h)
     candidates_by_id[hook_id] = _candidate(
         hook_id, "hook.mov", "peak", t_peak=1.0, window=(0.0, 5.0)
     )
-    selected.append(_selected(hook_id, "hook", 1))
+    selected.append(_selected(hook_id, "hook", 1, exercise="hook_move"))
 
     close_id = "close0"
     sources_by_src["close.mov"] = _source("close.mov", w, h)
     candidates_by_id[close_id] = _candidate(
         close_id, "close.mov", "calm", t_peak=5.0, window=(3.0, 8.0)
     )
-    selected.append(_selected(close_id, "close", 1))
+    selected.append(_selected(close_id, "close", 1, exercise="close_move"))
 
     exercises = [
         "back squat",
@@ -285,3 +291,120 @@ def test_missing_hook_raises() -> None:
     }
     with pytest.raises(PlannerError):
         build_clips(slots, selected, candidates_by_id, sources_by_src)
+
+
+def test_place_develop_arc_repairs_boundary_violation_against_close() -> None:
+    # rank1 (best) is always placed last by arc_order, adjacent to close --
+    # give it the same exercise as close so that boundary clashes, and
+    # verify the fix (mapping the violation to a develop-side swap even at
+    # the chain edges) repairs it instead of falling back.
+    hook = _selected("hook0", "hook", 1, exercise="hook_move")
+    close = _selected("close0", "close", 1, exercise="close_move")
+    dev_rank1 = _selected(  # clashes w/ close
+        "dev1", "develop", 1, exercise="close_move"
+    )
+    dev_rank2 = _selected("dev2", "develop", 2, exercise="burpee")
+    candidates_by_id = {
+        "hook0": _candidate("hook0", "hook.mov", "peak", 1.0, (0.0, 5.0)),
+        "close0": _candidate("close0", "close.mov", "calm", 5.0, (3.0, 8.0)),
+        "dev1": _candidate("dev1", "dev1.mov", "peak", 5.0, (1.0, 9.0)),
+        "dev2": _candidate("dev2", "dev2.mov", "peak", 5.0, (1.0, 9.0)),
+    }
+    taken = [dev_rank1, dev_rank2]  # sorted by rank, rank1 first
+
+    placement, arc_fallback = place_develop_arc(taken, hook, close, candidates_by_id)
+
+    assert arc_fallback is False
+    chain = [hook, *placement, close]
+    assert not [
+        i
+        for i in range(len(chain) - 1)
+        if chain[i]["exercise"] == chain[i + 1]["exercise"]
+    ]
+    # rank1 got swapped away from the close boundary to fix the clash.
+    assert placement[-1]["candidate_id"] == "dev2"
+
+
+def test_place_develop_arc_falls_back_when_unrepairable() -> None:
+    # A single develop slot has no develop-side neighbor to swap with, so a
+    # boundary clash against hook can't be repaired: must fall back, not
+    # loop forever or crash.
+    hook = _selected("hook0", "hook", 1, exercise="squat")
+    close = _selected("close0", "close", 1, exercise="close_move")
+    dev = _selected("dev1", "develop", 1, exercise="squat")  # clashes w/ hook
+    candidates_by_id = {
+        "hook0": _candidate("hook0", "hook.mov", "peak", 1.0, (0.0, 5.0)),
+        "close0": _candidate("close0", "close.mov", "calm", 5.0, (3.0, 8.0)),
+        "dev1": _candidate("dev1", "dev1.mov", "peak", 5.0, (1.0, 9.0)),
+    }
+
+    placement, arc_fallback = place_develop_arc([dev], hook, close, candidates_by_id)
+
+    assert arc_fallback is True
+    assert placement == [dev]
+
+
+def _develop_slots(k: int, develop_f: int = 40):
+    return [s for s in _slots(k, develop_f=develop_f) if s["role"] == "develop"]
+
+
+def test_select_develop_stage1_relaxation_allows_repeated_exercise() -> None:
+    develop_slots = _develop_slots(3)
+    candidates_by_id = {
+        "c1": _candidate("c1", "a.mov", "peak", 2.0, (0.0, 4.0)),
+        "c2": _candidate("c2", "b.mov", "peak", 2.0, (0.0, 4.0)),
+        "c3": _candidate("c3", "c.mov", "peak", 2.0, (0.0, 4.0)),
+    }
+    selected = [
+        _selected("c1", "develop", 1, exercise="squat"),
+        _selected("c2", "develop", 2, exercise="squat"),  # repeats c1's exercise
+        _selected("c3", "develop", 3, exercise="deadlift"),
+    ]
+
+    taken = select_develop(
+        selected, candidates_by_id, develop_slots, [], DEFAULT_CONFIG
+    )
+
+    assert [s["candidate_id"] for s in taken] == ["c1", "c2", "c3"]
+
+
+def test_select_develop_stage2_relaxation_allows_repeated_src() -> None:
+    develop_slots = _develop_slots(3)
+    candidates_by_id = {
+        "c1": _candidate("c1", "a.mov", "peak", 2.0, (0.0, 4.0)),
+        "c2": _candidate("c2", "a.mov", "peak", 10.0, (8.0, 12.0)),  # repeats c1's src
+        "c3": _candidate("c3", "b.mov", "peak", 2.0, (0.0, 4.0)),
+    }
+    selected = [
+        _selected("c1", "develop", 1, exercise="squat"),
+        _selected("c2", "develop", 2, exercise="deadlift"),
+        _selected("c3", "develop", 3, exercise="clean"),
+    ]
+
+    taken = select_develop(
+        selected, candidates_by_id, develop_slots, [], DEFAULT_CONFIG
+    )
+
+    assert [s["candidate_id"] for s in taken] == ["c1", "c2", "c3"]
+
+
+def test_select_develop_relaxation_cant_manufacture_missing_candidates() -> None:
+    # Only 2 develop candidates exist at all for 3 slots -- no relaxation
+    # stage can conjure a 3rd, so assign_slots must still raise.
+    slots = _slots(3)
+    hook_id, close_id = "hook0", "close0"
+    candidates_by_id = {
+        hook_id: _candidate(hook_id, "hook.mov", "peak", 1.0, (0.0, 5.0)),
+        close_id: _candidate(close_id, "close.mov", "calm", 5.0, (3.0, 8.0)),
+        "c1": _candidate("c1", "a.mov", "peak", 2.0, (0.0, 4.0)),
+        "c2": _candidate("c2", "b.mov", "peak", 2.0, (0.0, 4.0)),
+    }
+    selected = [
+        _selected(hook_id, "hook", 1, exercise="hook_move"),
+        _selected(close_id, "close", 1, exercise="close_move"),
+        _selected("c1", "develop", 1, exercise="squat"),
+        _selected("c2", "develop", 2, exercise="deadlift"),
+    ]
+
+    with pytest.raises(PlannerError, match="not enough develop candidates"):
+        assign_slots(slots, selected, candidates_by_id)

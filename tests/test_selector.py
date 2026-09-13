@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import requests
+
 from edl_agent.selector import admissible_candidates, build_parts, select
 
 
@@ -52,7 +54,10 @@ class _FakeInteractions:
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
-        return self._responses.pop(0)
+        item = self._responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
 
 
 class _FakeClient:
@@ -152,6 +157,55 @@ def test_select_returns_none_after_max_attempts_incomplete(tmp_path) -> None:
     candidates_json = {"candidates": [_cand("c1", [0], jpg)]}
     client = _FakeClient(
         [_FakeInteraction("incomplete"), _FakeInteraction("incomplete")]
+    )
+
+    selection, meta = select(
+        candidates_json,
+        _slots_json(),
+        duration_s=20.0,
+        client=client,
+        session_dir=tmp_path,
+    )
+
+    assert selection is None
+    assert meta["llm_attempts"] == 2
+
+
+def test_select_recovers_from_transient_read_timeout(tmp_path) -> None:
+    jpg = tmp_path / "f.jpg"
+    jpg.write_bytes(b"x")
+    candidates_json = {"candidates": [_cand("c1", [0], jpg)]}
+    client = _FakeClient(
+        [
+            requests.exceptions.ReadTimeout("upstream timed out"),
+            _FakeInteraction("completed", json.dumps(_selection_payload())),
+        ]
+    )
+
+    selection, meta = select(
+        candidates_json,
+        _slots_json(),
+        duration_s=20.0,
+        client=client,
+        session_dir=tmp_path,
+    )
+
+    assert selection == _selection_payload()
+    assert meta["llm_attempts"] == 2
+    attempt_1 = json.loads((tmp_path / "selection_attempt_1.json").read_text())
+    assert attempt_1["status"] == "error"
+    assert (tmp_path / "selection_attempt_2.json").exists()
+
+
+def test_select_returns_none_on_persistent_malformed_json(tmp_path) -> None:
+    jpg = tmp_path / "f.jpg"
+    jpg.write_bytes(b"x")
+    candidates_json = {"candidates": [_cand("c1", [0], jpg)]}
+    client = _FakeClient(
+        [
+            _FakeInteraction("completed", "not json"),
+            _FakeInteraction("completed", "still not json"),
+        ]
     )
 
     selection, meta = select(
