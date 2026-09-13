@@ -1,4 +1,4 @@
-"""Manual end-to-end driver for a session, per arquitectura_edl_agent_v4.md.
+"""Manual end-to-end driver for a session, per docs/architecture/README.md.
 Not part of the library; ad-hoc script for real_test_02 validation.
 
 Usage: uv run scripts/run_e2e.py sessions/real_test_02 [--provider ollama]

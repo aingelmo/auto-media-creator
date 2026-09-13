@@ -8,9 +8,10 @@
   typing. Comments/docstrings are being translated from Spanish to English
   as files are touched; exception: LLM prompt strings in `selector/prompts.py`
   stay in Spanish (sent to the model, not documentation).
-- Docstrings/comments cross-reference `docs/architecture/arquitectura_edl_agent_v4.md`
-  by section number, e.g. `"""#6 Planner determinista..."""` or
-  `"Ver docs/architecture/... #4.1."`. When adding code implementing a spec'd
+- Docstrings/comments cross-reference `docs/architecture/` (one file per section,
+  see `docs/architecture/README.md`) by section number, e.g. `"""#6 Planner
+  determinista..."""` or `"Ver docs/architecture/06-planner.md #6."`. When adding
+  code implementing a spec'd
   behavior, add the matching `#<section>` reference.
 - File size: aim for ~150-200 LOC per file (excluding docstrings/blanks), one
   responsibility/spec-section each; split trigger is >1 spec section or

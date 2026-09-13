@@ -1,6 +1,6 @@
 """Layer 4 - Deterministic planner (snapper).
 
-See docs/architecture/arquitectura_edl_agent_v4.md #6. The LLM decides
+See docs/architecture/06-planner.md #6. The LLM decides
 *what* (candidates, role, rank, exercise); this module decides *when* and
 *where*: exact frames, beat alignment, develop ordering, pixel-space crop.
 """

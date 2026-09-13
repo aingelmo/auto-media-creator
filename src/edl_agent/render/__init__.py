@@ -1,6 +1,6 @@
 """Layer 6 (preview) and Layer 7 (render): segments, concat, audio, checks R1-R6.
 
-See docs/architecture/arquitectura_edl_agent_v4.md #9, #10.
+See docs/architecture/09-preview.md #9, docs/architecture/10-render.md #10.
 """
 
 from __future__ import annotations

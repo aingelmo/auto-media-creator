@@ -4,9 +4,10 @@ Automated vertical (9:16) video montage pipeline: ingests raw clips/photos + a m
 track, selects highlight moments (via LLM), and deterministically plans/renders a
 reel.mp4 synced to the beat.
 
-Single source of truth for the whole design: `docs/architecture/arquitectura_edl_agent_v4.md`
-(Spanish, ~974 lines, numbered sections §0-§14). Code comments reference it by section
-number (e.g. "#4.2-#4.3", "ver #1, #4"). **Always check this doc before changing
+Single source of truth for the whole design: `docs/architecture/` (start at
+`docs/architecture/README.md`), split one file per numbered section §0-§14
+(Spanish; e.g. §4 lives in `docs/architecture/04-features.md`). Code comments
+reference sections by number (e.g. "#4.2-#4.3", "ver #1, #4"). **Always check this doc before changing
 pipeline behavior** — it defines schemas, invariants and fallback rules that the code
 must match exactly; the doc is the spec, the code is the implementation.
 

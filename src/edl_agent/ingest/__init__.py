@@ -1,7 +1,7 @@
 """Layer 1 - Ingestion.
 
 manifest.json, proxies, image normalization, music trimming.
-See docs/architecture/arquitectura_edl_agent_v4.md #3.
+See docs/architecture/03-ingest.md #3.
 """
 
 from __future__ import annotations

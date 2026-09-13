@@ -4,8 +4,9 @@
 
 `edl-agent`: builds an EDL (edit decision list) for automated video montage —
 ingest → candidate selection → planning (LLM-assisted) → render, plus proxy
-verification. Full design spec: `docs/architecture/arquitectura_edl_agent_v4.md`
-(Spanish; section numbers like `#4.3` referenced throughout the code).
+verification. Full design spec: `docs/architecture/README.md` and its linked
+section files (Spanish; section numbers like `#4.3` referenced throughout the
+code map 1:1 to file prefixes, e.g. `#4.3` → `docs/architecture/04-features.md`).
 
 ## Setup / commands
 
@@ -44,8 +45,9 @@ Every public function/method gets a full Google-style docstring, in English:
   keys where relevant.
 - `Raises:` — note domain exceptions (`PlannerError`, `RenderError`,
   `IngestError`, etc.) and when they're raised.
-- Preserve spec references (`#4.3`, `#6.2.3`, etc.) — they point into
-  `docs/architecture/arquitectura_edl_agent_v4.md`.
+- Preserve spec references (`#4.3`, `#6.2.3`, etc.) — they point into the
+  section files under `docs/architecture/` (see `docs/architecture/README.md`
+  for the number → file mapping).
 
 Translate Spanish comments/docstrings to English as you touch a file.
 Exception: LLM prompt content in `selector.py` (`SYSTEM_PROMPT`,

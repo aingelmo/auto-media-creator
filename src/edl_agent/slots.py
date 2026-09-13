@@ -1,6 +1,6 @@
 """Layer 2 (partial) - Audio -> slots.json.
 
-See docs/architecture/arquitectura_edl_agent_v4.md #4.1.
+See docs/architecture/04-features.md #4.1.
 """
 
 from __future__ import annotations
