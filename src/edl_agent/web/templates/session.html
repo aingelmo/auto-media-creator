@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>{{ name }}</h2>
+
+  {% if reel_exists and (job is none or job.done and not job.error) %}
+    <video controls width="640" src="/sessions/{{ name }}/reel.mp4"></video>
+    <p><a href="/sessions/{{ name }}/reel.mp4" download>Download reel.mp4</a></p>
+    {% if job and job.check_results %}
+      <h3>Render checks</h3>
+      <pre>{{ job.check_results | join("\n") }}</pre>
+    {% endif %}
+  {% elif job and job.error %}
+    <p class="status-failed">Failed at stage: {{ job.stage }}</p>
+    <pre>{{ job.error }}</pre>
+  {% elif job %}
+    <p class="status-running">Running: stage = <span id="stage">{{ job.stage }}</span></p>
+    <script>
+      async function poll() {
+        const r = await fetch("/sessions/{{ name }}/status");
+        const data = await r.json();
+        document.getElementById("stage").textContent = data.stage;
+        if (data.done) { location.reload(); } else { setTimeout(poll, 3000); }
+      }
+      setTimeout(poll, 3000);
+    </script>
+  {% else %}
+    <p>No run found for this session.</p>
+  {% endif %}
+{% endblock %}

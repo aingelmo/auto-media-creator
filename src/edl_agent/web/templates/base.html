@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>edl-agent</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    a { color: #06c; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid #ddd; }
+    .status-done { color: #0a0; }
+    .status-running { color: #a60; }
+    .status-failed { color: #c00; }
+    .status-new { color: #888; }
+    pre { white-space: pre-wrap; background: #f4f4f4; padding: 1rem; }
+    label { display: block; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1><a href="/">edl-agent</a></h1>
+  {% block content %}{% endblock %}
+</body>
+</html>

@@ -8,8 +8,10 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "anthropic>=1.5.0",
+    "fastapi>=0.141.1",
     "google-genai==2.23.0",
     "imagehash>=4.3.2",
+    "jinja2>=3.1.6",
     "librosa>=1.0.0",
     "numpy>=2.5.3",
     "opencv-python-headless>=5.0.0.93",
@@ -17,8 +19,10 @@ dependencies = [
     "pillow>=12.3.0",
     "pillow-heif>=1.7.0",
     "pyarrow>=25.0.1",
+    "python-multipart>=0.0.32",
     "scenedetect>=0.7.1",
     "ultralytics>=8.4.147",
+    "uvicorn>=0.52.4",
 ]
 
 [build-system]
@@ -66,6 +70,7 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S311", "ANN001", "ANN201", "ANN202", "ANN204", "ANN003", "INP001", "PT006", "PT011", "PT018", "ARG001", "ARG005", "D"]
 "scripts/**" = ["T201", "INP001", "D"]
+"src/edl_agent/web/**" = ["B008"]  # FastAPI's Form(...)/Depends(...) idiom
 
 [tool.ty.environment]
 python-version = "3.14"

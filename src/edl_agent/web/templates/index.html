@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+  <p><a href="/new">+ New session</a></p>
+  <table>
+    <tr><th>Session</th><th>Status</th></tr>
+    {% for s in sessions %}
+    <tr>
+      <td><a href="/sessions/{{ s.name }}">{{ s.name }}</a></td>
+      <td class="status-{{ s.status }}">{{ s.status }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="2">No sessions yet.</td></tr>
+    {% endfor %}
+  </table>
+{% endblock %}

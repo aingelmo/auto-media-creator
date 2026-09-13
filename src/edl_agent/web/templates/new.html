@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>New session</h2>
+  <form action="/sessions" method="post" enctype="multipart/form-data">
+    <label>Session name
+      <input type="text" name="name" required pattern="[A-Za-z0-9_-]+">
+    </label>
+    <label>Clips / photos
+      <input type="file" name="clips" multiple required>
+    </label>
+    <label>Music track (mp3)
+      <input type="file" name="music" accept="audio/mpeg" required>
+    </label>
+    <label>LLM provider
+      <select name="provider" id="provider">
+        {% for p in providers %}
+        <option value="{{ p }}">{{ p }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Model
+      <input type="text" name="model" id="model">
+    </label>
+    <p><button type="submit">Start run</button></p>
+  </form>
+  <script>
+    const defaultModels = {{ default_models | tojson }};
+    const providerSelect = document.getElementById("provider");
+    const modelInput = document.getElementById("model");
+    function syncModel() { modelInput.value = defaultModels[providerSelect.value] || ""; }
+    providerSelect.addEventListener("change", syncModel);
+    syncModel();
+  </script>
+{% endblock %}

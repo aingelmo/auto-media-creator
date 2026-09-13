@@ -11,6 +11,9 @@ verification. Full design spec: `docs/architecture/arquitectura_edl_agent_v4.md`
 
 - Package manager: `uv` (not pip/poetry). Install: `uv sync`.
 - Run: `uv run python scripts/run_e2e.py ...` or `uv run python -m edl_agent...`.
+- Web UI: `uv run scripts/run_web.py [--host HOST] [--port PORT]` (defaults
+  to `127.0.0.1:8000`); open the printed URL in a browser to upload media
+  and run sessions without the CLI. See `src/edl_agent/web/`.
 - Checks (all must pass before considering a task done):
   `uv run ruff check .`, `uv run ty check`, `uv run pytest -q`.
 
