@@ -12,6 +12,7 @@ DEFAULTS: dict[str, Any] = {
     "temperature": 0.2,
     "max_output_tokens": 16384,
     "max_attempts": 2,  # #5.6
+    "theme": "training",  # "training" (CrossFit/Hyrox/funcional) | "yoga"
 }
 
 # Canonical list of exercises, #5.5.
@@ -38,5 +39,19 @@ EXERCISES = [
     "rope climb",
     "handstand",
     "double-under",
+    "sled push",
+    "sled pull",
+    "farmers carry",
+    "sandbag lunge",
+    "lunge",
+    "toes-to-bar",
+    "sun salutation",
+    "warrior pose",
+    "downward dog",
+    "balance pose",
+    "inversion",
+    "backbend",
+    "stretch",
+    "savasana",
     "other",
 ]

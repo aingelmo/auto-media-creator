@@ -37,7 +37,9 @@ DEFAULT_MODELS = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("session", type=Path, help="Session directory, e.g. sessions/real_test_02")
+    parser.add_argument(
+        "session", type=Path, help="Session directory, e.g. sessions/real_test_02"
+    )
     parser.add_argument("--pose-model", default=POSE_MODEL)
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--music-offset-s", type=float, default=15.0)
@@ -47,6 +49,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model", default=None, help="Selector LLM model; defaults per --provider"
+    )
+    parser.add_argument(
+        "--theme",
+        choices=["training", "yoga"],
+        default="training",
+        help="Selector prompt theme",
     )
     parser.add_argument("--tonemap-chain", default="")
     parser.add_argument(
@@ -100,17 +108,21 @@ def main() -> None:
     selection_meta_path = session / "selection_meta.json"
     if resume and selection_path.exists():
         selection = _load_json(selection_path) or None
-        selection_meta = _load_json(selection_meta_path) if selection_meta_path.exists() else {}
+        selection_meta = (
+            _load_json(selection_meta_path) if selection_meta_path.exists() else {}
+        )
     else:
         client = get_client(args.provider)
         selection, selection_meta = run_selection(
             session,
             candidates,
             slots,
-            config={"model": args.model},
+            config={"model": args.model, "theme": args.theme},
             client=client,
         )
-        selection_path.write_text(json.dumps(selection or {}, indent=2, ensure_ascii=False))
+        selection_path.write_text(
+            json.dumps(selection or {}, indent=2, ensure_ascii=False)
+        )
         selection_meta_path.write_text(
             json.dumps(selection_meta or {}, indent=2, ensure_ascii=False)
         )
@@ -120,16 +132,30 @@ def main() -> None:
         edl = _load_json(edl_path)
     else:
         edl = run_planner(
-            session, manifest, candidates, slots, selection, selection_meta, threads=args.threads
+            session,
+            manifest,
+            candidates,
+            slots,
+            selection,
+            selection_meta,
+            threads=args.threads,
         )
 
     reel_path = session / "reel.mp4"
     if not (resume and reel_path.exists()):
         render_preview_segments(
-            edl, manifest, session, threads=args.threads, tonemap_chain=args.tonemap_chain
+            edl,
+            manifest,
+            session,
+            threads=args.threads,
+            tonemap_chain=args.tonemap_chain,
         )
         render_segments(
-            edl, manifest, session, threads=args.threads, tonemap_chain=args.tonemap_chain
+            edl,
+            manifest,
+            session,
+            threads=args.threads,
+            tonemap_chain=args.tonemap_chain,
         )
         concat_and_audio(edl, session, threads=args.threads)
 

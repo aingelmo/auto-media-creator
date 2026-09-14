@@ -13,9 +13,9 @@ from edl_agent.selector.client import _usage_dict
 from edl_agent.selector.pricing import _cost_usd
 from edl_agent.selector.prompts import (
     REINFORCED_SUFFIX,
-    SYSTEM_PROMPT,
     admissible_candidates,
     build_parts,
+    build_system_prompt,
     build_user_prompt,
     selection_schema,
 )
@@ -61,7 +61,7 @@ def select(
     session_dir = Path(session_dir)
 
     candidates = admissible_candidates(candidates_json, slots_json)
-    user_prompt = build_user_prompt(duration_s, slots_json, candidates)
+    user_prompt = build_user_prompt(duration_s, slots_json, candidates, config["theme"])
     parts = build_parts(candidates, user_prompt)
     thinking_level = (
         config["thinking_level_many_candidates"]
@@ -72,7 +72,8 @@ def select(
     selection = None
     attempts_usage: list[dict | None] = []
     total_cost = 0.0
-    system_prompt = SYSTEM_PROMPT
+    base_system_prompt = build_system_prompt(config["theme"])
+    system_prompt = base_system_prompt
 
     for attempt in range(1, config["max_attempts"] + 1):
         try:
@@ -124,7 +125,7 @@ def select(
         if attempt_record["status"] not in ("incomplete", "error"):
             selection = attempt_record["output"]
             break
-        system_prompt = SYSTEM_PROMPT + REINFORCED_SUFFIX  # #5.6: reinforced retry
+        system_prompt = base_system_prompt + REINFORCED_SUFFIX  # #5.6: reinforced retry
 
     meta = {
         "model": config["model"],

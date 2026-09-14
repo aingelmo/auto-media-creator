@@ -32,7 +32,10 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 # Provider -> env var read by edl_agent.llm.get_client; gemini/ollama use
 # SDK-default/no-auth flows not worth preflighting here.
-PROVIDER_API_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "deepseek": "DEEPSEEK_API_KEY"}
+PROVIDER_API_KEY_ENV = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+}
 
 app = FastAPI(title="edl-agent")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -90,7 +93,9 @@ def _stage_statuses(name: str) -> dict[str, str]:
         "checks": "reel.mp4",
     }
     return {
-        stage: "done" if (session_dir / artifact_by_stage[stage]).exists() else "pending"
+        stage: "done"
+        if (session_dir / artifact_by_stage[stage]).exists()
+        else "pending"
         for stage in STAGES
     }
 
@@ -140,6 +145,7 @@ async def create_session(
     name: str = Form(...),
     provider: str = Form(...),
     model: str = Form(...),
+    theme: str = Form("training"),
     clips: list[UploadFile] = Form(...),
     music: UploadFile = Form(...),
 ) -> HTMLResponse | RedirectResponse:
@@ -193,7 +199,9 @@ async def create_session(
     job = JobState()
     with _lock:
         _jobs[name] = job
-    background_tasks.add_task(run_pipeline_job, session_dir, provider, model, job)
+    background_tasks.add_task(
+        run_pipeline_job, session_dir, provider, model, job, theme=theme
+    )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
 
@@ -209,7 +217,13 @@ def retry_session(name: str, background_tasks: BackgroundTasks) -> RedirectRespo
     with _lock:
         _jobs[name] = job
     background_tasks.add_task(
-        run_pipeline_job, SESSIONS_DIR / name, old_job.provider, old_job.model, job, True
+        run_pipeline_job,
+        SESSIONS_DIR / name,
+        old_job.provider,
+        old_job.model,
+        job,
+        True,
+        old_job.theme,
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -222,6 +236,7 @@ def regenerate_session(
     from_stage: str = Form(...),
     provider: str = Form(...),
     model: str = Form(...),
+    theme: str = Form("training"),
 ) -> RedirectResponse:
     """Force `from_stage` onward to redo, reusing already-completed earlier stages."""
     session_dir = SESSIONS_DIR / name
@@ -235,7 +250,9 @@ def regenerate_session(
     job = JobState()
     with _lock:
         _jobs[name] = job
-    background_tasks.add_task(run_pipeline_job, session_dir, provider, model, job, True)
+    background_tasks.add_task(
+        run_pipeline_job, session_dir, provider, model, job, True, theme
+    )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
 
@@ -365,4 +382,6 @@ def selection_page(request: Request, name: str) -> HTMLResponse:
 def planner_page(request: Request, name: str) -> HTMLResponse:
     """Show `edl.json`'s clip list for debugging the planner stage."""
     edl = _load_json(name, "edl.json")
-    return templates.TemplateResponse(request, "planner.html", {"name": name, "edl": edl})
+    return templates.TemplateResponse(
+        request, "planner.html", {"name": name, "edl": edl}
+    )

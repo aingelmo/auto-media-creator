@@ -7,7 +7,7 @@ from pathlib import Path
 
 from edl_agent.selector._common import EXERCISES
 
-SYSTEM_PROMPT = """Eres un editor de vídeo profesional especializado en Reels \
+SYSTEM_PROMPT_TEMPLATE = """Eres un editor de vídeo profesional especializado en Reels \
 verticales (9:16) de gimnasio.
 
 Recibes una lista de MOMENTOS CANDIDATOS. Cada candidato tiene un id, un tipo \
@@ -21,10 +21,8 @@ Tu tarea es juzgar contenido, no calcular tiempos, coordenadas ni orden temporal
 de encuadre o tapado, encuadre que no permite ver la ejecución, o contenido \
 idéntico a otro candidato mejor del mismo clip.
 2. SELECCIONA todos los demás y asigna a cada uno UN rol:
-   - hook: máxima explosividad o impacto visual. Solo tipo peak.
-   - close: sujeto estable, centrado, final limpio. Prioriza tipo calm o \
-image; si no hay ninguno disponible, usa el candidato peak que se vea más \
-quieto (menos movimiento, pose más estática) y dilo en notes.
+   - hook: {hook}
+   - close: {close}
    - develop: el resto. Prioriza variedad de ejercicios y planos donde se ve \
 bien la técnica.
 3. Asigna rank dentro de cada rol: 1 = mejor calidad. Sin huecos (1, 2, 3, …). \
@@ -42,8 +40,31 @@ ejercicio específico salvo que sea exactamente el de "exercise" (si \
 
 REINFORCED_SUFFIX = "\n\nreason: máximo 8 palabras."
 
-USER_PROMPT_TEMPLATE = """OBJETIVO: Reel de {duration_s} s. Temática: resumen \
-dinámico de entrenamiento.
+_CLOSE_FALLBACK = (
+    "si no hay ninguno disponible, usa el candidato peak que se vea más "
+    "quieto (menos movimiento, pose más estática) y dilo en notes."
+)
+
+# Theme-dependent prompt lines; the rest of the prompt is shared.
+THEMES: dict[str, dict[str, str]] = {
+    "training": {
+        "tematica": "resumen dinámico de entrenamiento (CrossFit, Hyrox, funcional).",
+        "hook": "máxima explosividad o impacto visual. Solo tipo peak.",
+        "close": "sujeto estable, centrado, final limpio. Prioriza tipo calm o "
+        "image; " + _CLOSE_FALLBACK,
+    },
+    "yoga": {
+        "tematica": "flujo de yoga sereno: posturas limpias, transiciones "
+        "fluidas, ambiente calmado.",
+        "hook": "la postura o transición más impactante visualmente "
+        "(inversión, equilibrio, apertura amplia). Solo tipo peak.",
+        "close": "postura de reposo o meditación (savasana, sentado, manos en "
+        "el pecho), sujeto centrado y quieto. Prioriza tipo calm o image; "
+        + _CLOSE_FALLBACK,
+    },
+}
+
+USER_PROMPT_TEMPLATE = """OBJETIVO: Reel de {duration_s} s. Temática: {tematica}
 
 SLOTS (N_SLOTS = {n_slots}): 1 hook, {n_develop} develop, 1 close.
 
@@ -149,8 +170,24 @@ def admissible_candidates(candidates_json: dict, slots_json: dict) -> list[dict]
     ]
 
 
+def build_system_prompt(theme: str = "training") -> str:
+    """Fill in `SYSTEM_PROMPT_TEMPLATE` with the theme's hook/close guidance.
+
+    Args:
+        theme: Key of `THEMES` (`"training"` or `"yoga"`).
+
+    Returns:
+        System prompt text (in Spanish).
+    """
+    t = THEMES[theme]
+    return SYSTEM_PROMPT_TEMPLATE.format(hook=t["hook"], close=t["close"])
+
+
 def build_user_prompt(
-    duration_s: float, slots_json: dict, candidates: list[dict]
+    duration_s: float,
+    slots_json: dict,
+    candidates: list[dict],
+    theme: str = "training",
 ) -> str:
     """Fill in `USER_PROMPT_TEMPLATE` with the current session, per #5.1.
 
@@ -159,14 +196,16 @@ def build_user_prompt(
         slots_json: Parsed `slots.json`, with a `slots` key.
         candidates: Admissible candidates (see `admissible_candidates`);
             only their `id`s are used here.
+        theme: Key of `THEMES`; picks the `Temática:` line.
 
     Returns:
-        Filled-in user prompt text (in Spanish, matching `SYSTEM_PROMPT`).
+        Filled-in user prompt text (in Spanish, matching `build_system_prompt`).
     """
     slots = slots_json["slots"]
     n_develop = sum(1 for s in slots if s["role"] == "develop")
     return USER_PROMPT_TEMPLATE.format(
         duration_s=duration_s,
+        tematica=THEMES[theme]["tematica"],
         n_slots=len(slots),
         n_develop=n_develop,
         exercises=", ".join(EXERCISES),

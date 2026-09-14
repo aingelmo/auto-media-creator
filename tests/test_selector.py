@@ -7,6 +7,7 @@ import json
 import requests
 
 from edl_agent.selector import admissible_candidates, build_parts, select
+from edl_agent.selector.prompts import build_system_prompt, build_user_prompt
 
 
 def _cand(cid, admits, peak_frame):
@@ -218,3 +219,11 @@ def test_select_returns_none_on_persistent_malformed_json(tmp_path) -> None:
 
     assert selection is None
     assert meta["llm_attempts"] == 2
+
+
+def test_theme_switches_prompt_wording() -> None:
+    assert "explosividad" in build_system_prompt("training")
+    yoga = build_system_prompt("yoga")
+    assert "savasana" in yoga and "Solo tipo peak" in yoga
+    assert "yoga" in build_user_prompt(6.0, _slots_json(), [], "yoga")
+    assert "Hyrox" in build_user_prompt(6.0, _slots_json(), [])

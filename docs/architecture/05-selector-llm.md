@@ -79,6 +79,8 @@ Compatible con structured output de Gemini (sin `$schema`, sin `const`, sin `def
 
 ### 5.4 System prompt
 
+Las líneas `hook`/`close` y la `Temática:` del user prompt dependen de `config["theme"]` (`"training"` por defecto, cubre CrossFit/Hyrox/funcional; `"yoga"`). Se muestra la variante `training`; la de `yoga` pide como hook «la postura o transición más impactante visualmente (inversión, equilibrio, apertura amplia). Solo tipo peak.» y como close «postura de reposo o meditación (savasana, sentado, manos en el pecho), sujeto centrado y quieto. Prioriza tipo calm o image; …» con el mismo fallback a peak. La invariante hook=peak se mantiene en ambos temas.
+
 ```text
 Eres un editor de vídeo profesional especializado en Reels verticales (9:16) de gimnasio.
 
@@ -89,7 +91,7 @@ Tu tarea es juzgar contenido, no calcular tiempos, coordenadas ni orden temporal
 1. RECHAZA los candidatos con: desenfoque en el fotograma central, sujeto fuera de encuadre o tapado, encuadre que no permite ver la ejecución, o contenido idéntico a otro candidato mejor del mismo clip.
 2. SELECCIONA todos los demás y asigna a cada uno UN rol:
    - hook: máxima explosividad o impacto visual. Solo tipo peak.
-   - close: sujeto estable, centrado, final limpio. Solo tipo calm o image.
+   - close: sujeto estable, centrado, final limpio. Prioriza tipo calm o image; si no hay ninguno disponible, usa el candidato peak que se vea más quieto (menos movimiento, pose más estática) y dilo en notes.
    - develop: el resto. Prioriza variedad de ejercicios y planos donde se ve bien la técnica.
 3. Asigna rank dentro de cada rol: 1 = mejor calidad. Sin huecos (1, 2, 3, …). El orden en el montaje lo decide otro sistema.
 4. exercise: usa exactamente un nombre de la lista canónica; si no encaja, "other".
@@ -97,18 +99,19 @@ Tu tarea es juzgar contenido, no calcular tiempos, coordenadas ni orden temporal
 
 Reglas:
 - Usa solo candidate_id existentes. No emitas tiempos ni coordenadas.
-- reason: máximo 12 palabras. Responde únicamente con el JSON del schema.
+- reason: máximo 12 palabras, describe solo lo visible; no nombres un ejercicio específico salvo que sea exactamente el de "exercise" (si "exercise" es "other", no inventes un nombre de ejercicio en reason).
+- Responde únicamente con el JSON del schema.
 ```
 
 ### 5.5 User prompt (dinámico)
 
 ```text
-OBJETIVO: Reel de {duration_s} s. Temática: resumen dinámico de entrenamiento.
+OBJETIVO: Reel de {duration_s} s. Temática: resumen dinámico de entrenamiento (CrossFit, Hyrox, funcional).
 
 SLOTS (N_SLOTS = {n}): 1 hook, {n-2} develop, 1 close.
 
 LISTA CANÓNICA DE EJERCICIOS:
-back squat, front squat, overhead squat, deadlift, clean, snatch, jerk, thruster, pull-up, muscle-up, push-up, burpee, box jump, wall ball, kettlebell swing, rowing, bike, ski erg, run, rope climb, handstand, double-under, other
+back squat, front squat, overhead squat, deadlift, clean, snatch, jerk, thruster, pull-up, muscle-up, push-up, burpee, box jump, wall ball, kettlebell swing, rowing, bike, ski erg, run, rope climb, handstand, double-under, sled push, sled pull, farmers carry, sandbag lunge, lunge, toes-to-bar, sun salutation, warrior pose, downward dog, balance pose, inversion, backbend, stretch, savasana, other
 
 CANDIDATOS: {n_cand} (ids: {ids}). Los fotogramas de cada uno preceden a este mensaje, etiquetados con su id.
 

@@ -52,6 +52,8 @@ def _shorten_durations(start_s: float) -> list[float]:
         return [MIN_SHORTEN_DURATION_S]
     step = (start_s - MIN_SHORTEN_DURATION_S) / (SHORTEN_ATTEMPTS - 1)
     return [round(start_s - i * step, 1) for i in range(SHORTEN_ATTEMPTS)]
+
+
 DEFAULT_MODELS = {
     "gemini": "gemini-3.8-flash",
     "anthropic": "claude-sonnet-5",
@@ -139,6 +141,7 @@ class JobState:
         provider: LLM provider this job was (or should be, on retry) run
             with; kept so `/sessions/{name}/retry` can relaunch it.
         model: LLM model this job was (or should be, on retry) run with.
+        theme: Selector prompt theme (`"training"` | `"yoga"`).
     """
 
     stages: dict[str, str] = field(
@@ -157,6 +160,7 @@ class JobState:
     shorten: bool = False
     provider: str = ""
     model: str = ""
+    theme: str = "training"
 
     @contextmanager
     def running(self, stage: str):  # noqa: ANN201 (contextmanager)
@@ -172,7 +176,12 @@ class JobState:
 
 
 def run_pipeline_job(
-    session_dir: Path, provider: str, model: str, job: JobState, resume: bool = False
+    session_dir: Path,
+    provider: str,
+    model: str,
+    job: JobState,
+    resume: bool = False,
+    theme: str = "training",
 ) -> None:
     """Run the full ingest->render pipeline for a session, updating `job` along the way.
 
@@ -189,9 +198,11 @@ def run_pipeline_job(
             reference to it for status polling.
         resume: If `True`, skip any stage whose output file already exists
             on disk (loading it instead), per `/sessions/{name}/retry`.
+        theme: Selector prompt theme, a key of `edl_agent.selector.prompts.THEMES`.
     """
     job.provider = provider
     job.model = model
+    job.theme = theme
     try:
         manifest_path = session_dir / "manifest.json"
         slots_path = session_dir / "slots.json"
@@ -287,7 +298,9 @@ def run_pipeline_job(
                             break
 
                     if new_duration != best_duration:
-                        cut_music(orig_track, cut_path, music["offset_s"], best_duration)
+                        cut_music(
+                            orig_track, cut_path, music["offset_s"], best_duration
+                        )
                     slots = best_slots
 
                     music["max_duration_s"] = best_duration
@@ -317,7 +330,11 @@ def run_pipeline_job(
             with job.running("selection"):
                 client = get_client(provider)
                 selection, selection_meta = run_selection(
-                    session_dir, candidates, slots, config={"model": model}, client=client
+                    session_dir,
+                    candidates,
+                    slots,
+                    config={"model": model, "theme": theme},
+                    client=client,
                 )
                 selection_path.write_text(
                     json.dumps(selection or {}, indent=2, ensure_ascii=False)
