@@ -1,22 +1,11 @@
-"""Anthropic-SDK-backed client, shared by real Anthropic and DeepSeek.
-
-DeepSeek exposes an Anthropic-compatible endpoint
-(`https://api.deepseek.com/anthropic`) that the official `anthropic` SDK
-talks to unmodified given a matching `base_url`, so one adapter class
-serves both providers; only `base_url`, the API key, and (for DeepSeek) the
-set of vision-capable model names differ.
-"""
+"""Anthropic-SDK-backed client for real Anthropic (Claude)."""
 
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 
 import anthropic
-
-DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic"
-DEEPSEEK_VISION_MODELS = frozenset({"deepseek-flash", "deepseek-v4-flash-vision-exp"})
 
 
 @dataclass
@@ -56,11 +45,8 @@ _TOOL_NAME = "emit_selection"
 class _Interactions:
     """Backs `ClaudeCompatibleClient.interactions`; calls the Messages API."""
 
-    def __init__(
-        self, client: anthropic.Anthropic, vision_models: frozenset[str] | None
-    ) -> None:
+    def __init__(self, client: anthropic.Anthropic) -> None:
         self._client = client
-        self._vision_models = vision_models
 
     def create(
         self,
@@ -75,7 +61,7 @@ class _Interactions:
         """Send one Messages API request, mimicking `genai...interactions.create`.
 
         Args:
-            model: Model name (e.g. `"claude-sonnet-5"`, `"deepseek-flash"`).
+            model: Model name (e.g. `"claude-sonnet-5"`).
             system_instruction: System prompt text.
             input: Message parts, each a dict with `type` (`"text"` or
                 `"image"`); text parts have `text` (str), image parts have
@@ -97,21 +83,7 @@ class _Interactions:
             if `stop_reason` was `"max_tokens"`), `output_text` (the tool
             call's input, re-serialized to a JSON string so callers can
             `json.loads` it exactly like the other adapters), and `usage`.
-
-        Raises:
-            ValueError: If `input` contains an image part and `model` isn't
-                in this client's `vision_models` allowlist (DeepSeek only;
-                real Anthropic has no restriction).
         """
-        if self._vision_models is not None:
-            has_images = any(p["type"] == "image" for p in input)
-            if has_images and model not in self._vision_models:
-                msg = (
-                    f"Model {model!r} has no vision support; use one of "
-                    f"{sorted(self._vision_models)} for image inputs."
-                )
-                raise ValueError(msg)
-
         content = [
             {"type": "text", "text": p["text"]}
             if p["type"] == "text"
@@ -156,19 +128,13 @@ class _Interactions:
 class ClaudeCompatibleClient:
     """Drop-in for `genai.Client`'s `.interactions.create()` shape.
 
-    Backed by the `anthropic` SDK; works for real Anthropic and for
-    DeepSeek's Anthropic-compatible endpoint (see `deepseek_client`).
+    Backed by the `anthropic` SDK, for real Anthropic (Claude).
     """
 
-    def __init__(
-        self,
-        api_key: str | None = None,
-        base_url: str | None = None,
-        vision_models: frozenset[str] | None = None,
-    ) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         self.sdk_version = anthropic.__version__
-        client = anthropic.Anthropic(api_key=api_key, base_url=base_url)
-        self.interactions = _Interactions(client, vision_models)
+        client = anthropic.Anthropic(api_key=api_key)
+        self.interactions = _Interactions(client)
 
 
 def anthropic_client(api_key: str | None = None) -> ClaudeCompatibleClient:
@@ -180,25 +146,6 @@ def anthropic_client(api_key: str | None = None) -> ClaudeCompatibleClient:
             here.
 
     Returns:
-        `ClaudeCompatibleClient` with no vision-model restriction — all
-        current Claude models accept images.
+        `ClaudeCompatibleClient`.
     """
     return ClaudeCompatibleClient(api_key=api_key)
-
-
-def deepseek_client(api_key: str | None = None) -> ClaudeCompatibleClient:
-    """Build a client for DeepSeek, via its Anthropic-compatible endpoint.
-
-    Args:
-        api_key: DeepSeek API key; defaults via `DEEPSEEK_API_KEY` (read
-            manually, since it isn't the `anthropic` SDK's default env var).
-
-    Returns:
-        `ClaudeCompatibleClient` pointed at DeepSeek's Anthropic-compatible
-        base URL, restricted to `DEEPSEEK_VISION_MODELS` for image inputs.
-    """
-    return ClaudeCompatibleClient(
-        api_key=api_key or os.environ.get("DEEPSEEK_API_KEY"),
-        base_url=DEEPSEEK_BASE_URL,
-        vision_models=DEEPSEEK_VISION_MODELS,
-    )

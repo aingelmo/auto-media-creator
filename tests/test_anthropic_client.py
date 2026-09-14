@@ -1,13 +1,11 @@
-"""Adaptador Anthropic/DeepSeek: misma forma que interactions.create()."""
+"""Adaptador Anthropic: misma forma que interactions.create()."""
 
 from __future__ import annotations
 
 import json
 from unittest.mock import Mock, patch
 
-import pytest
-
-from edl_agent.llm.anthropic_client import anthropic_client, deepseek_client
+from edl_agent.llm.anthropic_client import anthropic_client
 
 PARTS = [
     {"type": "text", "text": "id=c1"},
@@ -87,47 +85,3 @@ def test_create_marks_incomplete_on_max_tokens() -> None:
             generation_config=GENERATION_CONFIG,
         )
     assert interaction.status == "incomplete"
-
-
-def test_deepseek_vision_guard_raises_for_non_vision_model() -> None:
-    client = deepseek_client(api_key="test")
-    with pytest.raises(ValueError, match="no vision support"):
-        client.interactions.create(
-            model="deepseek-v4-pro",
-            system_instruction="s",
-            input=PARTS,
-            response_format=RESPONSE_FORMAT,
-            generation_config=GENERATION_CONFIG,
-        )
-
-
-def test_deepseek_vision_guard_allows_vision_model() -> None:
-    client = deepseek_client(api_key="test")
-    message = _fake_message(tool_input={"selected": []})
-    with patch.object(
-        client.interactions._client.messages, "create", return_value=message  # noqa: SLF001
-    ):
-        interaction = client.interactions.create(
-            model="deepseek-flash",
-            system_instruction="s",
-            input=PARTS,
-            response_format=RESPONSE_FORMAT,
-            generation_config=GENERATION_CONFIG,
-        )
-    assert interaction.status == "completed"
-
-
-def test_anthropic_client_has_no_vision_guard() -> None:
-    client = anthropic_client(api_key="test")
-    message = _fake_message(tool_input={"selected": []})
-    with patch.object(
-        client.interactions._client.messages, "create", return_value=message  # noqa: SLF001
-    ):
-        interaction = client.interactions.create(
-            model="claude-sonnet-5",
-            system_instruction="s",
-            input=PARTS,
-            response_format=RESPONSE_FORMAT,
-            generation_config=GENERATION_CONFIG,
-        )
-    assert interaction.status == "completed"

@@ -38,7 +38,7 @@ def get_client(provider: str, **kwargs: object) -> Any:  # noqa: ANN401 (duck-ty
 
         return anthropic_client(**kwargs)
     if provider == "deepseek":
-        from edl_agent.llm.anthropic_client import deepseek_client
+        from edl_agent.llm.deepseek_client import deepseek_client
 
         return deepseek_client(**kwargs)
     if provider == "ollama":
