@@ -23,7 +23,7 @@
     {% endfor %}
   </table>
 
-  {% if job and job.awaiting_confirmation %}
+  {% if job and job.awaiting_confirmation and job.pause_kind == "verification" %}
     <div class="warning">
       <p>
         <strong>Warning:</strong> {{ job.unverified_sources | length }} video(s)
@@ -42,6 +42,33 @@
         </label>
         {% endfor %}
         <button type="submit">Continue with checked clips excluded</button>
+      </form>
+      <form method="post" action="/sessions/{{ name }}/confirm">
+        <input type="hidden" name="proceed" value="false">
+        <button type="submit">Cancel run</button>
+      </form>
+    </div>
+  {% elif job and job.awaiting_confirmation and job.pause_kind == "low_candidates" %}
+    <div class="warning">
+      <p>
+        <strong>Warning:</strong> only {{ job.low_candidates.real_sources }} usable
+        source clip(s) for {{ job.low_candidates.slot_count }} slots to fill. Some
+        clips will repeat across slots, which can make the reel feel slow/static.
+      </p>
+      <p>
+        Keep the current duration and accept the repeats, or shorten the reel to
+        about {{ job.low_candidates.suggested_duration_s }}s so there are enough
+        distinct clips to keep it dynamic.
+      </p>
+      <form method="post" action="/sessions/{{ name }}/confirm">
+        <input type="hidden" name="proceed" value="true">
+        <input type="hidden" name="shorten" value="false">
+        <button type="submit">Keep current duration</button>
+      </form>
+      <form method="post" action="/sessions/{{ name }}/confirm">
+        <input type="hidden" name="proceed" value="true">
+        <input type="hidden" name="shorten" value="true">
+        <button type="submit">Shorten to {{ job.low_candidates.suggested_duration_s }}s</button>
       </form>
       <form method="post" action="/sessions/{{ name }}/confirm">
         <input type="hidden" name="proceed" value="false">

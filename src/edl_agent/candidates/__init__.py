@@ -8,7 +8,11 @@ planner and the LLM selector consume.
 from __future__ import annotations
 
 from edl_agent.candidates._common import FPS, edge_margin_s
-from edl_agent.candidates.build import build_image_candidate, build_video_candidates
+from edl_agent.candidates.build import (
+    build_image_candidate,
+    build_video_candidates,
+    readmit_candidates,
+)
 from edl_agent.candidates.calm import find_calm_windows
 from edl_agent.candidates.frames import build_contact_sheet, extract_peak_frames
 from edl_agent.candidates.peaks import find_peak_windows
@@ -24,5 +28,6 @@ __all__ = [
     "extract_peak_frames",
     "find_calm_windows",
     "find_peak_windows",
+    "readmit_candidates",
     "score_cv",
 ]

@@ -9,8 +9,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from edl_agent.candidates import readmit_candidates
 from edl_agent.features import yolo_pose_detector
-from edl_agent.ingest import write_manifest
+from edl_agent.ingest import cut_music, sha256_file, write_manifest
 from edl_agent.llm import get_client
 from edl_agent.render import (
     concat_and_audio,
@@ -28,6 +29,22 @@ POSE_MODEL = "models/yolov8n-pose.pt"
 THREADS = 4
 MUSIC_OFFSET_S = 15.0
 MUSIC_MAX_DURATION_S = 15.0
+MIN_SHORTEN_DURATION_S = 5.0
+SHORTEN_ATTEMPTS = 4  # beat detection isn't linear in duration; try progressively
+
+
+def _shorten_durations(start_s: float) -> list[float]:
+    """Decreasing durations to try when shortening, from `start_s` down to `MIN_SHORTEN_DURATION_S`.
+
+    Beat detection doesn't scale slot count linearly with duration, so a
+    single guessed duration isn't reliable; each step is retried against the
+    real slot count until one produces few enough slots (see the
+    `"low_candidates"` pause in `run_pipeline_job`).
+    """
+    if start_s <= MIN_SHORTEN_DURATION_S:
+        return [MIN_SHORTEN_DURATION_S]
+    step = (start_s - MIN_SHORTEN_DURATION_S) / (SHORTEN_ATTEMPTS - 1)
+    return [round(start_s - i * step, 1) for i in range(SHORTEN_ATTEMPTS)]
 TONEMAP_CHAIN = ""
 
 DEFAULT_MODELS = {
@@ -60,16 +77,26 @@ class JobState:
             `checks` stage completes.
         unverified_sources: Video `src` paths whose proxy failed temporal
             verification against the original, once `ingest` completes.
-        awaiting_confirmation: `True` while the job is paused after
-            `ingest`, waiting on `confirm_event`, because
-            `unverified_sources` is non-empty.
+        awaiting_confirmation: `True` while the job is paused waiting on
+            `confirm_event`, either after `ingest` (`unverified_sources`
+            non-empty) or after `candidates` (`low_candidates` non-empty).
+        pause_kind: Which pause `awaiting_confirmation` refers to:
+            `"verification"` or `"low_candidates"`.
         confirm_event: Set (via `/sessions/{name}/confirm`) to unblock a
             job paused on `awaiting_confirmation`.
         cancelled: `True` if the user chose not to proceed past the
             `awaiting_confirmation` pause.
         excluded_sources: `src` paths (a subset of `unverified_sources`,
             set via `/sessions/{name}/confirm`) to drop from the manifest
-            before resuming past the `awaiting_confirmation` pause.
+            before resuming past a `"verification"` pause.
+        low_candidates: `{"real_sources": int, "slot_count": int,
+            "suggested_duration_s": float}` once `candidates` completes, if
+            distinct usable video sources are fewer than slots to fill;
+            `{}` otherwise.
+        shorten: `True` (set via `/sessions/{name}/confirm`) to re-cut the
+            music to `low_candidates["suggested_duration_s"]` and rebuild
+            slots before resuming past a `"low_candidates"` pause; `False`
+            keeps the original duration as-is.
         provider: LLM provider this job was (or should be, on retry) run
             with; kept so `/sessions/{name}/retry` can relaunch it.
         model: LLM model this job was (or should be, on retry) run with.
@@ -83,9 +110,12 @@ class JobState:
     check_results: list[str] = field(default_factory=list)
     unverified_sources: list[str] = field(default_factory=list)
     awaiting_confirmation: bool = False
+    pause_kind: str = ""
     confirm_event: threading.Event = field(default_factory=threading.Event)
     cancelled: bool = False
     excluded_sources: list[str] = field(default_factory=list)
+    low_candidates: dict = field(default_factory=dict)
+    shorten: bool = False
     provider: str = ""
     model: str = ""
 
@@ -148,6 +178,7 @@ def run_pipeline_job(
                 if s.get("type") == "video" and not s.get("proxy_verified", True)
             ]
             if job.unverified_sources:
+                job.pause_kind = "verification"
                 job.awaiting_confirmation = True
                 job.confirm_event.wait()
                 job.awaiting_confirmation = False
@@ -171,6 +202,67 @@ def run_pipeline_job(
                 candidates = run_candidates(
                     session_dir, manifest, slots, detector, pose_model_path=POSE_MODEL
                 )
+
+            real_sources = len(
+                {
+                    c["src"]
+                    for c in candidates["candidates"]
+                    if c["kind"] != "image" and c["admits_slots"]
+                }
+            )
+            slot_count = len(slots["slots"])
+            has_video_sources = any(
+                s.get("type") == "video" for s in manifest["sources"]
+            )
+            if has_video_sources and real_sources < slot_count:
+                job.low_candidates = {
+                    "real_sources": real_sources,
+                    "slot_count": slot_count,
+                    "suggested_duration_s": max(
+                        MIN_SHORTEN_DURATION_S,
+                        round(MUSIC_MAX_DURATION_S * real_sources / slot_count, 1),
+                    ),
+                }
+                job.pause_kind = "low_candidates"
+                job.awaiting_confirmation = True
+                job.confirm_event.wait()
+                job.awaiting_confirmation = False
+                if job.cancelled:
+                    return
+                if job.shorten:
+                    music = manifest["music"]
+                    cut_path = session_dir / "music" / "track_cut.wav"
+                    orig_track = session_dir / music["src"]
+
+                    best_duration, best_slots = None, None
+                    for new_duration in _shorten_durations(
+                        job.low_candidates["suggested_duration_s"]
+                    ):
+                        cut_music(orig_track, cut_path, music["offset_s"], new_duration)
+                        candidate_slots = slots_from_file(str(cut_path))
+                        if best_slots is None or len(candidate_slots["slots"]) < len(
+                            best_slots["slots"]
+                        ):
+                            best_duration, best_slots = new_duration, candidate_slots
+                        if len(candidate_slots["slots"]) <= real_sources:
+                            break
+
+                    if new_duration != best_duration:
+                        cut_music(orig_track, cut_path, music["offset_s"], best_duration)
+                    slots = best_slots
+
+                    music["max_duration_s"] = best_duration
+                    music["cut_sha256"] = sha256_file(cut_path)
+                    write_manifest(manifest, session_dir / "manifest.json")
+
+                    slots_path.write_text(
+                        json.dumps(slots, indent=2, ensure_ascii=False)
+                    )
+
+                    readmit_candidates(candidates["candidates"], slots["slots"])
+                    candidates_path.write_text(
+                        json.dumps(candidates, indent=2, ensure_ascii=False)
+                    )
 
         selection_path = session_dir / "selection.json"
         selection_meta_path = session_dir / "selection_meta.json"

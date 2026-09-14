@@ -192,3 +192,25 @@ def build_image_candidate(
         if Path(peak_frame).exists()
         else [hashlib.sha256(b"").hexdigest()],
     }
+
+
+def readmit_candidates(
+    candidates: list[dict], slots: list[dict], speed: float = 1.0
+) -> None:
+    """Recompute `admits_slots` for existing candidates against a new `slots` list, in place.
+
+    Cheap alternative to rebuilding candidates from scratch when only the
+    slot layout changed (e.g. the music was re-cut to a shorter duration):
+    peak/calm windows don't depend on `slots`, only `admits_slots` does.
+
+    Args:
+        candidates: Candidate dicts (as in `candidates.json["candidates"]`),
+            mutated in place.
+        slots: New slot definitions, as in `slots.json["slots"]`.
+        speed: Playback speed multiplier, as in `build_video_candidates`.
+    """
+    for c in candidates:
+        if c["kind"] == "image":
+            c["admits_slots"] = [s["slot"] for s in slots]
+        else:
+            c["admits_slots"] = admits_slots(tuple(c["window"]), slots, speed)

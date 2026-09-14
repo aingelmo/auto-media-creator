@@ -248,19 +248,25 @@ def session_status(name: str) -> dict:
 
 @app.post("/sessions/{name}/confirm", response_model=None)
 def session_confirm(
-    name: str, proceed: bool = Form(...), exclude: list[str] = Form(default=[])
+    name: str,
+    proceed: bool = Form(...),
+    exclude: list[str] = Form(default=[]),
+    shorten: bool = Form(default=False),
 ) -> RedirectResponse:
-    """Unblock a job paused on unverified ingest proxies.
+    """Unblock a job paused on `awaiting_confirmation` (see `JobState`).
 
-    `proceed=False` cancels the run instead of continuing. Otherwise, any
-    `exclude` source paths (checked on the confirmation form) are dropped
-    from the manifest before the remaining, verified sources proceed.
+    `proceed=False` cancels the run instead of continuing. For a
+    `"verification"` pause, any `exclude` source paths (checked on the
+    confirmation form) are dropped from the manifest. For a
+    `"low_candidates"` pause, `shorten=True` re-cuts the music to the
+    suggested shorter duration instead of keeping the original one.
     """
     job = _jobs.get(name)
     if job is None or not job.awaiting_confirmation:
         raise HTTPException(status_code=404, detail="no confirmation pending")
     job.cancelled = not proceed
     job.excluded_sources = exclude
+    job.shorten = shorten
     job.confirm_event.set()
     return RedirectResponse(f"/sessions/{name}", status_code=303)
 
