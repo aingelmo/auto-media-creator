@@ -82,6 +82,39 @@
       <h3>Render checks</h3>
       <pre>{{ job.check_results | join("\n") }}</pre>
     {% endif %}
+
+    <h3>Regenerate</h3>
+    <form method="post" action="/sessions/{{ name }}/regenerate">
+      <label>From stage
+        <select name="from_stage" id="from_stage">
+          <option value="candidates">candidates</option>
+          <option value="selection" selected>selection</option>
+          <option value="planner">planner</option>
+          <option value="render">render</option>
+        </select>
+      </label>
+      <label>LLM provider
+        <select name="provider" id="regen_provider">
+          {% for p in providers %}
+          <option value="{{ p }}">{{ p }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Model
+        <input type="text" name="model" id="regen_model">
+      </label>
+      <button type="submit">Regenerate from this stage</button>
+    </form>
+    <script>
+      const regenDefaultModels = {{ default_models | tojson }};
+      const regenProviderSelect = document.getElementById("regen_provider");
+      const regenModelInput = document.getElementById("regen_model");
+      function syncRegenModel() {
+        regenModelInput.value = regenDefaultModels[regenProviderSelect.value] || "";
+      }
+      regenProviderSelect.addEventListener("change", syncRegenModel);
+      syncRegenModel();
+    </script>
   {% elif job and job.error %}
     <p class="status-failed">Failed</p>
     <pre>{{ job.error }}</pre>

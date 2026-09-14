@@ -7,7 +7,7 @@ import threading
 import time
 from unittest.mock import Mock, patch
 
-from edl_agent.web.pipeline import JobState, run_pipeline_job
+from edl_agent.web.pipeline import JobState, clear_stage_artifacts, run_pipeline_job
 
 
 def _fake_ollama_response(json_data):
@@ -204,3 +204,29 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
     assert on_disk_manifest["music"]["max_duration_s"] == 5.0
     on_disk_candidates = json.loads((session_dir / "candidates.json").read_text())
     assert on_disk_candidates["candidates"][0]["admits_slots"] == [0]
+
+
+def test_clear_stage_artifacts_from_selection_keeps_earlier_stages_and_backs_up_reel(
+    tmp_path,
+) -> None:
+    """Clearing from "selection" removes selection/planner/render outputs but
+    leaves ingest/candidates outputs untouched, and backs up the old reel."""
+    (tmp_path / "manifest.json").write_text("{}")
+    (tmp_path / "candidates.json").write_text("{}")
+    (tmp_path / "selection.json").write_text("{}")
+    (tmp_path / "selection_meta.json").write_text("{}")
+    (tmp_path / "edl.json").write_text("{}")
+    (tmp_path / "reel.mp4").write_text("old reel")
+    (tmp_path / "segments").mkdir()
+    (tmp_path / "segments" / "s0.mp4").write_text("seg")
+
+    clear_stage_artifacts(tmp_path, "selection")
+
+    assert (tmp_path / "manifest.json").exists()
+    assert (tmp_path / "candidates.json").exists()
+    assert not (tmp_path / "selection.json").exists()
+    assert not (tmp_path / "selection_meta.json").exists()
+    assert not (tmp_path / "edl.json").exists()
+    assert not (tmp_path / "reel.mp4").exists()
+    assert not (tmp_path / "segments").exists()
+    assert (tmp_path / "reel.prev.mp4").read_text() == "old reel"

@@ -19,7 +19,13 @@ from fastapi.templating import Jinja2Templates
 
 from edl_agent.llm import PROVIDERS
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
-from edl_agent.web.pipeline import DEFAULT_MODELS, STAGES, JobState, run_pipeline_job
+from edl_agent.web.pipeline import (
+    DEFAULT_MODELS,
+    STAGES,
+    JobState,
+    clear_stage_artifacts,
+    run_pipeline_job,
+)
 
 SESSIONS_DIR = Path("sessions")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -209,6 +215,31 @@ def retry_session(name: str, background_tasks: BackgroundTasks) -> RedirectRespo
     return RedirectResponse(f"/sessions/{name}", status_code=303)
 
 
+@app.post("/sessions/{name}/regenerate", response_model=None)
+def regenerate_session(
+    name: str,
+    background_tasks: BackgroundTasks,
+    from_stage: str = Form(...),
+    provider: str = Form(...),
+    model: str = Form(...),
+) -> RedirectResponse:
+    """Force `from_stage` onward to redo, reusing already-completed earlier stages."""
+    session_dir = SESSIONS_DIR / name
+    if not session_dir.is_dir():
+        raise HTTPException(status_code=404, detail="no such session")
+    if from_stage not in STAGES:
+        raise HTTPException(status_code=400, detail=f"unknown stage {from_stage!r}")
+
+    clear_stage_artifacts(session_dir, from_stage)
+
+    job = JobState()
+    with _lock:
+        _jobs[name] = job
+    background_tasks.add_task(run_pipeline_job, session_dir, provider, model, job, True)
+
+    return RedirectResponse(f"/sessions/{name}", status_code=303)
+
+
 @app.get("/sessions/{name}", response_class=HTMLResponse)
 def session_page(request: Request, name: str) -> HTMLResponse:
     """Show a session's live per-stage status, or its final results once done."""
@@ -223,6 +254,8 @@ def session_page(request: Request, name: str) -> HTMLResponse:
             "reel_exists": reel_exists,
             "stages": STAGES,
             "stage_statuses": _stage_statuses(name),
+            "providers": PROVIDERS,
+            "default_models": DEFAULT_MODELS,
         },
     )
 
