@@ -29,9 +29,12 @@ def _select_single(
     role: str,
     kinds: set[str] | None,
     candidates_by_id: dict,
-    d_f: int,
+    slot: dict,
     speed: float,
+    config: dict,
+    used: list[dict],
 ) -> dict | None:
+    d_f = slot["end_f"] - slot["start_f"]
     pool = sorted(
         (
             s
@@ -43,7 +46,14 @@ def _select_single(
     )
     for s in pool:
         cand = candidates_by_id[s["candidate_id"]]
-        if admits(tuple(cand["window"]), d_f, speed):
+        if not admits(tuple(cand["window"]), d_f, speed):
+            continue
+        if cand["kind"] == "image":
+            return s
+        timing = compute_in_out(cand, slot, role, speed, config)
+        if not _overlaps_used(
+            cand, timing["in_s"], timing["out_s"], used, config["adjacency_gap_s"]
+        ):
             return s
     return None
 
@@ -368,25 +378,13 @@ def assign_slots(
         "hook",
         {"peak"},
         candidates_by_id,
-        hook_slot["end_f"] - hook_slot["start_f"],
+        hook_slot,
         config["hook_speed"],
+        config,
+        [],
     )
     if hook is None:
         msg = "no admissible hook candidate (rules fallback out of scope here)"
-        raise PlannerError(msg)
-
-    # "peak" included because fallback_close (#8.6) uses it as a last
-    # resort (close_not_calm) when no calm/image candidate is admissible.
-    close = _select_single(
-        selected,
-        "close",
-        {"calm", "image", "peak"},
-        candidates_by_id,
-        close_slot["end_f"] - close_slot["start_f"],
-        1.0,
-    )
-    if close is None:
-        msg = "no admissible close candidate (rules fallback out of scope here)"
         raise PlannerError(msg)
 
     used = [
@@ -405,6 +403,35 @@ def assign_slots(
             },
         }
     ]
+
+    # "peak" included because fallback_close (#8.6) uses it as a last
+    # resort (close_not_calm) when no calm/image candidate is admissible.
+    close = _select_single(
+        selected,
+        "close",
+        {"calm", "image", "peak"},
+        candidates_by_id,
+        close_slot,
+        1.0,
+        config,
+        used,
+    )
+    if close is None:
+        msg = "no admissible close candidate (rules fallback out of scope here)"
+        raise PlannerError(msg)
+
+    if candidates_by_id[close["candidate_id"]]["kind"] != "image":
+        close_timing = compute_in_out(
+            candidates_by_id[close["candidate_id"]], close_slot, "close", 1.0, config
+        )
+        used = [
+            *used,
+            {
+                "src": candidates_by_id[close["candidate_id"]]["src"],
+                "in_s": close_timing["in_s"],
+                "out_s": close_timing["out_s"],
+            },
+        ]
 
     taken = select_develop(selected, candidates_by_id, develop_slots, used, config)
     warnings = []
