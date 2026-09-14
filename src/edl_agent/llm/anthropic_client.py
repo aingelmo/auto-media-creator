@@ -83,8 +83,9 @@ class _Interactions:
             response_format: Structured-output spec; only `schema` (dict,
                 JSON schema) is read and sent as a forced tool call, since
                 the Messages API has no native `response_format` param.
-            generation_config: Generation params; reads `temperature`
-                (float) and `max_output_tokens` (int). `thinking_level` is
+            generation_config: Generation params; reads
+                `max_output_tokens` (int). `temperature` is ignored — the
+                Messages API dropped that param. `thinking_level` is
                 ignored — the Messages API's extended-thinking mechanism
                 (a token budget, not a level enum) has no clean equivalent,
                 same as `OllamaClient`.
@@ -133,11 +134,11 @@ class _Interactions:
         message = self._client.messages.create(
             model=model,
             max_tokens=generation_config["max_output_tokens"],
-            temperature=generation_config["temperature"],
             system=system_instruction,
             messages=[{"role": "user", "content": content}],
             tools=[tool],
             tool_choice={"type": "tool", "name": _TOOL_NAME},
+            thinking={"type": "disabled"},
         )
 
         tool_use = next(b for b in message.content if b.type == "tool_use")
