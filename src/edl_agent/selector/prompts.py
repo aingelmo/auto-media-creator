@@ -22,7 +22,9 @@ de encuadre o tapado, encuadre que no permite ver la ejecución, o contenido \
 idéntico a otro candidato mejor del mismo clip.
 2. SELECCIONA todos los demás y asigna a cada uno UN rol:
    - hook: máxima explosividad o impacto visual. Solo tipo peak.
-   - close: sujeto estable, centrado, final limpio. Solo tipo calm o image.
+   - close: sujeto estable, centrado, final limpio. Prioriza tipo calm o \
+image; si no hay ninguno disponible, usa el candidato peak que se vea más \
+quieto (menos movimiento, pose más estática) y dilo en notes.
    - develop: el resto. Prioriza variedad de ejercicios y planos donde se ve \
 bien la técnica.
 3. Asigna rank dentro de cada rol: 1 = mejor calidad. Sin huecos (1, 2, 3, …). \
@@ -33,7 +35,10 @@ explícalo en notes. No inventes candidatos ni fuerces rechazos para cumplir cuo
 
 Reglas:
 - Usa solo candidate_id existentes. No emitas tiempos ni coordenadas.
-- reason: máximo 12 palabras. Responde únicamente con el JSON del schema."""
+- reason: máximo 12 palabras, describe solo lo visible; no nombres un \
+ejercicio específico salvo que sea exactamente el de "exercise" (si \
+"exercise" es "other", no inventes un nombre de ejercicio en reason).
+- Responde únicamente con el JSON del schema."""
 
 REINFORCED_SUFFIX = "\n\nreason: máximo 8 palabras."
 
