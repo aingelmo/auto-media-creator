@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -56,6 +57,15 @@ class JobState:
         done: `True` once the job has finished (successfully or not).
         check_results: Stringified `run_render_checks` results, once the
             `checks` stage completes.
+        unverified_sources: Video `src` paths whose proxy failed temporal
+            verification against the original, once `ingest` completes.
+        awaiting_confirmation: `True` while the job is paused after
+            `ingest`, waiting on `confirm_event`, because
+            `unverified_sources` is non-empty.
+        confirm_event: Set (via `/sessions/{name}/confirm`) to unblock a
+            job paused on `awaiting_confirmation`.
+        cancelled: `True` if the user chose not to proceed past the
+            `awaiting_confirmation` pause.
     """
 
     stages: dict[str, str] = field(
@@ -64,6 +74,10 @@ class JobState:
     error: str | None = None
     done: bool = False
     check_results: list[str] = field(default_factory=list)
+    unverified_sources: list[str] = field(default_factory=list)
+    awaiting_confirmation: bool = False
+    confirm_event: threading.Event = field(default_factory=threading.Event)
+    cancelled: bool = False
 
     @contextmanager
     def running(self, stage: str):  # noqa: ANN201 (contextmanager)
@@ -106,6 +120,18 @@ def run_pipeline_job(
             slots = slots_from_file(str(session_dir / "music" / "track_cut.wav"))
             slots_json = json.dumps(slots, indent=2, ensure_ascii=False)
             (session_dir / "slots.json").write_text(slots_json)
+
+        job.unverified_sources = [
+            s["src"]
+            for s in manifest["sources"]
+            if s.get("type") == "video" and not s.get("proxy_verified", True)
+        ]
+        if job.unverified_sources:
+            job.awaiting_confirmation = True
+            job.confirm_event.wait()
+            job.awaiting_confirmation = False
+            if job.cancelled:
+                return
 
         with job.running("candidates"):
             detector = yolo_pose_detector(POSE_MODEL)

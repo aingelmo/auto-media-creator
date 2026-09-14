@@ -23,7 +23,31 @@
     {% endfor %}
   </table>
 
-  {% if reel_exists and (job is none or job.done and not job.error) %}
+  {% if job and job.awaiting_confirmation %}
+    <div class="warning">
+      <p>
+        <strong>Warning:</strong> {{ job.unverified_sources | length }} video(s)
+        failed proxy verification: their re-encoded working proxy's timeline
+        doesn't line up with the original file's, so timestamps chosen later
+        (candidate peaks, cut points) may land on the wrong frame when the
+        final render pulls from the original for these clips.
+      </p>
+      <ul>
+        {% for src in job.unverified_sources %}
+        <li>{{ src }}</li>
+        {% endfor %}
+      </ul>
+      <p>See <a href="/sessions/{{ name }}/ingest">ingest details</a> for the mismatch data.</p>
+      <form method="post" action="/sessions/{{ name }}/confirm" style="display:inline">
+        <input type="hidden" name="proceed" value="true">
+        <button type="submit">Continue anyway</button>
+      </form>
+      <form method="post" action="/sessions/{{ name }}/confirm" style="display:inline">
+        <input type="hidden" name="proceed" value="false">
+        <button type="submit">Cancel run</button>
+      </form>
+    </div>
+  {% elif reel_exists and (job is none or job.done and not job.error) %}
     <video controls width="640" src="/sessions/{{ name }}/reel.mp4"></video>
     <p><a href="/sessions/{{ name }}/reel.mp4" download>Download reel.mp4</a></p>
     {% if job and job.check_results %}
@@ -50,7 +74,11 @@
           }
           cell.innerHTML = html;
         }
-        if (data.done) { location.reload(); } else { setTimeout(poll, 3000); }
+        if (data.done || data.awaiting_confirmation) {
+          location.reload();
+        } else {
+          setTimeout(poll, 3000);
+        }
       }
       setTimeout(poll, 3000);
     </script>

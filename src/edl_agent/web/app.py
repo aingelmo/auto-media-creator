@@ -215,8 +215,33 @@ def session_status(name: str) -> dict:
     """JSON status for the polling script on the session page."""
     job = _jobs.get(name)
     if job is None:
-        return {"stages": _stage_statuses(name), "done": True, "error": None}
-    return {"stages": job.stages, "done": job.done, "error": job.error}
+        return {
+            "stages": _stage_statuses(name),
+            "done": True,
+            "error": None,
+            "awaiting_confirmation": False,
+        }
+    return {
+        "stages": job.stages,
+        "done": job.done,
+        "error": job.error,
+        "awaiting_confirmation": job.awaiting_confirmation,
+    }
+
+
+@app.post("/sessions/{name}/confirm", response_model=None)
+def session_confirm(name: str, proceed: bool = Form(...)) -> RedirectResponse:
+    """Unblock a job paused on unverified ingest proxies.
+
+    `proceed=False` cancels the run instead of continuing past sources
+    whose proxy failed temporal verification (see `edl_agent.verify`).
+    """
+    job = _jobs.get(name)
+    if job is None or not job.awaiting_confirmation:
+        raise HTTPException(status_code=404, detail="no confirmation pending")
+    job.cancelled = not proceed
+    job.confirm_event.set()
+    return RedirectResponse(f"/sessions/{name}", status_code=303)
 
 
 @app.get("/sessions/{name}/reel.mp4")
