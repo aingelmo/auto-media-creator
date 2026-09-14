@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from edl_agent.planner._common import DEFAULT_CONFIG, FPS
+from edl_agent.planner._common import DEFAULT_CONFIG, FPS, hook_ramp
 from edl_agent.planner.assignment import assign_slots
 from edl_agent.planner.crop import compute_crop
 from edl_agent.planner.effects import effect_for
@@ -56,23 +56,24 @@ def build_clips(
     assignment = assign_slots(slots, selected, candidates_by_id, config)
     warnings = list(assignment.warnings)
 
-    per_slot: dict[int, tuple[dict, str, float]] = {}
+    per_slot: dict[int, tuple[dict, str, dict | None]] = {}
     hook_slot = next(s for s in slots if s["role"] == "hook")
     close_slot = next(s for s in slots if s["role"] == "close")
     develop_slots = [s for s in slots if s["role"] == "develop"]
 
-    per_slot[hook_slot["slot"]] = (assignment.hook, "hook", config["hook_speed"])
-    per_slot[close_slot["slot"]] = (assignment.close, "close", 1.0)
+    # ponytail: ramp only on the hook; per-develop ramps make the reel feel slow.
+    per_slot[hook_slot["slot"]] = (assignment.hook, "hook", hook_ramp(config))
+    per_slot[close_slot["slot"]] = (assignment.close, "close", None)
     for slot, sel in zip(develop_slots, assignment.develop, strict=False):
-        per_slot[slot["slot"]] = (sel, "develop", 1.0)
+        per_slot[slot["slot"]] = (sel, "develop", None)
 
     clips: list[dict[str, Any]] = []
     for slot in slots:
-        sel, role, speed = per_slot[slot["slot"]]
+        sel, role, ramp = per_slot[slot["slot"]]
         cand = candidates_by_id[sel["candidate_id"]]
         src_info = sources_by_src[cand["src"]]
 
-        timing = compute_in_out(cand, slot, role, speed, config)
+        timing = compute_in_out(cand, slot, role, ramp, config)
         warnings.extend(timing["warnings"])
 
         crop_info = compute_crop(
@@ -83,7 +84,9 @@ def build_clips(
             crop_info["crop"], src_info["w"], src_info["h"], crop_info["layout"]
         )
 
-        effect, effect_params = effect_for(cand, crop_info["layout"], config)
+        effect, effect_params = effect_for(
+            cand, crop_info["layout"], config, timing["ramp"]
+        )
 
         clip_warnings = list(timing["warnings"]) + list(crop_info["warnings"])
         clips.append(
@@ -110,7 +113,7 @@ def build_clips(
                 "in_s": timing["in_s"],
                 "out_s": timing["out_s"],
                 "n_frames": timing["n_frames"],
-                "speed": speed,
+                "speed": 1.0,  # EDL back-compat; the ramp lives in effect_params
                 "timeline_start_f": timing["timeline_start_f"],
                 "timeline_end_f": timing["timeline_end_f"],
                 "layout": crop_info["layout"],

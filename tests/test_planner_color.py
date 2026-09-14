@@ -70,7 +70,7 @@ def test_measure_and_apply_on_two_clips(tmp_path: Path) -> None:
     }
     edl: dict[str, Any] = {
         "clips": [
-            {"src": s, "type": "video", "in_s": 0.0, "n_frames": 15, "speed": 1.0}
+            {"src": s, "type": "video", "in_s": 0.0, "out_s": 0.5, "n_frames": 15}
             for s in ("dark.mp4", "bright.mp4")
         ]
     }

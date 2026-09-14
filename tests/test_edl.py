@@ -196,7 +196,6 @@ def test_w1_low_framing_quality_from_many_upscaled_clips() -> None:
     clips = [
         {
             "role": "develop",
-            "speed": 1.0,
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": ["upscale_gt_1.3"],
@@ -213,7 +212,6 @@ def test_w1_low_framing_quality_from_many_cropped_clips() -> None:
     clips = [
         {
             "role": "develop",
-            "speed": 1.0,
             "src_fps_nominal": 30,
             "subject_cropped": True,
             "warnings": [],
@@ -230,7 +228,6 @@ def test_w1_no_warning_below_threshold() -> None:
     clips = [
         {
             "role": "develop",
-            "speed": 1.0,
             "src_fps_nominal": 30,
             "subject_cropped": True,
             "warnings": [],
@@ -251,21 +248,19 @@ def test_w2_low_material_quality_from_relaxed_warnings() -> None:
     clips = [
         {
             "role": "hook",
-            "speed": 1.0,
+            "effect": "none",
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": ["relaxed_4"],
         },
         {
             "role": "develop",
-            "speed": 1.0,
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": ["relaxed_5"],
         },
         {
             "role": "close",
-            "speed": 1.0,
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": [],
@@ -281,21 +276,19 @@ def test_w3_weak_rhythm_from_two_peak_off_beat_clips() -> None:
     clips = [
         {
             "role": "hook",
-            "speed": 1.0,
+            "effect": "none",
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": ["peak_off_beat"],
         },
         {
             "role": "develop",
-            "speed": 1.0,
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": ["peak_off_beat"],
         },
         {
             "role": "close",
-            "speed": 1.0,
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": [],
@@ -311,14 +304,13 @@ def test_w3_weak_rhythm_from_arc_fallback() -> None:
     clips = [
         {
             "role": "hook",
-            "speed": 1.0,
+            "effect": "none",
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": [],
         },
         {
             "role": "close",
-            "speed": 1.0,
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": [],
@@ -334,14 +326,14 @@ def test_w4_slowmo_duplicates_from_slow_hook_on_low_fps_source() -> None:
     clips = [
         {
             "role": "hook",
-            "speed": 0.5,
+            "effect": "ramp",
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": [],
         },
         {
             "role": "close",
-            "speed": 1.0,
+            "effect": "none",
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": [],
@@ -357,14 +349,14 @@ def test_w4_no_warning_when_hook_source_is_high_fps() -> None:
     clips = [
         {
             "role": "hook",
-            "speed": 0.5,
+            "effect": "ramp",
             "src_fps_nominal": 60,
             "subject_cropped": False,
             "warnings": [],
         },
         {
             "role": "close",
-            "speed": 1.0,
+            "effect": "none",
             "src_fps_nominal": 30,
             "subject_cropped": False,
             "warnings": [],

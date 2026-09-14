@@ -1,6 +1,6 @@
 """Cierre del paso 2 de #14: render + concat + audio desde una EDL escrita a
-mano (#10), sin CV ni LLM. Hook a speed=0.5 sobre fuente 60 fps (slow-motion
-real) y clip a speed=1.0 sobre fuente 30 fps.
+mano (#10), sin CV ni LLM. Hook con speed ramp (0.4x en 12 frames) sobre fuente
+60 fps (slow-motion real) y clip a 1.0x sobre fuente 30 fps.
 """
 
 from __future__ import annotations
@@ -133,7 +133,7 @@ def test_is_916() -> None:
 
 
 def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
-    clip_a = session_dir / "inputs" / "a.mp4"  # hook: 60 fps, speed 0.5
+    clip_a = session_dir / "inputs" / "a.mp4"  # hook: 60 fps, ramp 0.4x
     _make_clip(clip_a, w=360, h=640, fps=60, duration=3)
     clip_b = session_dir / "inputs" / "b.mp4"  # close: 30 fps, speed 1.0
     _make_clip(clip_b, w=360, h=640, fps=30, duration=3)
@@ -169,7 +169,16 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
         "session_id": "sess",
         "target": {"w": 1080, "h": 1920, "fps": 30, "duration_f": 90},
         "clips": [
-            _clip(0, "hook", "inputs/a.mp4", 360, 640, 0.0, 0.75, 45, 0.5, 0, 45),
+            {
+                # 45 frames = 33 at 1.0x + 12 at 0.4x -> 1.1 + 0.16 = 1.26 s
+                **_clip(0, "hook", "inputs/a.mp4", 360, 640, 0.0, 1.26, 45, 1.0, 0, 45),
+                "effect": "ramp",
+                "effect_params": {
+                    "ramp_speed": 0.4,
+                    "ramp_frames": 12,
+                    "ramp_start_f": 9,
+                },
+            },
             _clip(1, "close", "inputs/b.mp4", 360, 640, 0.5, 2.0, 45, 1.0, 45, 90),
         ],
         "audio": {

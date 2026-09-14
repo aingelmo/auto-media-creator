@@ -22,7 +22,7 @@
 | P2 | `candidate_id` único en `clips` |
 | P3 | `window[0] ≤ in_s` y `out_s ≤ window[1]` (vídeo) |
 | P4 | `0 ≤ in_s < out_s ≤ duration_s` de la fuente (vídeo) |
-| P5 | `round((out_s − in_s) / speed * 30) == n_frames` |
+| P5 | `round((out_s − in_s − n_ramp/30·ramp_speed) * 30) + n_ramp == n_frames` (`n_ramp = 0` salvo `effect == ramp`) |
 | P6 | `timeline_start_f[i+1] == timeline_end_f[i]`, `timeline_start_f[0] == 0`, `timeline_end_f[-1] == duration_f`, `Σ n_frames == duration_f` |
 | P7 | Sin solapes de la misma fuente (margen 0.25 s) |
 | P8 | `crop` en `[0,1]`; `crop_px` dentro de `W×H`, `w,h` pares, y `|w_px/h_px − 9/16| · h_px ≤ 2 px` si `layout == crop` |
@@ -37,7 +37,7 @@ Estos invariantes se cubren con property tests sobre candidatos sintéticos (§1
 | W1 | Nº de clips con `subject_cropped` > 3 o con `upscale_gt_1.3` > 3 | `low_framing_quality` |
 | W2 | `Σ` de `relaxed_4/relaxed_5` > N_SLOTS/2 | `low_material_quality` |
 | W3 | `arc_fallback` o `peak_off_beat` en ≥ 2 clips | `weak_rhythm` |
-| W4 | Hook con `speed == 0.5` y `src_fps_nominal ≤ 30` | `slowmo_duplicates` |
+| W4 | Hook con `effect == ramp` y `round(src_fps_nominal) ≤ 30` (30.003 de iPhone cuenta como 30) | `slowmo_duplicates` |
 | W5 | `sharpness` es relativa al clip: si el fallback de hook elige por `sharpness` entre clips distintos | `sharpness_cross_clip` (informativo) |
 
 ### 8.4 Checks de render (R) — ver §10.5

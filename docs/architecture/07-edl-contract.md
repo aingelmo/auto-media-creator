@@ -79,7 +79,7 @@
           "in_s": { "type": "number", "minimum": 0, "description": "Relativo al inicio del fichero. Se pasa tal cual a -ss." },
           "out_s": { "type": "number" },
           "n_frames": { "type": "integer", "minimum": 30 },
-          "speed": { "type": "number", "enum": [0.5, 1.0] },
+          "speed": { "type": "number", "const": 1.0 },
           "timeline_start_f": { "type": "integer", "minimum": 0 },
           "timeline_end_f": { "type": "integer" },
           "layout": { "type": "string", "enum": ["crop", "blur_pad"] },
@@ -103,7 +103,7 @@
             },
             "required": ["x", "y", "w", "h"]
           },
-          "effect": { "type": "string", "enum": ["none", "kenburns"] },
+          "effect": { "type": "string", "enum": ["none", "kenburns", "ramp"] },
           "effect_params": { "type": "object" },
           "color_fix": {
             "type": "object",

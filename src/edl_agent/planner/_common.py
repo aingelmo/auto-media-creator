@@ -13,7 +13,9 @@ class PlannerError(RuntimeError):
 
 
 DEFAULT_CONFIG = {
-    "hook_speed": 1.0,  # the only role where 0.5 is allowed (#6)
+    "hook_ramp": True,  # #6.3: slow the hook to ramp_speed around the peak beat
+    "ramp_speed": 0.4,
+    "ramp_frames": 12,  # output frames in the slow window, centred on the beat
     "peak_beat_index": 1,  # #6.3: peak lands on the slot's 2nd beat by default
     "allow_blur_pad": True,  # #6.4
     "upscale_threshold": 1.3,
@@ -44,3 +46,10 @@ def admits(window: tuple[float, float], d_f: int, speed: float) -> bool:
     """
     need_s = d_f / FPS * speed
     return (window[1] - window[0]) >= need_s + 2 / FPS
+
+
+def hook_ramp(config: dict) -> dict | None:
+    """`{"speed", "frames"}` for the hook's speed ramp, or `None` if disabled."""
+    if not config.get("hook_ramp"):
+        return None
+    return {"speed": config["ramp_speed"], "frames": config["ramp_frames"]}

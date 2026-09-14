@@ -46,7 +46,7 @@ Reglas de cálculo:
 
 - `raw_w/raw_h` = `streams[v].width/height` de ffprobe. `rotation` = `side_data_list[].rotation` del displaymatrix (0 si ausente). `w/h` (post-rotación) = swap de raw si `|rotation| ∈ {90, 270}`. ffprobe no da las dims post-rotación; las calcula el código.
 - `hdr` ∈ `none | hlg | pq | dv84`. Detección: `color_transfer` = `arib-std-b67` → `hlg`; `smpte2084` → `pq`; presencia de `side_data` Dolby Vision con base HLG → `dv84` (se trata como `hlg`: el RPU se ignora y se usa la capa base; el perfil 8.4 es por definición compatible con HLG en la capa base `[verificado]`, la validación pendiente es solo visual). Si `color_transfer` es `unknown` o falta en un fichero de 10 bits → **error de ingesta**, no se asume SDR (evita el "vídeo lavado etiquetado bt709").
-- `vfr` = `r_frame_rate ≠ avg_frame_rate` o desviación de `pkt_duration_time` > 5 %. `src_fps_nominal` = `avg_frame_rate` redondeado; se usa solo para el warning `slowmo_duplicates` (hook con `speed=0.5` sobre fuente ≤ 30 fps).
+- `vfr` = `r_frame_rate ≠ avg_frame_rate` o desviación de `pkt_duration_time` > 5 %. `src_fps_nominal` = `avg_frame_rate` redondeado; se usa solo para el warning `slowmo_duplicates` (hook con `effect == ramp` sobre fuente ≤ 30 fps).
 - `start_time_s` y `color` se registran para diagnóstico y para la EDL. **No entran en ningún cálculo de tiempo.**
 - `proxy_verified` pasa a `true` en Capa 2 (§4.4), no aquí.
 

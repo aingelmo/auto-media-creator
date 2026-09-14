@@ -172,6 +172,9 @@ def test_planner_invariants(aspect_name, w, h, n_develop) -> None:
     clips, warnings = build_clips(slots, selected, candidates_by_id, sources_by_src)
 
     n_slots = n_develop + 2
+    # hook_ramp on by default: the hook slot has 2 beats, so it gets a ramp
+    assert clips[0]["effect"] == "ramp"
+    assert all(c["effect"] != "ramp" for c in clips[1:])
     # P1
     assert len(clips) == n_slots
     assert [c["slot"] for c in clips] == list(range(n_slots))
@@ -185,8 +188,14 @@ def test_planner_invariants(aspect_name, w, h, n_develop) -> None:
             assert c["out_s"] <= cand["window"][1]
             # P4
             assert 0 <= c["in_s"] < c["out_s"]
-            # P5
-            assert round((c["out_s"] - c["in_s"]) / c["speed"] * FPS) == c["n_frames"]
+            # P5 (ramp: its frames consume ramp_speed x source time)
+            src_s = c["out_s"] - c["in_s"]
+            n_ramp = 0
+            if c["effect"] == "ramp":
+                n_ramp = c["effect_params"]["ramp_frames"]
+                src_s -= n_ramp / FPS * c["effect_params"]["ramp_speed"]
+            assert round(src_s * FPS) + n_ramp == c["n_frames"]
+            assert c["speed"] == 1.0
         # P8
         crop = c["crop"]
         assert 0 <= crop["x"] <= 1
@@ -252,8 +261,9 @@ def test_compute_in_out_peak_lands_on_configured_beat() -> None:
     slot = {"start_f": 0, "end_f": 60, "beats_rel_f": [0, 20, 40]}  # d_f=60, 2s
     cand = _candidate("c0", "a.mov", "peak", t_peak=6.0, window=(0.0, 12.0))
     timing = compute_in_out(
-        cand, slot, role="develop", speed=1.0, config=DEFAULT_CONFIG
+        cand, slot, role="develop", ramp=None, config=DEFAULT_CONFIG
     )
+    assert timing["ramp"] is None
 
     need_s = 60 / FPS
     lead = 20 / 60  # peak_beat_index=1 -> beats_rel_f[1] == 20
@@ -272,10 +282,46 @@ def test_compute_in_out_clamped_reports_peak_off_beat() -> None:
     # t_peak muy cerca del borde de la ventana: el lead lo empuja fuera y se clampa.
     cand = _candidate("c0", "a.mov", "peak", t_peak=0.5, window=(0.0, 12.0))
     timing = compute_in_out(
-        cand, slot, role="develop", speed=1.0, config=DEFAULT_CONFIG
+        cand, slot, role="develop", ramp=None, config=DEFAULT_CONFIG
     )
     assert timing["in_s"] == 0.0
     assert "peak_off_beat" in timing["warnings"]
+
+
+def test_compute_in_out_ramp_peak_on_beat() -> None:
+    # d_f=45, peak on beats_rel_f[1]=15 -> ramp of 12 frames centred there
+    # (a=9, b=21); source consumed shrinks by 12/30*(1-0.4).
+    slot = {"start_f": 0, "end_f": 45, "beats_rel_f": [0, 15, 30]}
+    cand = _candidate("c0", "a.mov", "peak", t_peak=6.0, window=(0.0, 12.0))
+    timing = compute_in_out(
+        cand,
+        slot,
+        role="hook",
+        ramp={"speed": 0.4, "frames": 12},
+        config=DEFAULT_CONFIG,
+    )
+    need_s = (45 - 12) / FPS + 12 / FPS * 0.4
+    lead_src_s = 9 / FPS + 6 / FPS * 0.4
+    assert timing["in_s"] == pytest.approx(6.0 - lead_src_s)
+    assert timing["out_s"] == pytest.approx(6.0 - lead_src_s + need_s)
+    assert timing["ramp"] == {"speed": 0.4, "frames": 12, "start_f": 9}
+    assert timing["warnings"] == []
+
+    # Ramp is a no-op on calm candidates and single-beat slots.
+    calm = _candidate("c1", "a.mov", "calm", t_peak=6.0, window=(0.0, 12.0))
+    assert (
+        compute_in_out(
+            calm, slot, "close", {"speed": 0.4, "frames": 12}, DEFAULT_CONFIG
+        )["ramp"]
+        is None
+    )
+    one_beat = {"start_f": 0, "end_f": 45, "beats_rel_f": [0]}
+    assert (
+        compute_in_out(
+            cand, one_beat, "hook", {"speed": 0.4, "frames": 12}, DEFAULT_CONFIG
+        )["ramp"]
+        is None
+    )
 
 
 def test_missing_hook_raises() -> None:

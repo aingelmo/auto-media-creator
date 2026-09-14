@@ -57,3 +57,24 @@ def color_fix_filter(clip: dict) -> str:
     """Per-clip colour-match filter (#6.7), trailing comma included; "" if absent."""
     fix = clip.get("color_fix")
     return COLOR_FIX_FILTER_TEMPLATE.format(**fix) if fix else ""
+
+
+# Piecewise speed ramp in output frames (#6.3): 1.0x until `t_a` source
+# seconds, `s`x for `n` output frames (until `t_b` source seconds), then
+# 1.0x again. `T` is input time after `-ss`, which starts at 0. Single
+# quotes keep the commas out of the filtergraph parser.
+RAMP_SETPTS_TEMPLATE = (
+    "'if(lt(T,{t_a}),PTS,if(lt(T,{t_b}),({t_a}+(T-{t_a})/{s})/TB,"
+    "({t_a}+{n}/30+(T-{t_b}))/TB))'"
+)
+
+
+def setpts_expr(clip: dict) -> str:
+    """`setpts=` value for a clip: `PTS/{speed}` or the ramp expression."""
+    if clip["effect"] != "ramp":
+        return f"PTS/{clip['speed']}"
+    p = clip["effect_params"]
+    s, n = p["ramp_speed"], p["ramp_frames"]
+    t_a = p["ramp_start_f"] / 30
+    t_b = t_a + n / 30 * s
+    return RAMP_SETPTS_TEMPLATE.format(t_a=t_a, t_b=t_b, s=s, n=n)

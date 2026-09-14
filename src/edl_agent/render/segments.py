@@ -11,6 +11,7 @@ from edl_agent.render._common import (
     PREVIEW_TARGET,
     _video_codec_args,
     color_fix_filter,
+    setpts_expr,
 )
 from edl_agent.render.crop import crop_to_px
 
@@ -35,9 +36,10 @@ def render_video_segment(
 
     Args:
         clip: Clip dict, as produced by `planner.build_clips`. Reads
-            `n_frames`, `speed`, `in_s`, `hdr`, `layout`, and, for
-            `blur_pad`, `effect_params` (dict with `blur_radius`,
-            `blur_power`, `bg_brightness`).
+            `n_frames`, `speed`, `in_s`, `out_s`, `hdr`, `layout`, `effect`
+            and `effect_params` (`blur_radius`, `blur_power`,
+            `bg_brightness` for `blur_pad`; `ramp_*` for `effect == "ramp"`,
+            see `_common.setpts_expr`).
         src_path: Path to the source video (proxy if `preview`, original
             otherwise).
         crop_px: Pixel crop rect `{x, y, w, h}`, as returned by
@@ -55,8 +57,8 @@ def render_video_segment(
     """
     target = PREVIEW_TARGET if preview else FINAL_TARGET
     n_frames = clip["n_frames"]
-    speed = clip["speed"]
-    t_safety = n_frames / 30 * speed + 0.5
+    t_safety = clip["out_s"] - clip["in_s"] + 0.5
+    setpts = setpts_expr(clip)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # The proxy (source of the preview) already comes out of build_proxy
@@ -69,7 +71,7 @@ def render_video_segment(
     if clip["layout"] == "crop":
         vf = (
             f"crop={crop_px['w']}:{crop_px['h']}:{crop_px['x']}:{crop_px['y']},"
-            f"setpts=PTS/{speed},fps=30,"
+            f"setpts={setpts},fps=30,"
             f"scale={target['w']}:{target['h']}:flags=lanczos,"
             f"{hdr_prefix}{color_fix}setsar=1,format=yuv420p"
         )
@@ -96,7 +98,7 @@ def render_video_segment(
     else:  # blur_pad
         params = clip["effect_params"]
         filter_complex = (
-            f"[0:v]setpts=PTS/{speed},fps=30,"
+            f"[0:v]setpts={setpts},fps=30,"
             f"scale='if(gt(iw,ih),-2,{target['w']})':'if(gt(iw,ih),{target['w']},-2)':flags=lanczos,"
             f"{hdr_prefix}{color_fix}split[a][b];"
             f"[a]scale={target['w']}:{target['h']}:force_original_aspect_ratio=increase,"

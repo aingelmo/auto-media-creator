@@ -6,7 +6,11 @@ import hashlib
 import json
 import subprocess
 
-from edl_agent.render._common import COLOR_FIX_FILTER_TEMPLATE, _video_codec_args
+from edl_agent.render._common import (
+    COLOR_FIX_FILTER_TEMPLATE,
+    RAMP_SETPTS_TEMPLATE,
+    _video_codec_args,
+)
 
 
 def _dpkg_version(package_prefix: str) -> str | None:
@@ -61,7 +65,8 @@ def get_render_profile(
         templates used at render time (`segment_filter_template`,
         `blur_pad_filter_template`, `image_filter_template`, each a format
         string with `{...}` placeholders filled in per-clip;
-        `color_fix_filter_template` fills `{color_fix}`, #6.7),
+        `color_fix_filter_template` fills `{color_fix}`, #6.7;
+        `ramp_setpts_template` fills `{setpts}` for `effect == "ramp"`),
         `audio_codec_args` (str), and `profile_sha256` (str, hash of the
         rest of the dict, for reproducibility checks).
     """
@@ -74,11 +79,11 @@ def get_render_profile(
         "tonemap_chain_pq": tonemap_chain_pq,
         "video_codec_args": " ".join(_video_codec_args(threads, preview=False)),
         "segment_filter_template": (
-            "crop={w}:{h}:{x}:{y},setpts=PTS/{speed},fps=30,"
+            "crop={w}:{h}:{x}:{y},setpts={setpts},fps=30,"
             "scale={tw}:{th}:flags=lanczos,{hdr}setsar=1,format=yuv420p"
         ),
         "blur_pad_filter_template": (
-            "[0:v]setpts=PTS/{speed},fps=30,scale='if(gt(iw,ih),-2,{tw})':'if(gt(iw,ih),{tw},-2)':flags=lanczos,{hdr}split[a][b];"
+            "[0:v]setpts={setpts},fps=30,scale='if(gt(iw,ih),-2,{tw})':'if(gt(iw,ih),{tw},-2)':flags=lanczos,{hdr}split[a][b];"
             "[a]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur={blur_radius}:{blur_power},eq=brightness={bg_brightness}[bg];"
             "[b]scale={tw}:-2:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[v]"
         ),
@@ -88,6 +93,7 @@ def get_render_profile(
             "setsar=1,format=yuv420p"
         ),
         "color_fix_filter_template": COLOR_FIX_FILTER_TEMPLATE,
+        "ramp_setpts_template": RAMP_SETPTS_TEMPLATE,
         "audio_codec_args": "-c:a aac -b:a 192k -ar 48000",
     }
     profile["profile_sha256"] = hashlib.sha256(

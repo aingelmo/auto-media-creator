@@ -17,7 +17,7 @@
 | Solo imágenes en la sesión | pipeline válido: todos los slots con `kind: image`, `warning: images_only` |
 | `start_time_s ≠ 0` | irrelevante por convención de tiempo; detectado por §4.4 si algo falla |
 | Fuente ya 9:16 pero 1080p | crop identidad, sin upscale (1080→1080) |
-| Fuente 60 fps con hook a 0.5 | slow-motion real (frames únicos); fuente 30 fps → duplicados + `warning: slowmo_duplicates` |
+| Fuente 60 fps con rampa en el hook | slow-motion real (frames únicos) en la ventana lenta; fuente 30 fps → duplicados + `warning: slowmo_duplicates` |
 | Fuente DV 8.4 | tratada como HLG; RPU ignorado; con libplacebo, `apply_dolbyvision=false` `[validar visualmente]` |
 | Fuente 10 bits sin `color_transfer` | error de ingesta (no se asume SDR) |
 | Truncado del LLM (`status: incomplete`) | reintento con `reason` acortado; luego fallback total |

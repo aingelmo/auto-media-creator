@@ -8,10 +8,10 @@ Todos los comandos llevan `-threads {threads}` y los flags exactos se serializan
 
 ```bash
 # {src_hdr}: render_profile.tonemap_chain seguida de coma, o vacío si hdr == none
-# {t_safety} = n_frames/30*speed + 0.5   (solo tope de lectura; el corte exacto lo da -frames:v)
+# {t_safety} = out_s - in_s + 0.5   (solo tope de lectura; el corte exacto lo da -frames:v)
 ffmpeg -y -ss {in_s} -t {t_safety} -i {src} \
   -vf "crop={crop_px.w}:{crop_px.h}:{crop_px.x}:{crop_px.y},\
-setpts=PTS/{speed},fps=30,\
+setpts={setpts},fps=30,\
 scale=1080:1920:flags=lanczos,\
 {src_hdr}{color_fix}setsar=1,format=yuv420p" \
   -fps_mode cfr -frames:v {n_frames} \
@@ -23,8 +23,9 @@ scale=1080:1920:flags=lanczos,\
 
 - `{color_fix}`: si el clip trae `color_fix` (§6.7), `eq=brightness={brightness}:saturation={saturation},colorcorrect=rl={rl}:bl={bl}:rh={rl}:bh={bl},`; si no, vacío. Igual en preview y final (`render_profile.color_fix_filter_template`).
 - Orden del filtro: `crop` (reduce píxeles) → `setpts` (velocidad) → `fps` (fija cadencia **después** de la velocidad) → `scale` → tonemap → `{color_fix}` → `setsar`.
-  - Con `speed == 1.0`, `setpts=PTS/1.0` es un no-op.
-  - Con `speed == 0.5`: `setpts=PTS/0.5` estira los timestamps; `fps=30` duplica frames (fuente 30 fps) o los conserva (fuente 60 fps). Se consumen `d_f/60` s de fuente y se emiten `d_f` frames, coherente con §6.3. **El orden inverso (`fps` antes de `setpts`) produce un segmento con la mitad de frames a cadencia 15 fps y hace fallar R1**; no usar.
+  - `{setpts}` (`render/_common.py:setpts_expr`): sin rampa, `PTS/1.0` (no-op). Con `effect == ramp`, la expresión a trozos `render_profile.ramp_setpts_template`, con `t_a = ramp_start_f/30`, `t_b = t_a + ramp_frames/30·ramp_speed` en segundos de **entrada** (`T` arranca en 0 tras `-ss`):
+    `'if(lt(T,t_a),PTS,if(lt(T,t_b),(t_a+(T-t_a)/s)/TB,(t_a+n/30+(T-t_b))/TB))'`. Las comillas simples protegen las comas del parser del filtergraph.
+  - `fps=30` tras `setpts` remuestrea: en la ventana lenta duplica frames (fuente 30 fps) o los conserva (fuente 60 fps). Se consumen `out_s − in_s` s de fuente y se emiten `d_f` frames, coherente con §6.3. **El orden inverso (`fps` antes de `setpts`) rompe la cuenta de frames y hace fallar R1**; no usar.
   - `scale` antes del tonemap: el tonemap en `gbrpf32le` trabaja a 1080×1920 en vez de a resolución de recorte 4K (≈3× menos trabajo, sin diferencia visible a 1080p).
 - `-frames:v {n_frames}` cuenta frames de **salida** tras el filtergraph `[verificado: doc ffmpeg, opción output,per-stream]`.
 - `-ss` de entrada + `-i`: seek exacto por defecto (`accurate_seek`), timestamps desde 0.
@@ -35,7 +36,7 @@ scale=1080:1920:flags=lanczos,\
 
 ```bash
 ffmpeg -y -ss {in_s} -t {t_safety} -i {src} \
-  -filter_complex "[0:v]setpts=PTS/{speed},fps=30,\
+  -filter_complex "[0:v]setpts={setpts},fps=30,\
 scale='if(gt(iw,ih),-2,1080)':'if(gt(iw,ih),1080,-2)':flags=lanczos,{src_hdr}{color_fix}split[a][b];\
 [a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,\
 boxblur={blur_radius}:{blur_power},eq=brightness={bg_brightness}[bg];\

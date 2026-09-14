@@ -7,8 +7,6 @@ import statistics
 import subprocess
 from typing import TYPE_CHECKING
 
-from edl_agent.planner._common import FPS
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -112,7 +110,7 @@ def apply_color_match(
                 measure_clip_color(str(session_dir / source["normalized"]), 0, 1)
             )
         else:
-            dur = clip["n_frames"] / FPS * clip["speed"]
+            dur = clip["out_s"] - clip["in_s"]
             measured.append(
                 measure_clip_color(
                     str(session_dir / source["proxy"]), clip["in_s"], dur

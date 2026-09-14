@@ -58,7 +58,7 @@ def _aggregate_warnings(clips: list[dict], warnings: list[str]) -> list[str]:
     Args:
         clips: Clip dicts as produced by `planner.build_clips`. Fields read
             here: `subject_cropped` (bool), `warnings` (list[str]), `role`
-            (str), `speed` (float), `src_fps_nominal` (float).
+            (str), `effect` (str), `src_fps_nominal` (float).
         warnings: Warnings already accumulated at the selection/planner
             level (e.g. from `selection.build_selected`), checked here for
             `"relaxed_4"`, `"relaxed_5"`, `"arc_fallback"`, and
@@ -72,9 +72,9 @@ def _aggregate_warnings(clips: list[dict], warnings: list[str]) -> list[str]:
           selection-level warnings) come from relaxed/low-quality material.
         - `"weak_rhythm"` (W3): the develop arc fell back to rank order, or
           2+ clips missed their beat alignment.
-        - `"slowmo_duplicates"` (W4): the hook clip is slow-motion (0.5x) on
-          a source with nominal fps <= 30, which can look duplicated rather
-          than slowed down.
+        - `"slowmo_duplicates"` (W4): the hook clip has a speed ramp
+          (`effect == "ramp"`) on a source with nominal fps <= 30, so the
+          slow window duplicates frames rather than truly slowing down.
         - `"sharpness_cross_clip"` (W5): forwarded verbatim if already
           present in `warnings` (sharpness thresholds are not comparable
           across clips from different sources, #4.2).
@@ -98,7 +98,11 @@ def _aggregate_warnings(clips: list[dict], warnings: list[str]) -> list[str]:
         agg.append("weak_rhythm")
 
     hook = next((c for c in clips if c["role"] == "hook"), None)
-    if hook is not None and hook["speed"] == 0.5 and hook["src_fps_nominal"] <= 30:
+    if (
+        hook is not None
+        and hook["effect"] == "ramp"
+        and round(hook["src_fps_nominal"]) <= 30
+    ):
         agg.append("slowmo_duplicates")
 
     if "sharpness_cross_clip" in warnings:

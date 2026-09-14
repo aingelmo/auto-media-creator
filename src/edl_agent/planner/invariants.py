@@ -48,8 +48,15 @@ def assert_invariants(
             if not (0 <= c["in_s"] < c["out_s"] <= duration_s + 1e-6):
                 msg = f"P4: invalid in_s/out_s in slot {c['slot']}"
                 raise PlannerError(msg)
-            # P5
-            expected_n_frames = round((c["out_s"] - c["in_s"]) / c["speed"] * FPS)
+            # P5 (a ramp consumes `ramp_frames/FPS*ramp_speed` source seconds
+            # for its `ramp_frames` output frames; the rest is 1.0x)
+            src_s = c["out_s"] - c["in_s"]
+            n_ramp = 0
+            if c["effect"] == "ramp":
+                p = c["effect_params"]
+                n_ramp = p["ramp_frames"]
+                src_s -= n_ramp / FPS * p["ramp_speed"]
+            expected_n_frames = round(src_s / c["speed"] * FPS) + n_ramp
             if expected_n_frames != c["n_frames"]:
                 msg = f"P5: n_frames mismatch in slot {c['slot']}"
                 raise PlannerError(msg)

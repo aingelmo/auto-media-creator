@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from edl_agent.planner._common import DEFAULT_CONFIG, PlannerError, admits
+from edl_agent.planner._common import DEFAULT_CONFIG, PlannerError, admits, hook_ramp
 from edl_agent.planner.timing import compute_in_out
 
 
@@ -30,11 +30,13 @@ def _select_single(
     kinds: set[str] | None,
     candidates_by_id: dict,
     slot: dict,
-    speed: float,
+    ramp: dict | None,
     config: dict,
     used: list[dict],
 ) -> dict | None:
     d_f = slot["end_f"] - slot["start_f"]
+    # A ramp only ever needs *less* source than 1.0x, so admitting at 1.0 is
+    # conservative and correct.
     pool = sorted(
         (
             s
@@ -46,11 +48,11 @@ def _select_single(
     )
     for s in pool:
         cand = candidates_by_id[s["candidate_id"]]
-        if not admits(tuple(cand["window"]), d_f, speed):
+        if not admits(tuple(cand["window"]), d_f, 1.0):
             continue
         if cand["kind"] == "image":
             return s
-        timing = compute_in_out(cand, slot, role, speed, config)
+        timing = compute_in_out(cand, slot, role, ramp, config)
         if not _overlaps_used(
             cand, timing["in_s"], timing["out_s"], used, config["adjacency_gap_s"]
         ):
@@ -121,7 +123,7 @@ def _take_develop_pool(
             cand,
             {"start_f": 0, "end_f": admissible_d_f, "beats_rel_f": [0]},
             role="develop",
-            speed=1.0,
+            ramp=None,
             config=config,
         )
         if _overlaps_used(cand, timing["in_s"], timing["out_s"], used, gap_s):
@@ -379,7 +381,7 @@ def assign_slots(
         {"peak"},
         candidates_by_id,
         hook_slot,
-        config["hook_speed"],
+        hook_ramp(config),
         config,
         [],
     )
@@ -396,7 +398,7 @@ def assign_slots(
                     candidates_by_id[hook["candidate_id"]],
                     hook_slot,
                     "hook",
-                    config["hook_speed"],
+                    hook_ramp(config),
                     config,
                 ).items()
                 if k in ("in_s", "out_s")
@@ -412,7 +414,7 @@ def assign_slots(
         {"calm", "image", "peak"},
         candidates_by_id,
         close_slot,
-        1.0,
+        None,
         config,
         used,
     )
@@ -422,7 +424,7 @@ def assign_slots(
 
     if candidates_by_id[close["candidate_id"]]["kind"] != "image":
         close_timing = compute_in_out(
-            candidates_by_id[close["candidate_id"]], close_slot, "close", 1.0, config
+            candidates_by_id[close["candidate_id"]], close_slot, "close", None, config
         )
         used = [
             *used,

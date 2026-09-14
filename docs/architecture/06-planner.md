@@ -2,7 +2,7 @@
 
 ## 6. Capa 4 — Planner determinista (snapper)
 
-Todo en frames de 30 fps. Notación: `d_f` = duración del slot en frames; `speed` = 1.0 salvo override de config para hook (0.5 permitido, resto de valores no).
+Todo en frames de 30 fps. Notación: `d_f` = duración del slot en frames; `speed` = 1.0 siempre (campo conservado por compatibilidad). El hook lleva una **rampa de velocidad** (§6.3) en vez de un `speed` plano.
 
 ### 6.1 Admisión de un candidato en un slot
 
@@ -35,7 +35,6 @@ Un candidato no admitido para un slot no se considera para ese slot (no se clamp
 ### 6.3 Cálculo de `in`/`out` (pico sobre beat)
 
 ```python
-need_s = d_f / 30 * speed
 beats = slot.beats_rel_f                       # offsets en frames, beats[0] == 0
 if role == "close" or kind == "calm":
     lead_f = d_f // 2                           # centrado
@@ -43,14 +42,26 @@ elif len(beats) >= 2:
     lead_f = beats[config.peak_beat_index]      # por defecto 1: el pico cae en el 2.º beat del slot
 else:
     lead_f = round(0.35 * d_f)                  # fallback (slot de 1 beat)
-lead = lead_f / d_f
-in_s = t_peak - lead * need_s
+
+# Rampa de velocidad (solo hook, kind == peak, >= 2 beats; config.hook_ramp):
+# 1.0x → ramp_speed (0.4) durante ramp_frames (12) frames de salida centrados
+# en el beat del pico → 1.0x. Escalón duro, sin easing.
+if ramp:
+    a = max(0, lead_f - n // 2); b = min(d_f, a + n); n_eff = b - a
+    need_s = (d_f - n_eff) / 30 + n_eff / 30 * s     # segundos de fuente consumidos
+    lead_src_s = a / 30 + (lead_f - a) / 30 * s      # fuente desde in_s hasta el pico
+    effect = "ramp"; effect_params = {ramp_speed: s, ramp_frames: n_eff, ramp_start_f: a}
+else:
+    need_s = d_f / 30
+    lead_src_s = lead_f / 30
+in_s = t_peak - lead_src_s
 in_s = clamp(in_s, window[0], window[1] - need_s)   # válido porque admits garantiza window[1]-need_s >= window[0]
 out_s = in_s + need_s
-n_frames = d_f                                  # frames de SALIDA del segmento, independiente de speed
+n_frames = d_f                                  # frames de SALIDA del segmento, independiente de la rampa
 ```
 
-- Si el clamp desplaza `in_s` más de 2 frames (`|in_s − (t_peak − lead·need_s)| > 2/30`) se registra `warning: peak_off_beat` en el clip.
+- Si el clamp desplaza `in_s` más de 2 frames (`|in_s − (t_peak − lead_src_s)| > 2/30`) se registra `warning: peak_off_beat` en el clip.
+- La admisión (§6.1) se evalúa a 1.0x: la rampa consume *menos* fuente, así que es conservadora.
 - La duración total es exacta por construcción: `Σ n_frames == duration_f`.
 - Imágenes: `in_s = 0`, `out_s = d_f / 30`, `n_frames = d_f`.
 - `timeline_start_f = slot.start_f`, `timeline_end_f = slot.end_f`.
@@ -86,14 +97,15 @@ y_px = even(round(crop.y * H)); y_px = max(0, min(y_px, H - h_px))
 
 ### 6.6 Efectos por clip
 
-- `effect ∈ {none, kenburns}`; `kenburns` solo en `kind == image` y si `config.ken_burns` (por defecto true). Parámetros (`zoom_per_frame = 0.0015`, `zoom_max = 1.08`) se copian de config a `clip.effect_params`.
+- `effect ∈ {none, kenburns, ramp}`; `kenburns` solo en `kind == image` y si `config.ken_burns` (por defecto true). Parámetros (`zoom_per_frame = 0.0015`, `zoom_max = 1.08`) se copian de config a `clip.effect_params`.
+- `ramp` solo en el hook (§6.3): `effect_params` lleva `ramp_speed`, `ramp_frames`, `ramp_start_f` (mezclados con los de `blur_pad` si aplica).
 - `blur_pad` copia `{blur_radius: 20, blur_power: 2, bg_brightness: -0.1}` a `clip.effect_params`.
 
 ### 6.7 Igualación de color por clip (`color_fix`)
 
 Los segmentos se renderizan por separado y se concatenan con `-c:v copy`, así que nada iguala exposición ni balance entre fuentes grabadas en luces distintas. El planner mide cada clip una vez y guarda una corrección pequeña en la EDL; el render sólo emite un filtro más (§10). Sin etapa nueva ni dependencias.
 
-- **Medida** (`planner/color.py:measure_clip_color`): `ffprobe -f lavfi -i "movie=<proxy>:seek_point=<in_s>,trim=duration=<n_frames/30*speed>,signalstats"`, media de `YAVG/UAVG/VAVG/SATAVG` (0-255) sobre los frames del clip. Imágenes: la misma llamada sobre el `normalized` jpg (1 frame). Se mide sobre el **proxy** (ya bt709 SDR, §3.2) → el mismo `color_fix` sirve para preview y final, y R2 se mantiene.
+- **Medida** (`planner/color.py:measure_clip_color`): `ffprobe -f lavfi -i "movie=<proxy>:seek_point=<in_s>,trim=duration=<out_s - in_s>,signalstats"`, media de `YAVG/UAVG/VAVG/SATAVG` (0-255) sobre los frames del clip. Imágenes: la misma llamada sobre el `normalized` jpg (1 frame). Se mide sobre el **proxy** (ya bt709 SDR, §3.2) → el mismo `color_fix` sirve para preview y final, y R2 se mantiene.
 - **Objetivo** = mediana por clave (`statistics.median`) entre todos los clips del reel, no "gris neutro": un reel cálido sigue cálido, sólo se mueven los outliers.
 - **Corrección** (`color_fix_for`, con `s = config.color_match_strength`, por defecto 0.7):
   - `brightness = clamp(s·(Y_t − Y_m)/255, 0, 0.15)` — **sólo levanta**: un clip a Y≈110+ (~45 IRE) ya está bien expuesto según referencias de coloristas (piel en 40-70 IRE), y oscurecerlo hacia una mediana arrastrada por clips oscuros se veía mal.
