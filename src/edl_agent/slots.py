@@ -5,6 +5,8 @@ See docs/architecture/04-features.md #4.1.
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 
 FRAME_RATE = 30
@@ -98,6 +100,19 @@ def build_slots(
     if confident:
         beats_f = sorted({round(b * FRAME_RATE) for b in beats_s})
         beats_per_slot = max(1, int(np.ceil(tempo_bpm / 60.0)))
+        # #4.1.3: detected beats can stop partway through duration_f (e.g. a
+        # rhythmic section ends early). Any gap wider than one uniform-grid
+        # slot has no real beat to anchor a boundary, so fill it with the
+        # same synthetic grid used for beats_confident == False, instead of
+        # letting one oversized slot span the whole gap.
+        gap_step_f = round(UNIFORM_GRID_S * FRAME_RATE / 2)
+        gap_threshold_f = round(UNIFORM_GRID_S * FRAME_RATE)
+        edges = [0, *beats_f, duration_f]
+        filled = list(beats_f)
+        for a, b in itertools.pairwise(edges):
+            if b - a > gap_threshold_f:
+                filled.extend(range(a + gap_step_f, b, gap_step_f))
+        beats_f = sorted(set(filled))
     else:
         # #4.1.2: uniform 1.6s (48-frame) grid with synthetic beats every 24
         # frames (2 per slot) so beat alignment keeps working downstream.

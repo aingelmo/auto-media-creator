@@ -6,7 +6,7 @@ import itertools
 
 import pytest
 
-from edl_agent.slots import build_slots
+from edl_agent.slots import FRAME_RATE, UNIFORM_GRID_S, build_slots
 
 
 def _periodic_beats(bpm: float, duration_s: float) -> list[float]:
@@ -67,6 +67,17 @@ def test_two_slots_minimum_roles() -> None:
     assert len(slots) == 2
     assert slots[0]["role"] == "hook"
     assert slots[1]["role"] == "close"
+
+
+def test_trailing_gap_falls_back_to_uniform_grid() -> None:
+    # Beats detected only for the first ~7s of a 15s clip (rhythmic section
+    # ends early); the trailing gap must be subdivided, not left as one slot.
+    duration_s = 15.0
+    beats = _periodic_beats(120, 7.3)
+    result = build_slots(duration_s, tempo_bpm=120.0, beats_s=beats, confident=True)
+    slots = result["slots"]
+    max_slot_s = max(s["end_f"] - s["start_f"] for s in slots) / FRAME_RATE
+    assert max_slot_s <= UNIFORM_GRID_S + 0.1
 
 
 def test_single_slot_is_error() -> None:
