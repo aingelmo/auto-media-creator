@@ -15,7 +15,7 @@ from edl_agent.ingest import (
     sha256_file,
     write_manifest,
 )
-from edl_agent.session._common import IMAGE_EXTS, VIDEO_EXTS
+from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
 from edl_agent.verify import verify_source
 
 
@@ -33,18 +33,18 @@ def run_ingest(
 
     Args:
         session_dir: Session directory; must already contain `inputs/` (and
-            optionally `music/track.mp3`).
+            optionally a `music/track.<mp3|wav>` file).
         threads: ffmpeg thread count for proxy encoding.
-        music_offset_s: Start offset into `music/track.mp3`, in seconds.
+        music_offset_s: Start offset into the music track, in seconds.
         music_max_duration_s: Max duration of the cut music clip, in
-            seconds. Required if `music/track.mp3` exists.
+            seconds. Required if a music track exists.
 
     Returns:
         The `manifest.json` dict (see `ingest.build_manifest`).
 
     Raises:
         IngestError: If a video proxy fails temporal verification against
-            its original, or if `music/track.mp3` exists but
+            its original, or if a music track exists but
             `music_max_duration_s` was not given.
     """
     session_dir = Path(session_dir)
@@ -112,10 +112,15 @@ def run_ingest(
             )
 
     music = None
-    track = music_dir / "track.mp3"
-    if track.exists():
+    track = None
+    if music_dir.is_dir():
+        track = next(
+            (p for p in sorted(music_dir.iterdir()) if p.suffix.lower() in MUSIC_EXTS),
+            None,
+        )
+    if track is not None:
         if music_max_duration_s is None:
-            msg = "music/track.mp3 present but music_max_duration_s not given"
+            msg = f"{track} present but music_max_duration_s not given"
             raise IngestError(msg)
         cut_path = music_dir / "track_cut.wav"
         cut_music(track, cut_path, music_offset_s, music_max_duration_s)
