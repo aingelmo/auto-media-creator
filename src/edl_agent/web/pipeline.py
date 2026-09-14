@@ -20,7 +20,13 @@ from edl_agent.render import (
     render_segments,
     run_render_checks,
 )
-from edl_agent.session import run_candidates, run_ingest, run_planner, run_selection
+from edl_agent.session import (
+    run_candidates,
+    run_ingest,
+    run_planner,
+    run_selection,
+    tonemap_chain_for_manifest,
+)
 from edl_agent.slots import slots_from_file
 
 if TYPE_CHECKING:
@@ -46,8 +52,6 @@ def _shorten_durations(start_s: float) -> list[float]:
         return [MIN_SHORTEN_DURATION_S]
     step = (start_s - MIN_SHORTEN_DURATION_S) / (SHORTEN_ATTEMPTS - 1)
     return [round(start_s - i * step, 1) for i in range(SHORTEN_ATTEMPTS)]
-TONEMAP_CHAIN = ""
-
 DEFAULT_MODELS = {
     "gemini": "gemini-3.8-flash",
     "anthropic": "claude-sonnet-5",
@@ -343,15 +347,20 @@ def run_pipeline_job(
             job.stages["render"] = "done"
         else:
             with job.running("render"):
+                tonemap_chain = tonemap_chain_for_manifest(manifest)
                 render_preview_segments(
                     edl,
                     manifest,
                     session_dir,
                     threads=THREADS,
-                    tonemap_chain=TONEMAP_CHAIN,
+                    tonemap_chain=tonemap_chain,
                 )
                 render_segments(
-                    edl, manifest, session_dir, threads=THREADS, tonemap_chain=TONEMAP_CHAIN
+                    edl,
+                    manifest,
+                    session_dir,
+                    threads=THREADS,
+                    tonemap_chain=tonemap_chain,
                 )
                 concat_and_audio(edl, session_dir, threads=THREADS)
 

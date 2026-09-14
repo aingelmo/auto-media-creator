@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from edl_agent.edl import build_edl
+from edl_agent.planner import DEFAULT_CONFIG, apply_color_match
 from edl_agent.session._common import tonemap_chain_for_manifest
 
 
@@ -56,6 +57,7 @@ def run_planner(
         tonemap_chain=tonemap_chain,
         config=config,
     )
+    apply_color_match(edl, manifest, session_dir, {**DEFAULT_CONFIG, **(config or {})})
     with (session_dir / "edl.json").open("w") as f:
         json.dump(edl, f, indent=2, ensure_ascii=False)
     return edl

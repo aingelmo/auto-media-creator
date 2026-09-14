@@ -15,8 +15,10 @@ if TYPE_CHECKING:
 PROXY_SHORT_SIDE = 720
 
 # Tonemap chain for proxy/preview/render; fixed here for the whole session (#3.2).
+# npl=203 = HLG reference white (BT.2408); npl=1000 crushed DV84 clips to Y~62
+# vs ~110 for SDR clips of the same scene (measured 2026-09-15).
 TONEMAP_CHAIN_HLG = (
-    "zscale=tin=arib-std-b67:t=linear:npl=1000,format=gbrpf32le,"
+    "zscale=tin=arib-std-b67:t=linear:npl=203,format=gbrpf32le,"
     "zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv"
 )
 

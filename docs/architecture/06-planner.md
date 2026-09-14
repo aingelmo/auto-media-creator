@@ -89,4 +89,16 @@ y_px = even(round(crop.y * H)); y_px = max(0, min(y_px, H - h_px))
 - `effect ∈ {none, kenburns}`; `kenburns` solo en `kind == image` y si `config.ken_burns` (por defecto true). Parámetros (`zoom_per_frame = 0.0015`, `zoom_max = 1.08`) se copian de config a `clip.effect_params`.
 - `blur_pad` copia `{blur_radius: 20, blur_power: 2, bg_brightness: -0.1}` a `clip.effect_params`.
 
+### 6.7 Igualación de color por clip (`color_fix`)
 
+Los segmentos se renderizan por separado y se concatenan con `-c:v copy`, así que nada iguala exposición ni balance entre fuentes grabadas en luces distintas. El planner mide cada clip una vez y guarda una corrección pequeña en la EDL; el render sólo emite un filtro más (§10). Sin etapa nueva ni dependencias.
+
+- **Medida** (`planner/color.py:measure_clip_color`): `ffprobe -f lavfi -i "movie=<proxy>:seek_point=<in_s>,trim=duration=<n_frames/30*speed>,signalstats"`, media de `YAVG/UAVG/VAVG/SATAVG` (0-255) sobre los frames del clip. Imágenes: la misma llamada sobre el `normalized` jpg (1 frame). Se mide sobre el **proxy** (ya bt709 SDR, §3.2) → el mismo `color_fix` sirve para preview y final, y R2 se mantiene.
+- **Objetivo** = mediana por clave (`statistics.median`) entre todos los clips del reel, no "gris neutro": un reel cálido sigue cálido, sólo se mueven los outliers.
+- **Corrección** (`color_fix_for`, con `s = config.color_match_strength`, por defecto 0.7):
+  - `brightness = clamp(s·(Y_t − Y_m)/255, 0, 0.15)` — **sólo levanta**: un clip a Y≈110+ (~45 IRE) ya está bien expuesto según referencias de coloristas (piel en 40-70 IRE), y oscurecerlo hacia una mediana arrastrada por clips oscuros se veía mal.
+  - `saturation = clamp(1 + s·(SAT_t/SAT_m − 1), 0.85, 1.15)` (si `SAT_m == 0` → 1.0). Banda estrecha: levantar luma ya sube la saturación aparente, y con >1.15 la piel se va a naranja (la piel debe quedarse en 20-50 % del vectorscopio, sobre la línea I).
+  - `rl = rh = clamp(s·(V_t − V_m)/255, ±0.10)`, `bl = bh = clamp(s·(U_t − U_m)/255, ±0.10)`
+  - Ganancias verificadas empíricamente en ffmpeg 5.1 (2026-09-15): `eq=brightness=0.1` sube Y ≈ 25; `colorcorrect=rl=0.05` sube V ≈ 12 y `bl=-0.05` baja U ≈ 13. Signos positivos = subir el plano, de ahí el `/255` (no `/128`).
+- Se guarda `clip.color_fix = {brightness, saturation, rl, bl, measured}`; `measured` es sólo para depurar. `config.color_match = false` deja la clave ausente y el render se comporta como antes.
+- Los clamps y `strength` son los mandos de calibración: evitan aplanar un plano deliberadamente oscuro. Corrección estática por clip (sin adaptación temporal ni matching de histograma); ampliar si en metraje real no basta.

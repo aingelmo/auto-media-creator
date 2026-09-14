@@ -45,3 +45,15 @@ def _video_codec_args(threads: int, preview: bool) -> list[str]:
         "-threads",
         str(threads),
     ]
+
+
+COLOR_FIX_FILTER_TEMPLATE = (
+    "eq=brightness={brightness}:saturation={saturation},"
+    "colorcorrect=rl={rl}:bl={bl}:rh={rl}:bh={bl},"
+)
+
+
+def color_fix_filter(clip: dict) -> str:
+    """Per-clip colour-match filter (#6.7), trailing comma included; "" if absent."""
+    fix = clip.get("color_fix")
+    return COLOR_FIX_FILTER_TEMPLATE.format(**fix) if fix else ""

@@ -58,7 +58,7 @@ Objetivo: 720 en el lado corto, CFR 30, SDR BT.709, sin audio, primer frame en p
 # HDR (hlg / dv84). Para pq: tin=smpte2084 y npl según [validar].
 ffmpeg -y -i inputs/take_01.mov \
   -vf "fps=30,setpts=PTS-STARTPTS,\
-zscale=tin=arib-std-b67:t=linear:npl=1000,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,\
+zscale=tin=arib-std-b67:t=linear:npl=203,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,\
 zscale=t=bt709:m=bt709:r=tv,format=yuv420p,\
 scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'" \
   -fps_mode cfr -avoid_negative_ts make_zero \
@@ -73,7 +73,7 @@ Notas:
 
 - `fps=30` va **antes** del tonemap para no tonemapear frames que se descartan.
 - `tin=arib-std-b67` explícito: si el fichero no viene etiquetado, zscale falla ruidosamente en vez de producir un resultado incorrecto en silencio.
-- `npl=1000` con HLG `[validar]` (semántica de `peak_luminance` en zimg para HLG no verificada). El valor y el filtro exacto se fijan en la Sesión 0 comparando con la alternativa `libplacebo`:
+- `npl=203` con HLG: blanco de referencia HLG (BT.2408). Con `npl=1000` los clips DV84 salían a Y≈62 frente a Y≈110 de los SDR de la misma escena; con 203 quedan en Y≈100-127 (medido 2026-09-15). Alternativa no adoptada, `libplacebo`:
   `libplacebo=colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=bt.2390:format=yuv420p` (requiere build con Vulkan; en Docker sin GPU exige lavapipe, rendimiento `[validar]`). Aviso: en libplacebo `apply_dolbyvision` está activo por defecto y con RPU presente la salida interna pasa a BT.2020+PQ `[verificado: doc vf_libplacebo]`; para que DV 8.4 se trate igual que HLG hay que pasar `apply_dolbyvision=false`.
 - La cadena de tonemap elegida se guarda en `render_profile.tonemap_chain` y se usa idéntica en proxy, preview y render.
 - `-g 30`: keyframe cada segundo para que `-ss` sobre el proxy (extracción de JPEG de pico, preview) sea rápido y exacto.

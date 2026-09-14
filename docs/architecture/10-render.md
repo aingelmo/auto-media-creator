@@ -13,7 +13,7 @@ ffmpeg -y -ss {in_s} -t {t_safety} -i {src} \
   -vf "crop={crop_px.w}:{crop_px.h}:{crop_px.x}:{crop_px.y},\
 setpts=PTS/{speed},fps=30,\
 scale=1080:1920:flags=lanczos,\
-{src_hdr}setsar=1,format=yuv420p" \
+{src_hdr}{color_fix}setsar=1,format=yuv420p" \
   -fps_mode cfr -frames:v {n_frames} \
   -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv \
   -an -c:v libx264 -crf 18 -preset medium -profile:v high -pix_fmt yuv420p \
@@ -21,7 +21,8 @@ scale=1080:1920:flags=lanczos,\
   segments/seg_{slot:02d}.mp4
 ```
 
-- Orden del filtro: `crop` (reduce píxeles) → `setpts` (velocidad) → `fps` (fija cadencia **después** de la velocidad) → `scale` → tonemap → `setsar`.
+- `{color_fix}`: si el clip trae `color_fix` (§6.7), `eq=brightness={brightness}:saturation={saturation},colorcorrect=rl={rl}:bl={bl}:rh={rl}:bh={bl},`; si no, vacío. Igual en preview y final (`render_profile.color_fix_filter_template`).
+- Orden del filtro: `crop` (reduce píxeles) → `setpts` (velocidad) → `fps` (fija cadencia **después** de la velocidad) → `scale` → tonemap → `{color_fix}` → `setsar`.
   - Con `speed == 1.0`, `setpts=PTS/1.0` es un no-op.
   - Con `speed == 0.5`: `setpts=PTS/0.5` estira los timestamps; `fps=30` duplica frames (fuente 30 fps) o los conserva (fuente 60 fps). Se consumen `d_f/60` s de fuente y se emiten `d_f` frames, coherente con §6.3. **El orden inverso (`fps` antes de `setpts`) produce un segmento con la mitad de frames a cadencia 15 fps y hace fallar R1**; no usar.
   - `scale` antes del tonemap: el tonemap en `gbrpf32le` trabaja a 1080×1920 en vez de a resolución de recorte 4K (≈3× menos trabajo, sin diferencia visible a 1080p).
@@ -35,7 +36,7 @@ scale=1080:1920:flags=lanczos,\
 ```bash
 ffmpeg -y -ss {in_s} -t {t_safety} -i {src} \
   -filter_complex "[0:v]setpts=PTS/{speed},fps=30,\
-scale='if(gt(iw,ih),-2,1080)':'if(gt(iw,ih),1080,-2)':flags=lanczos,{src_hdr}split[a][b];\
+scale='if(gt(iw,ih),-2,1080)':'if(gt(iw,ih),1080,-2)':flags=lanczos,{src_hdr}{color_fix}split[a][b];\
 [a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,\
 boxblur={blur_radius}:{blur_power},eq=brightness={bg_brightness}[bg];\
 [b]scale=1080:-2:flags=lanczos[fg];\
@@ -44,7 +45,7 @@ boxblur={blur_radius}:{blur_power},eq=brightness={bg_brightness}[bg];\
   (mismos flags de codec que 10.1) segments/seg_{slot:02d}.mp4
 ```
 
-- Se reduce la fuente a 1080 en el lado corto antes de tonemap y `split`.
+- Se reduce la fuente a 1080 en el lado corto antes de tonemap y `split`. `{color_fix}` va antes del `split` para que fondo y primer plano reciban la misma corrección.
 - `boxblur=20:2` por defecto (`40:8` = 8 pasadas de radio 40, lento sin ganancia visible).
 - `effect_params` del clip suministra `blur_radius`, `blur_power`, `bg_brightness`.
 
@@ -55,14 +56,14 @@ ffmpeg -y -framerate 30 -loop 1 -i {normalized_jpg} \
   -vf "crop={crop_px.w}:{crop_px.h}:{crop_px.x}:{crop_px.y},\
 scale=3240:5760:flags=lanczos,\
 zoompan=z='min(1.0+{zoom_per_frame}*(on-1),{zoom_max})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30,\
-setsar=1,format=yuv420p" \
+{color_fix}setsar=1,format=yuv420p" \
   -fps_mode cfr -frames:v {n_frames} \
   (mismos flags de codec que 10.1) segments/seg_{slot:02d}.mp4
 ```
 
 - `zoompan` trunca el rectángulo de recorte a píxeles enteros de la fuente; a 1080 de ancho un zoom de 0.0015/frame avanza menos de un píxel por frame y produce jitter `[verificado: doc zoompan + fuentes secundarias]`. Por eso se pre-escala a 3240×5760 (3×) y `zoompan` emite 1080×1920. Ya no es un punto a validar.
 - `on` es el contador acumulado de frames de salida y empieza en 1 `[verificado: lista ffmpeg-user]`; con `-loop 1` y `d=1` no se reinicia. `(on-1)` hace que el primer frame tenga zoom exactamente 1.0.
-- Con `effect == none`: se elimina `zoompan` y el `scale` intermedio es `scale=1080:1920:flags=lanczos`.
+- Con `effect == none`: se elimina `zoompan` y el `scale` intermedio es `scale=1080:1920:flags=lanczos`; `{color_fix}` sigue justo antes de `setsar`.
 
 ### 10.4 Concat + audio (dos pasadas de loudnorm)
 

@@ -15,6 +15,7 @@ from edl_agent.planner.assignment import (
     place_develop_arc,
     select_develop,
 )
+from edl_agent.planner.color import apply_color_match, color_fix_for, measure_clip_color
 from edl_agent.planner.crop import compute_crop
 from edl_agent.planner.effects import effect_for
 from edl_agent.planner.pipeline import build_clips
@@ -26,12 +27,15 @@ __all__ = [
     "Assignment",
     "PlannerError",
     "admits",
+    "apply_color_match",
     "arc_order",
     "assign_slots",
     "build_clips",
+    "color_fix_for",
     "compute_crop",
     "compute_in_out",
     "effect_for",
+    "measure_clip_color",
     "place_develop_arc",
     "select_develop",
 ]

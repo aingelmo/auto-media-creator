@@ -10,6 +10,7 @@ from edl_agent.render._common import (
     FINAL_TARGET,
     PREVIEW_TARGET,
     _video_codec_args,
+    color_fix_filter,
 )
 from edl_agent.render.crop import crop_to_px
 
@@ -63,13 +64,14 @@ def render_video_segment(
     # reinterpret those SDR pixels as HLG again and darken/desaturate the
     # preview.
     hdr_prefix = "" if preview else _hdr_prefix(clip["hdr"], tonemap_chain)
+    color_fix = color_fix_filter(clip)
 
     if clip["layout"] == "crop":
         vf = (
             f"crop={crop_px['w']}:{crop_px['h']}:{crop_px['x']}:{crop_px['y']},"
             f"setpts=PTS/{speed},fps=30,"
             f"scale={target['w']}:{target['h']}:flags=lanczos,"
-            f"{hdr_prefix}setsar=1,format=yuv420p"
+            f"{hdr_prefix}{color_fix}setsar=1,format=yuv420p"
         )
         cmd = [
             "ffmpeg",
@@ -96,7 +98,7 @@ def render_video_segment(
         filter_complex = (
             f"[0:v]setpts=PTS/{speed},fps=30,"
             f"scale='if(gt(iw,ih),-2,{target['w']})':'if(gt(iw,ih),{target['w']},-2)':flags=lanczos,"
-            f"{hdr_prefix}split[a][b];"
+            f"{hdr_prefix}{color_fix}split[a][b];"
             f"[a]scale={target['w']}:{target['h']}:force_original_aspect_ratio=increase,"
             f"crop={target['w']}:{target['h']},"
             f"boxblur={params['blur_radius']}:{params['blur_power']},"
@@ -158,6 +160,7 @@ def render_image_segment(
     """
     target = PREVIEW_TARGET if preview else FINAL_TARGET
     n_frames = clip["n_frames"]
+    color_fix = color_fix_filter(clip)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     if clip["effect"] == "kenburns":
@@ -168,12 +171,12 @@ def render_image_segment(
             f"scale={prescale_w}:{prescale_h}:flags=lanczos,"
             f"zoompan=z='min(1.0+{params['zoom_per_frame']}*(on-1),{params['zoom_max']})':"
             f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={target['w']}x{target['h']}:fps=30,"
-            f"setsar=1,format=yuv420p"
+            f"{color_fix}setsar=1,format=yuv420p"
         )
     else:
         vf = (
             f"crop={crop_px['w']}:{crop_px['h']}:{crop_px['x']}:{crop_px['y']},"
-            f"scale={target['w']}:{target['h']}:flags=lanczos,setsar=1,format=yuv420p"
+            f"scale={target['w']}:{target['h']}:flags=lanczos,{color_fix}setsar=1,format=yuv420p"
         )
     cmd = [
         "ffmpeg",

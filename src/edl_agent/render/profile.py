@@ -6,7 +6,7 @@ import hashlib
 import json
 import subprocess
 
-from edl_agent.render._common import _video_codec_args
+from edl_agent.render._common import COLOR_FIX_FILTER_TEMPLATE, _video_codec_args
 
 
 def _dpkg_version(package_prefix: str) -> str | None:
@@ -60,7 +60,8 @@ def get_render_profile(
         `tonemap_chain_pq`, `video_codec_args` (str), the ffmpeg filter
         templates used at render time (`segment_filter_template`,
         `blur_pad_filter_template`, `image_filter_template`, each a format
-        string with `{...}` placeholders filled in per-clip),
+        string with `{...}` placeholders filled in per-clip;
+        `color_fix_filter_template` fills `{color_fix}`, #6.7),
         `audio_codec_args` (str), and `profile_sha256` (str, hash of the
         rest of the dict, for reproducibility checks).
     """
@@ -86,6 +87,7 @@ def get_render_profile(
             "zoompan=z='min(1.0+{zoom_per_frame}*(on-1),{zoom_max})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={tw}x{th}:fps=30,"
             "setsar=1,format=yuv420p"
         ),
+        "color_fix_filter_template": COLOR_FIX_FILTER_TEMPLATE,
         "audio_codec_args": "-c:a aac -b:a 192k -ar 48000",
     }
     profile["profile_sha256"] = hashlib.sha256(

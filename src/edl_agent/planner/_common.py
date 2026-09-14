@@ -24,6 +24,8 @@ DEFAULT_CONFIG = {
     "blur_power": 2,
     "bg_brightness": -0.1,
     "adjacency_gap_s": 0.25,  # #6.2.3 anti-overlap margin for the same source
+    "color_match": True,  # #6.7
+    "color_match_strength": 0.7,
 }
 
 

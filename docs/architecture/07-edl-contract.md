@@ -105,6 +105,18 @@
           },
           "effect": { "type": "string", "enum": ["none", "kenburns"] },
           "effect_params": { "type": "object" },
+          "color_fix": {
+            "type": "object",
+            "description": "Opcional (§6.7). Ausente => sin igualación de color, render idéntico a v4 previo",
+            "properties": {
+              "brightness": { "type": "number", "minimum": 0, "maximum": 0.15 },
+              "saturation": { "type": "number", "minimum": 0.85, "maximum": 1.15 },
+              "rl": { "type": "number", "minimum": -0.1, "maximum": 0.1 },
+              "bl": { "type": "number", "minimum": -0.1, "maximum": 0.1 },
+              "measured": { "type": "object" }
+            },
+            "required": ["brightness", "saturation", "rl", "bl"]
+          },
           "warnings": { "type": "array", "items": { "type": "string" } }
         },
         "required": ["slot", "role", "candidate_id", "src", "src_sha256", "type", "src_w", "src_h", "src_rotation", "src_color", "hdr", "in_s", "out_s", "n_frames", "speed", "timeline_start_f", "timeline_end_f", "layout", "crop", "crop_px", "effect", "effect_params", "warnings"]
