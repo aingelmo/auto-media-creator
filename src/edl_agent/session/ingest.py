@@ -43,9 +43,10 @@ def run_ingest(
         The `manifest.json` dict (see `ingest.build_manifest`).
 
     Raises:
-        IngestError: If a video proxy fails temporal verification against
-            its original, or if a music track exists but
-            `music_max_duration_s` was not given.
+        IngestError: If a music track exists but `music_max_duration_s`
+            was not given. A video proxy failing temporal verification
+            against its original does not abort the run; it's recorded
+            as `proxy_verified: false` in the manifest instead.
     """
     session_dir = Path(session_dir)
     inputs = session_dir / "inputs"
@@ -69,12 +70,9 @@ def run_ingest(
                 tonemap_chain=tonemap_chain,
             )
             if not verified:
-                msg = (
-                    f"proxy/original temporal mismatch for {path}: "
+                print(
+                    f"WARNING: proxy/original temporal mismatch for {path}: "
                     f"{[(r.t_s, r.distances) for r in results]}"
-                )
-                raise IngestError(
-                    msg,
                 )
 
             entry = {
@@ -94,7 +92,7 @@ def run_ingest(
                 "hdr": info.hdr,
                 "color": info.color,
                 "proxy": str(proxy_path.relative_to(session_dir)),
-                "proxy_verified": True,
+                "proxy_verified": verified,
             }
             sources.append(entry)
         elif ext in IMAGE_EXTS:
