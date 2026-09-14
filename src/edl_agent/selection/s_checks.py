@@ -34,10 +34,13 @@ def apply_s_checks(
           assigned/overwritten, ignoring any rank the LLM proposed).
         - `warnings`: one entry per dropped/moved candidate:
           `"s2_dropped:{id}"` (unknown or duplicate candidate_id),
-          `"s4_moved:{id}->close"` / `"s4_moved:{id}->develop"` (role
-          reassigned to match the candidate's `kind`: hook must be `peak`,
-          close must not be `peak`), `"s5_dropped:{id}"` (candidate's
-          window doesn't admit any slot of its assigned role).
+          `"s4_moved:{id}->close"` (role reassigned because a non-`peak`
+          candidate was picked for hook, which must be `peak`), or
+          `"s5_dropped:{id}"` (candidate's window doesn't admit any slot
+          of its assigned role). `close` may be `peak`-kind: the prompt
+          already tells the model to prefer calm/image there and only use
+          a still-looking peak as a last resort, so its own rank ordering
+          is trusted instead of a hard kind filter.
     """
     warnings: list[str] = []
     seen: set[str] = set()
@@ -56,9 +59,6 @@ def apply_s_checks(
         if entry["role"] == "hook" and kind != "peak":
             entry["role"] = "close"
             warnings.append(f"s4_moved:{entry['candidate_id']}->close")
-        elif entry["role"] == "close" and kind == "peak":
-            entry["role"] = "develop"
-            warnings.append(f"s4_moved:{entry['candidate_id']}->develop")
 
     # S5: the LLM doesn't know `admits_slots` (it isn't sent to it); here we
     # drop whatever it chose for a role whose slot(s) don't fit its window,

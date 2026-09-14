@@ -70,10 +70,12 @@ def test_s2_drops_unknown_and_duplicate_ids() -> None:
     assert any("ghost" in w for w in warnings)
 
 
-def test_s4_moves_mistyped_hook_and_close() -> None:
+def test_s4_moves_mistyped_hook_but_trusts_peak_close() -> None:
     candidates_by_id = {
         "c1": _cand("c1", "a.mov", "calm"),  # en hook -> debe pasar a close
-        "c2": _cand("c2", "b.mov", "peak"),  # en close -> debe pasar a develop
+        # en close, kind=="peak" ya es el fallback deliberado del prompt
+        # (sujeto mas quieto) -> debe respetarse, no moverse a develop.
+        "c2": _cand("c2", "b.mov", "peak"),
     }
     selection = {
         "selected": [
@@ -96,7 +98,7 @@ def test_s4_moves_mistyped_hook_and_close() -> None:
     cleaned, _warnings = apply_s_checks(selection, candidates_by_id, _slots(1)["slots"])
     roles = {e["candidate_id"]: e["role"] for e in cleaned}
     assert roles["c1"] == "close"
-    assert roles["c2"] == "develop"
+    assert roles["c2"] == "close"
 
 
 def test_s3_renumbers_rank_without_gaps() -> None:
