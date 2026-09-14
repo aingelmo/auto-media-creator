@@ -192,6 +192,23 @@ async def create_session(
     return RedirectResponse(f"/sessions/{name}", status_code=303)
 
 
+@app.post("/sessions/{name}/retry", response_model=None)
+def retry_session(name: str, background_tasks: BackgroundTasks) -> RedirectResponse:
+    """Relaunch a failed session's pipeline, resuming past stages already on disk."""
+    old_job = _jobs.get(name)
+    if old_job is None or not old_job.error:
+        raise HTTPException(status_code=404, detail="no failed run to retry")
+
+    job = JobState()
+    with _lock:
+        _jobs[name] = job
+    background_tasks.add_task(
+        run_pipeline_job, SESSIONS_DIR / name, old_job.provider, old_job.model, job, True
+    )
+
+    return RedirectResponse(f"/sessions/{name}", status_code=303)
+
+
 @app.get("/sessions/{name}", response_class=HTMLResponse)
 def session_page(request: Request, name: str) -> HTMLResponse:
     """Show a session's live per-stage status, or its final results once done."""

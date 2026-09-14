@@ -58,6 +58,9 @@
   {% elif job and job.error %}
     <p class="status-failed">Failed</p>
     <pre>{{ job.error }}</pre>
+    <form method="post" action="/sessions/{{ name }}/retry">
+      <button type="submit">Retry (resume from last completed stage)</button>
+    </form>
   {% elif job %}
     <p class="status-running">Running&hellip;</p>
     <script>

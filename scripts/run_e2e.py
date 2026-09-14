@@ -49,52 +49,89 @@ def parse_args() -> argparse.Namespace:
         "--model", default=None, help="Selector LLM model; defaults per --provider"
     )
     parser.add_argument("--tonemap-chain", default="")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip stages whose output already exists on disk (e.g. after a failed run)",
+    )
     args = parser.parse_args()
     if args.model is None:
         args.model = DEFAULT_MODELS[args.provider]
     return args
 
 
+def _load_json(path: Path) -> dict:
+    return json.loads(path.read_text())
+
+
 def main() -> None:
     args = parse_args()
     session = args.session
+    resume = args.resume
 
-    manifest = run_ingest(
-        session,
-        threads=args.threads,
-        music_offset_s=args.music_offset_s,
-        music_max_duration_s=args.music_max_duration_s,
-    )
+    manifest_path = session / "manifest.json"
+    if resume and manifest_path.exists():
+        manifest = _load_json(manifest_path)
+    else:
+        manifest = run_ingest(
+            session,
+            threads=args.threads,
+            music_offset_s=args.music_offset_s,
+            music_max_duration_s=args.music_max_duration_s,
+        )
 
-    slots = slots_from_file(str(session / "music" / "track_cut.wav"))
-    (session / "slots.json").write_text(json.dumps(slots, indent=2, ensure_ascii=False))
+    slots_path = session / "slots.json"
+    if resume and slots_path.exists():
+        slots = _load_json(slots_path)
+    else:
+        slots = slots_from_file(str(session / "music" / "track_cut.wav"))
+        slots_path.write_text(json.dumps(slots, indent=2, ensure_ascii=False))
 
-    detector = yolo_pose_detector(args.pose_model)
-    candidates = run_candidates(
-        session, manifest, slots, detector, pose_model_path=args.pose_model
-    )
+    candidates_path = session / "candidates.json"
+    if resume and candidates_path.exists():
+        candidates = _load_json(candidates_path)
+    else:
+        detector = yolo_pose_detector(args.pose_model)
+        candidates = run_candidates(
+            session, manifest, slots, detector, pose_model_path=args.pose_model
+        )
 
-    client = get_client(args.provider)
-    selection, selection_meta = run_selection(
-        session,
-        candidates,
-        slots,
-        config={"model": args.model},
-        client=client,
-    )
-    (session / "selection.json").write_text(
-        json.dumps(selection or {}, indent=2, ensure_ascii=False)
-    )
+    selection_path = session / "selection.json"
+    selection_meta_path = session / "selection_meta.json"
+    if resume and selection_path.exists():
+        selection = _load_json(selection_path) or None
+        selection_meta = _load_json(selection_meta_path) if selection_meta_path.exists() else {}
+    else:
+        client = get_client(args.provider)
+        selection, selection_meta = run_selection(
+            session,
+            candidates,
+            slots,
+            config={"model": args.model},
+            client=client,
+        )
+        selection_path.write_text(json.dumps(selection or {}, indent=2, ensure_ascii=False))
+        selection_meta_path.write_text(
+            json.dumps(selection_meta or {}, indent=2, ensure_ascii=False)
+        )
 
-    edl = run_planner(
-        session, manifest, candidates, slots, selection, selection_meta, threads=args.threads
-    )
+    edl_path = session / "edl.json"
+    if resume and edl_path.exists():
+        edl = _load_json(edl_path)
+    else:
+        edl = run_planner(
+            session, manifest, candidates, slots, selection, selection_meta, threads=args.threads
+        )
 
-    render_preview_segments(
-        edl, manifest, session, threads=args.threads, tonemap_chain=args.tonemap_chain
-    )
-    render_segments(edl, manifest, session, threads=args.threads, tonemap_chain=args.tonemap_chain)
-    concat_and_audio(edl, session, threads=args.threads)
+    reel_path = session / "reel.mp4"
+    if not (resume and reel_path.exists()):
+        render_preview_segments(
+            edl, manifest, session, threads=args.threads, tonemap_chain=args.tonemap_chain
+        )
+        render_segments(
+            edl, manifest, session, threads=args.threads, tonemap_chain=args.tonemap_chain
+        )
+        concat_and_audio(edl, session, threads=args.threads)
 
     results = run_render_checks(edl, session)
     for r in results:
