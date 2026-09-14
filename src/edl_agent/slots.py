@@ -12,6 +12,11 @@ import numpy as np
 FRAME_RATE = 30
 UNIFORM_GRID_S = 1.6  # 48 frames, used when beats_confident == False
 MIN_SLOT_FRAMES = 30
+# ponytail: below this, a beat tracker locking onto the backbeat/half-time
+# period (a common octave error, e.g. four-on-the-floor at 128 BPM read as
+# 64) is more likely than a genuinely slow track; raise/lower if a genre
+# with legitimately slow real tempos starts getting doubled.
+OCTAVE_CORRECT_BELOW_BPM = 95.0
 
 
 def detect_beats(path: str) -> tuple[float, list[float]]:
@@ -30,6 +35,18 @@ def detect_beats(path: str) -> tuple[float, list[float]]:
     tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, units="frames")
     beats_s = librosa.frames_to_time(beat_frames, sr=sr).tolist()
     return float(np.asarray(tempo).item()), beats_s
+
+
+def _onset_autocorr_peak(onset_env: np.ndarray, sr: float, tempo_bpm: float) -> float:
+    """Onset-strength autocorrelation strength at `tempo_bpm`'s beat lag, 0..1."""
+    import librosa
+
+    hop_length = 512
+    lag_frames = round((60.0 / tempo_bpm) * sr / hop_length)
+    if lag_frames <= 0 or lag_frames >= len(onset_env):
+        return 0.0
+    ac = librosa.autocorrelate(onset_env, max_size=lag_frames + 1)
+    return float(ac[lag_frames] / ac[0]) if ac[0] > 0 else 0.0
 
 
 def beats_confident(
@@ -58,13 +75,41 @@ def beats_confident(
     if not (50 <= tempo_bpm <= 200):
         return False
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-    hop_length = 512
-    lag_frames = round((60.0 / tempo_bpm) * sr / hop_length)
-    if lag_frames <= 0 or lag_frames >= len(onset_env):
-        return False
-    ac = librosa.autocorrelate(onset_env, max_size=lag_frames + 1)
-    peak = ac[lag_frames] / ac[0] if ac[0] > 0 else 0.0
-    return bool(peak >= 0.3)
+    return _onset_autocorr_peak(onset_env, sr, tempo_bpm) >= 0.3
+
+
+def correct_octave_error(
+    tempo_bpm: float, beats_s: list[float], onset_env: np.ndarray, sr: float
+) -> tuple[float, list[float]]:
+    """Double `tempo_bpm`/interpolate `beats_s` if that looks like the real tempo.
+
+    Beat trackers commonly lock onto the backbeat/half-time period instead
+    of the true tempo (e.g. four-on-the-floor at 128 BPM read as 64), which
+    halves the detected beat count and starves `build_slots` of slots. Only
+    applies below `OCTAVE_CORRECT_BELOW_BPM`, and only if the doubled
+    tempo's autocorrelation peak also clears the confidence threshold used
+    by `beats_confident`.
+
+    Args:
+        tempo_bpm: Estimated tempo, in BPM, from `detect_beats`.
+        beats_s: Beat timestamps, in seconds, from `detect_beats`.
+        onset_env: Onset-strength envelope, from `librosa.onset.onset_strength`.
+        sr: Sample rate `onset_env` was computed at, in Hz.
+
+    Returns:
+        `(tempo_bpm, beats_s)`, doubled/interpolated if an octave error was
+        detected, unchanged otherwise.
+    """
+    if tempo_bpm >= OCTAVE_CORRECT_BELOW_BPM:
+        return tempo_bpm, beats_s
+    doubled_bpm = tempo_bpm * 2
+    if _onset_autocorr_peak(onset_env, sr, doubled_bpm) < 0.3:
+        return tempo_bpm, beats_s
+    sorted_beats = sorted(beats_s)
+    midpoints = [
+        (a + b) / 2 for a, b in itertools.pairwise(sorted_beats)
+    ]
+    return doubled_bpm, sorted(sorted_beats + midpoints)
 
 
 def build_slots(
@@ -202,6 +247,8 @@ def slots_from_file(path: str) -> dict:
     y, sr = librosa.load(path, sr=None, mono=True)
     duration_s = len(y) / sr
     tempo_bpm, beats_s = detect_beats(path)
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+    tempo_bpm, beats_s = correct_octave_error(tempo_bpm, beats_s, onset_env, sr)
     confident = beats_confident(tempo_bpm, y, sr, beats_s)
     result = build_slots(duration_s, tempo_bpm, beats_s, confident)
     result["music_cut"] = path

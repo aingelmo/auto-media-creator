@@ -6,7 +6,9 @@ import itertools
 
 import pytest
 
-from edl_agent.slots import FRAME_RATE, UNIFORM_GRID_S, build_slots
+import numpy as np
+
+from edl_agent.slots import FRAME_RATE, UNIFORM_GRID_S, build_slots, correct_octave_error
 
 
 def _periodic_beats(bpm: float, duration_s: float) -> list[float]:
@@ -83,3 +85,45 @@ def test_trailing_gap_falls_back_to_uniform_grid() -> None:
 def test_single_slot_is_error() -> None:
     with pytest.raises(ValueError):
         build_slots(duration_s=0.5, tempo_bpm=60.0, beats_s=[0.0], confident=True)
+
+
+def _impulse_train(period_frames: int, n_frames: int) -> np.ndarray:
+    env = np.zeros(n_frames)
+    env[::period_frames] = 1.0
+    return env
+
+
+def test_correct_octave_error_doubles_when_true_tempo_is_faster() -> None:
+    # 64 BPM detected, but the onset envelope is periodic at 128 BPM's lag
+    # too (a real four-on-the-floor track's backbeat aliasing).
+    sr = 22050
+    hop_length = 512
+    true_bpm = 128.0
+    period_frames = round((60.0 / true_bpm) * sr / hop_length)
+    onset_env = _impulse_train(period_frames, n_frames=2000)
+    beats_s = [i * (60.0 / (true_bpm / 2)) for i in range(10)]
+
+    tempo_bpm, corrected_beats_s = correct_octave_error(
+        true_bpm / 2, beats_s, onset_env, sr
+    )
+
+    assert tempo_bpm == true_bpm
+    assert len(corrected_beats_s) == 2 * len(beats_s) - 1
+
+
+def test_correct_octave_error_leaves_fast_tempo_unchanged() -> None:
+    onset_env = _impulse_train(period_frames=10, n_frames=2000)
+    tempo_bpm, beats_s = correct_octave_error(120.0, [0.0, 0.5], onset_env, sr=22050)
+    assert tempo_bpm == 120.0
+    assert beats_s == [0.0, 0.5]
+
+
+def test_correct_octave_error_leaves_unconfident_double_unchanged() -> None:
+    # Genuinely periodic at 60 BPM only: doubled lag doesn't align with any
+    # impulse, so it must not be mistaken for a faster true tempo.
+    sr = 22050
+    period_frames = round((60.0 / 60.0) * sr / 512)
+    onset_env = _impulse_train(period_frames, n_frames=2000)
+    tempo_bpm, beats_s = correct_octave_error(60.0, [0.0, 1.0], onset_env, sr)
+    assert tempo_bpm == 60.0
+    assert beats_s == [0.0, 1.0]
