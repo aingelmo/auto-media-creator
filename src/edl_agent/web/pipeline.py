@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from edl_agent.features import yolo_pose_detector
+from edl_agent.ingest import write_manifest
 from edl_agent.llm import get_client
 from edl_agent.render import (
     concat_and_audio,
@@ -66,6 +67,9 @@ class JobState:
             job paused on `awaiting_confirmation`.
         cancelled: `True` if the user chose not to proceed past the
             `awaiting_confirmation` pause.
+        excluded_sources: `src` paths (a subset of `unverified_sources`,
+            set via `/sessions/{name}/confirm`) to drop from the manifest
+            before resuming past the `awaiting_confirmation` pause.
     """
 
     stages: dict[str, str] = field(
@@ -78,6 +82,7 @@ class JobState:
     awaiting_confirmation: bool = False
     confirm_event: threading.Event = field(default_factory=threading.Event)
     cancelled: bool = False
+    excluded_sources: list[str] = field(default_factory=list)
 
     @contextmanager
     def running(self, stage: str):  # noqa: ANN201 (contextmanager)
@@ -132,6 +137,13 @@ def run_pipeline_job(
             job.awaiting_confirmation = False
             if job.cancelled:
                 return
+            if job.excluded_sources:
+                manifest["sources"] = [
+                    s
+                    for s in manifest["sources"]
+                    if s["src"] not in job.excluded_sources
+                ]
+                write_manifest(manifest, session_dir / "manifest.json")
 
         with job.running("candidates"):
             detector = yolo_pose_detector(POSE_MODEL)

@@ -230,16 +230,20 @@ def session_status(name: str) -> dict:
 
 
 @app.post("/sessions/{name}/confirm", response_model=None)
-def session_confirm(name: str, proceed: bool = Form(...)) -> RedirectResponse:
+def session_confirm(
+    name: str, proceed: bool = Form(...), exclude: list[str] = Form(default=[])
+) -> RedirectResponse:
     """Unblock a job paused on unverified ingest proxies.
 
-    `proceed=False` cancels the run instead of continuing past sources
-    whose proxy failed temporal verification (see `edl_agent.verify`).
+    `proceed=False` cancels the run instead of continuing. Otherwise, any
+    `exclude` source paths (checked on the confirmation form) are dropped
+    from the manifest before the remaining, verified sources proceed.
     """
     job = _jobs.get(name)
     if job is None or not job.awaiting_confirmation:
         raise HTTPException(status_code=404, detail="no confirmation pending")
     job.cancelled = not proceed
+    job.excluded_sources = exclude
     job.confirm_event.set()
     return RedirectResponse(f"/sessions/{name}", status_code=303)
 

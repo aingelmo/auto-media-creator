@@ -32,17 +32,18 @@
         (candidate peaks, cut points) may land on the wrong frame when the
         final render pulls from the original for these clips.
       </p>
-      <ul>
-        {% for src in job.unverified_sources %}
-        <li>{{ src }}</li>
-        {% endfor %}
-      </ul>
       <p>See <a href="/sessions/{{ name }}/ingest">ingest details</a> for the mismatch data.</p>
-      <form method="post" action="/sessions/{{ name }}/confirm" style="display:inline">
+      <form method="post" action="/sessions/{{ name }}/confirm">
         <input type="hidden" name="proceed" value="true">
-        <button type="submit">Continue anyway</button>
+        {% for src in job.unverified_sources %}
+        <label>
+          <input type="checkbox" name="exclude" value="{{ src }}" checked>
+          exclude {{ src }}
+        </label>
+        {% endfor %}
+        <button type="submit">Continue with checked clips excluded</button>
       </form>
-      <form method="post" action="/sessions/{{ name }}/confirm" style="display:inline">
+      <form method="post" action="/sessions/{{ name }}/confirm">
         <input type="hidden" name="proceed" value="false">
         <button type="submit">Cancel run</button>
       </form>
