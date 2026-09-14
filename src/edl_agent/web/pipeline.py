@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import traceback
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -49,18 +50,32 @@ class JobState:
     """Progress/result tracker for one session's background pipeline run.
 
     Attributes:
-        stage: Name of the currently running/last-attempted stage, one of
-            `STAGES`, or `"done"` once finished successfully.
+        stages: Status of each `STAGES` entry: `"pending"`, `"running"`,
+            `"done"`, or `"failed"`.
         error: Traceback string if the job failed, `None` otherwise.
         done: `True` once the job has finished (successfully or not).
         check_results: Stringified `run_render_checks` results, once the
             `checks` stage completes.
     """
 
-    stage: str = "queued"
+    stages: dict[str, str] = field(
+        default_factory=lambda: dict.fromkeys(STAGES, "pending")
+    )
     error: str | None = None
     done: bool = False
     check_results: list[str] = field(default_factory=list)
+
+    @contextmanager
+    def running(self, stage: str):  # noqa: ANN201 (contextmanager)
+        """Mark `stage` `"running"`, then `"done"`, or `"failed"` on exception."""
+        self.stages[stage] = "running"
+        try:
+            yield
+        except Exception:
+            self.stages[stage] = "failed"
+            raise
+        else:
+            self.stages[stage] = "done"
 
 
 def run_pipeline_job(
@@ -74,64 +89,65 @@ def run_pipeline_job(
 
     Args:
         session_dir: Session directory, already populated with `inputs/`
-            and `music/track.mp3` by the upload handler.
+            and `music/track.<mp3|wav>` by the upload handler.
         provider: LLM provider name, one of `edl_agent.llm.PROVIDERS`.
         model: LLM model name for `provider`.
         job: `JobState` instance to update in place; the caller keeps a
             reference to it for status polling.
     """
     try:
-        job.stage = "ingest"
-        manifest = run_ingest(
-            session_dir,
-            threads=THREADS,
-            music_offset_s=MUSIC_OFFSET_S,
-            music_max_duration_s=MUSIC_MAX_DURATION_S,
-        )
+        with job.running("ingest"):
+            manifest = run_ingest(
+                session_dir,
+                threads=THREADS,
+                music_offset_s=MUSIC_OFFSET_S,
+                music_max_duration_s=MUSIC_MAX_DURATION_S,
+            )
+            slots = slots_from_file(str(session_dir / "music" / "track_cut.wav"))
+            slots_json = json.dumps(slots, indent=2, ensure_ascii=False)
+            (session_dir / "slots.json").write_text(slots_json)
 
-        slots = slots_from_file(str(session_dir / "music" / "track_cut.wav"))
-        slots_json = json.dumps(slots, indent=2, ensure_ascii=False)
-        (session_dir / "slots.json").write_text(slots_json)
+        with job.running("candidates"):
+            detector = yolo_pose_detector(POSE_MODEL)
+            candidates = run_candidates(
+                session_dir, manifest, slots, detector, pose_model_path=POSE_MODEL
+            )
 
-        job.stage = "candidates"
-        detector = yolo_pose_detector(POSE_MODEL)
-        candidates = run_candidates(
-            session_dir, manifest, slots, detector, pose_model_path=POSE_MODEL
-        )
+        with job.running("selection"):
+            client = get_client(provider)
+            selection, selection_meta = run_selection(
+                session_dir, candidates, slots, config={"model": model}, client=client
+            )
+            (session_dir / "selection.json").write_text(
+                json.dumps(selection or {}, indent=2, ensure_ascii=False)
+            )
 
-        job.stage = "selection"
-        client = get_client(provider)
-        selection, selection_meta = run_selection(
-            session_dir, candidates, slots, config={"model": model}, client=client
-        )
-        (session_dir / "selection.json").write_text(
-            json.dumps(selection or {}, indent=2, ensure_ascii=False)
-        )
+        with job.running("planner"):
+            edl = run_planner(
+                session_dir,
+                manifest,
+                candidates,
+                slots,
+                selection,
+                selection_meta,
+                threads=THREADS,
+            )
 
-        job.stage = "planner"
-        edl = run_planner(
-            session_dir,
-            manifest,
-            candidates,
-            slots,
-            selection,
-            selection_meta,
-            threads=THREADS,
-        )
+        with job.running("render"):
+            render_preview_segments(
+                edl,
+                manifest,
+                session_dir,
+                threads=THREADS,
+                tonemap_chain=TONEMAP_CHAIN,
+            )
+            render_segments(
+                edl, manifest, session_dir, threads=THREADS, tonemap_chain=TONEMAP_CHAIN
+            )
+            concat_and_audio(edl, session_dir, threads=THREADS)
 
-        job.stage = "render"
-        render_preview_segments(
-            edl, manifest, session_dir, threads=THREADS, tonemap_chain=TONEMAP_CHAIN
-        )
-        render_segments(
-            edl, manifest, session_dir, threads=THREADS, tonemap_chain=TONEMAP_CHAIN
-        )
-        concat_and_audio(edl, session_dir, threads=THREADS)
-
-        job.stage = "checks"
-        job.check_results = [str(r) for r in run_render_checks(edl, session_dir)]
-
-        job.stage = "done"
+        with job.running("checks"):
+            job.check_results = [str(r) for r in run_render_checks(edl, session_dir)]
     except Exception:  # noqa: BLE001 - surfaced to the status page, not swallowed
         job.error = traceback.format_exc()
     finally:

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2><a href="/sessions/{{ name }}">{{ name }}</a> &mdash; selection</h2>
+  {% for a in attempts %}
+    <h3>Attempt {{ a.attempt }} &mdash; {{ a.status }}</h3>
+    <p>usage: {{ a.usage | tojson }} &mdash; cost_usd: {{ a.cost_usd }}</p>
+    {% if a.error %}
+      <p class="status-failed">{{ a.error }}</p>
+    {% endif %}
+    <details>
+      <summary>Prompt sent</summary>
+      <h4>System</h4>
+      <pre>{{ a.system_prompt }}</pre>
+      <h4>User</h4>
+      <pre>{{ a.user_prompt }}</pre>
+    </details>
+    {% if a.output %}
+      <h4>Output</h4>
+      <pre>{{ a.output | tojson(indent=2) }}</pre>
+    {% endif %}
+  {% endfor %}
+{% endblock %}

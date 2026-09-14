@@ -7,6 +7,8 @@ local, single-process, single-user tool (see `web/pipeline.py`).
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import threading
 from pathlib import Path
@@ -16,11 +18,15 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from edl_agent.llm import PROVIDERS
-from edl_agent.session._common import IMAGE_EXTS, VIDEO_EXTS
-from edl_agent.web.pipeline import DEFAULT_MODELS, JobState, run_pipeline_job
+from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
+from edl_agent.web.pipeline import DEFAULT_MODELS, STAGES, JobState, run_pipeline_job
 
 SESSIONS_DIR = Path("sessions")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# Provider -> env var read by edl_agent.llm.get_client; gemini/ollama use
+# SDK-default/no-auth flows not worth preflighting here.
+PROVIDER_API_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "deepseek": "DEEPSEEK_API_KEY"}
 
 app = FastAPI(title="edl-agent")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -51,6 +57,57 @@ def _session_status(name: str) -> str:
     return "new"
 
 
+def _stage_statuses(name: str) -> dict[str, str]:
+    """Per-stage status for a session's checklist, live job or disk fallback.
+
+    Args:
+        name: Session directory name under `SESSIONS_DIR`.
+
+    Returns:
+        Dict keyed by `STAGES`. If a live `JobState` is tracked, its
+        `stages` dict is used directly. Otherwise (server restarted since
+        the run), status is derived from which artifact files exist on
+        disk: `"done"` if the stage's output file exists, `"pending"`
+        otherwise -- a run from a previous process has no "running"/"failed"
+        signal available.
+    """
+    job = _jobs.get(name)
+    if job is not None:
+        return job.stages
+    session_dir = SESSIONS_DIR / name
+    artifact_by_stage = {
+        "ingest": "manifest.json",
+        "candidates": "candidates.json",
+        "selection": "selection.json",
+        "planner": "edl.json",
+        "render": "reel.mp4",
+        "checks": "reel.mp4",
+    }
+    return {
+        stage: "done" if (session_dir / artifact_by_stage[stage]).exists() else "pending"
+        for stage in STAGES
+    }
+
+
+def _load_json(name: str, filename: str) -> dict:
+    """Read and parse a session artifact JSON file, or 404.
+
+    Args:
+        name: Session directory name under `SESSIONS_DIR`.
+        filename: File name within the session directory.
+
+    Returns:
+        Parsed JSON content.
+
+    Raises:
+        HTTPException: 404 if the file doesn't exist yet.
+    """
+    path = SESSIONS_DIR / name / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"{filename} not found yet")
+    return json.loads(path.read_text())
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
     """List existing sessions with their derived status."""
@@ -66,20 +123,35 @@ def new_session_form(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "new.html",
-        {"providers": PROVIDERS, "default_models": DEFAULT_MODELS},
+        {"providers": PROVIDERS, "default_models": DEFAULT_MODELS, "error": None},
     )
 
 
-@app.post("/sessions")
+@app.post("/sessions", response_model=None)
 async def create_session(
     background_tasks: BackgroundTasks,
+    request: Request,
     name: str = Form(...),
     provider: str = Form(...),
     model: str = Form(...),
     clips: list[UploadFile] = Form(...),
     music: UploadFile = Form(...),
-) -> RedirectResponse:
+) -> HTMLResponse | RedirectResponse:
     """Save uploaded media into a new session dir and launch the pipeline."""
+    key_env = PROVIDER_API_KEY_ENV.get(provider)
+    if key_env and not os.environ.get(key_env):
+        return templates.TemplateResponse(
+            request,
+            "new.html",
+            {
+                "providers": PROVIDERS,
+                "default_models": DEFAULT_MODELS,
+                "error": f"{key_env} is not set in the server's environment. "
+                f"Export it and restart the web server before running {provider}.",
+            },
+            status_code=400,
+        )
+
     session_dir = SESSIONS_DIR / name
     inputs_dir = session_dir / "inputs"
     music_dir = session_dir / "music"
@@ -94,7 +166,22 @@ async def create_session(
         with (inputs_dir / filename).open("wb") as f:
             shutil.copyfileobj(clip.file, f)
 
-    with (music_dir / "track.mp3").open("wb") as f:
+    music_ext = Path(music.filename or "").suffix.lower()
+    if music_ext not in MUSIC_EXTS:
+        return templates.TemplateResponse(
+            request,
+            "new.html",
+            {
+                "providers": PROVIDERS,
+                "default_models": DEFAULT_MODELS,
+                "error": (
+                    f"Music file must be one of {sorted(MUSIC_EXTS)}, "
+                    f"got {music_ext!r}."
+                ),
+            },
+            status_code=400,
+        )
+    with (music_dir / f"track{music_ext}").open("wb") as f:
         shutil.copyfileobj(music.file, f)
 
     job = JobState()
@@ -107,13 +194,19 @@ async def create_session(
 
 @app.get("/sessions/{name}", response_class=HTMLResponse)
 def session_page(request: Request, name: str) -> HTMLResponse:
-    """Show a session's live status, or its final results once done."""
+    """Show a session's live per-stage status, or its final results once done."""
     job = _jobs.get(name)
     reel_exists = (SESSIONS_DIR / name / "reel.mp4").exists()
     return templates.TemplateResponse(
         request,
         "session.html",
-        {"name": name, "job": job, "reel_exists": reel_exists},
+        {
+            "name": name,
+            "job": job,
+            "reel_exists": reel_exists,
+            "stages": STAGES,
+            "stage_statuses": _stage_statuses(name),
+        },
     )
 
 
@@ -122,8 +215,8 @@ def session_status(name: str) -> dict:
     """JSON status for the polling script on the session page."""
     job = _jobs.get(name)
     if job is None:
-        return {"stage": "unknown", "done": True, "error": None}
-    return {"stage": job.stage, "done": job.done, "error": job.error}
+        return {"stages": _stage_statuses(name), "done": True, "error": None}
+    return {"stages": job.stages, "done": job.done, "error": job.error}
 
 
 @app.get("/sessions/{name}/reel.mp4")
@@ -133,3 +226,58 @@ def session_reel(name: str) -> FileResponse:
     if not reel_path.exists():
         raise HTTPException(status_code=404)
     return FileResponse(reel_path, media_type="video/mp4")
+
+
+@app.get("/sessions/{name}/files/{path:path}")
+def session_file(name: str, path: str) -> FileResponse:
+    """Serve a session-relative file (peak frames, proxies, segments) for debug views."""
+    session_dir = (SESSIONS_DIR / name).resolve()
+    file_path = (session_dir / path).resolve()
+    if session_dir not in file_path.parents or not file_path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(file_path)
+
+
+@app.get("/sessions/{name}/ingest", response_class=HTMLResponse)
+def ingest_page(request: Request, name: str) -> HTMLResponse:
+    """Show `manifest.json`'s sources for debugging the ingest stage."""
+    manifest = _load_json(name, "manifest.json")
+    return templates.TemplateResponse(
+        request, "ingest.html", {"name": name, "manifest": manifest}
+    )
+
+
+@app.get("/sessions/{name}/candidates", response_class=HTMLResponse)
+def candidates_page(request: Request, name: str) -> HTMLResponse:
+    """Show `candidates.json` with peak-frame thumbnails for debugging selection input."""
+    session_dir = SESSIONS_DIR / name
+    payload = _load_json(name, "candidates.json")
+    candidates = payload["candidates"]
+    for c in candidates:
+        c["peak_urls"] = [
+            f"/sessions/{name}/files/{Path(jpg).resolve().relative_to(session_dir.resolve())}"
+            for jpg in c["peak_frames"]
+        ]
+    return templates.TemplateResponse(
+        request, "candidates.html", {"name": name, "candidates": candidates}
+    )
+
+
+@app.get("/sessions/{name}/selection", response_class=HTMLResponse)
+def selection_page(request: Request, name: str) -> HTMLResponse:
+    """Show every `selection_attempt_N.json` -- prompt, raw LLM reply, usage, cost."""
+    session_dir = SESSIONS_DIR / name
+    attempts = sorted(session_dir.glob("selection_attempt_*.json"))
+    if not attempts:
+        raise HTTPException(status_code=404, detail="no selection attempts yet")
+    records = [json.loads(p.read_text()) for p in attempts]
+    return templates.TemplateResponse(
+        request, "selection.html", {"name": name, "attempts": records}
+    )
+
+
+@app.get("/sessions/{name}/planner", response_class=HTMLResponse)
+def planner_page(request: Request, name: str) -> HTMLResponse:
+    """Show `edl.json`'s clip list for debugging the planner stage."""
+    edl = _load_json(name, "edl.json")
+    return templates.TemplateResponse(request, "planner.html", {"name": name, "edl": edl})

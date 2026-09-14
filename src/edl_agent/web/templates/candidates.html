@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2><a href="/sessions/{{ name }}">{{ name }}</a> &mdash; candidates ({{ candidates | length }})</h2>
+  {% for c in candidates %}
+    <div class="candidate">
+      <h3>{{ c.id }} &mdash; {{ c.kind }}</h3>
+      <p>src={{ c.src }} score_cv={{ c.score_cv }} admits_slots={{ c.admits_slots }}</p>
+      {% for url in c.peak_urls %}
+        <img src="{{ url }}" alt="{{ c.id }} peak frame" height="160">
+      {% endfor %}
+    </div>
+  {% endfor %}
+{% endblock %}

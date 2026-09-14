@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2><a href="/sessions/{{ name }}">{{ name }}</a> &mdash; ingest</h2>
+  <table>
+    <tr>
+      <th>src</th><th>type</th><th>w x h</th><th>rotation</th>
+      <th>duration_s</th><th>hdr</th><th>proxy_verified</th>
+    </tr>
+    {% for s in manifest.sources %}
+    <tr>
+      <td>{{ s.src }}</td>
+      <td>{{ s.type }}</td>
+      <td>{{ s.w }}x{{ s.h }}</td>
+      <td>{{ s.rotation }}</td>
+      <td>{{ s.duration_s if s.type == "video" else "" }}</td>
+      <td>{{ s.hdr }}</td>
+      <td>{{ s.proxy_verified }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <h3>Target</h3>
+  <pre>{{ manifest.target | tojson(indent=2) }}</pre>
+  <h3>Music</h3>
+  <pre>{{ manifest.music | tojson(indent=2) }}</pre>
+{% endblock %}

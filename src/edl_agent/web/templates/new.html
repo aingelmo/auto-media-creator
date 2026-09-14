@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
   <h2>New session</h2>
+  {% if error %}
+    <p class="status-failed">{{ error }}</p>
+  {% endif %}
   <form action="/sessions" method="post" enctype="multipart/form-data">
     <label>Session name
       <input type="text" name="name" required pattern="[A-Za-z0-9_-]+">
@@ -8,8 +11,13 @@
     <label>Clips / photos
       <input type="file" name="clips" multiple required>
     </label>
-    <label>Music track (mp3)
-      <input type="file" name="music" accept="audio/mpeg" required>
+    <label>Music track (mp3, wav, or mp4/m4a)
+      <input
+        type="file"
+        name="music"
+        accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
+        required
+      >
     </label>
     <label>LLM provider
       <select name="provider" id="provider">

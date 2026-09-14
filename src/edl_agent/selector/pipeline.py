@@ -98,6 +98,8 @@ def select(
                 "status": interaction.status,
                 "usage": usage,
                 "cost_usd": cost,
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
             }
             if interaction.status != "incomplete":
                 attempt_record["output"] = json.loads(interaction.output_text)
@@ -109,6 +111,8 @@ def select(
                 "error": f"{type(exc).__name__}: {exc}",
                 "usage": None,
                 "cost_usd": 0.0,
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
             }
 
         attempts_usage.append(usage)

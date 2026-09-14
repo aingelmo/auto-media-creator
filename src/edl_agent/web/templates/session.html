@@ -2,6 +2,27 @@
 {% block content %}
   <h2>{{ name }}</h2>
 
+  {% set stage_links = {
+    "ingest": "/sessions/" ~ name ~ "/ingest",
+    "candidates": "/sessions/" ~ name ~ "/candidates",
+    "selection": "/sessions/" ~ name ~ "/selection",
+    "planner": "/sessions/" ~ name ~ "/planner",
+  } %}
+  <table id="stages">
+    <tr><th>Stage</th><th>Status</th></tr>
+    {% for s in stages %}
+    <tr>
+      <td>{{ s }}</td>
+      <td class="status-{{ stage_statuses[s] }}" data-stage="{{ s }}">
+        {{ stage_statuses[s] }}
+        {% if stage_statuses[s] in ("done", "failed") and s in stage_links %}
+          &mdash; <a href="{{ stage_links[s] }}">view</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+
   {% if reel_exists and (job is none or job.done and not job.error) %}
     <video controls width="640" src="/sessions/{{ name }}/reel.mp4"></video>
     <p><a href="/sessions/{{ name }}/reel.mp4" download>Download reel.mp4</a></p>
@@ -10,15 +31,25 @@
       <pre>{{ job.check_results | join("\n") }}</pre>
     {% endif %}
   {% elif job and job.error %}
-    <p class="status-failed">Failed at stage: {{ job.stage }}</p>
+    <p class="status-failed">Failed</p>
     <pre>{{ job.error }}</pre>
   {% elif job %}
-    <p class="status-running">Running: stage = <span id="stage">{{ job.stage }}</span></p>
+    <p class="status-running">Running&hellip;</p>
     <script>
+      const links = {{ stage_links | tojson }};
       async function poll() {
         const r = await fetch("/sessions/{{ name }}/status");
         const data = await r.json();
-        document.getElementById("stage").textContent = data.stage;
+        for (const [stage, status] of Object.entries(data.stages)) {
+          const cell = document.querySelector(`td[data-stage="${stage}"]`);
+          if (!cell) continue;
+          cell.className = `status-${status}`;
+          let html = status;
+          if ((status === "done" || status === "failed") && links[stage]) {
+            html += ` &mdash; <a href="${links[stage]}">view</a>`;
+          }
+          cell.innerHTML = html;
+        }
         if (data.done) { location.reload(); } else { setTimeout(poll, 3000); }
       }
       setTimeout(poll, 3000);
