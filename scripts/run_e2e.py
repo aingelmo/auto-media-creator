@@ -22,7 +22,13 @@ from edl_agent.render import (
     render_segments,
     run_render_checks,
 )
-from edl_agent.session import run_candidates, run_ingest, run_planner, run_selection
+from edl_agent.session import (
+    run_candidates,
+    run_hooks,
+    run_ingest,
+    run_planner,
+    run_selection,
+)
 from edl_agent.slots import slots_from_file
 
 POSE_MODEL = "models/yolov8n-pose.pt"
@@ -127,6 +133,15 @@ def main() -> None:
             json.dumps(selection_meta or {}, indent=2, ensure_ascii=False)
         )
 
+    hooks_path = session / "hooks.json"
+    if resume and hooks_path.exists():
+        hooks = _load_json(hooks_path)
+    else:
+        client = get_client(args.provider)
+        hooks = run_hooks(
+            session, candidates, slots, selection, args.theme, client, args.model
+        )
+
     edl_path = session / "edl.json"
     if resume and edl_path.exists():
         edl = _load_json(edl_path)
@@ -139,6 +154,11 @@ def main() -> None:
             selection,
             selection_meta,
             threads=args.threads,
+            config={
+                "hook_line_override": hooks["lines"][0]["text"]
+                if hooks["lines"]
+                else ""
+            },
         )
 
     reel_path = session / "reel.mp4"

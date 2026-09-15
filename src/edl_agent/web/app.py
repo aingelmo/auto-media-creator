@@ -88,6 +88,7 @@ def _stage_statuses(name: str) -> dict[str, str]:
         "ingest": "manifest.json",
         "candidates": "candidates.json",
         "selection": "selection.json",
+        "hooks": "hooks.json",
         "planner": "edl.json",
         "render": "reel.mp4",
         "checks": "reel.mp4",
@@ -168,7 +169,6 @@ async def create_session(
     provider: str = Form(...),
     model: str = Form(...),
     theme: str = Form("training"),
-    hook_line: str = Form(""),
     clips: list[UploadFile] = Form(...),
     music: UploadFile = Form(...),
     logo: UploadFile | None = None,
@@ -234,7 +234,6 @@ async def create_session(
         model,
         job,
         theme=theme,
-        hook_line=hook_line,
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -258,7 +257,6 @@ def retry_session(name: str, background_tasks: BackgroundTasks) -> RedirectRespo
         job,
         True,
         old_job.theme,
-        old_job.hook_line,
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -272,7 +270,6 @@ def regenerate_session(
     provider: str = Form(...),
     model: str = Form(...),
     theme: str = Form("training"),
-    hook_line: str = Form(""),
     logo: UploadFile | None = None,
     handle: str = Form(""),
     line: str = Form(""),
@@ -298,7 +295,7 @@ def regenerate_session(
     with _lock:
         _jobs[name] = job
     background_tasks.add_task(
-        run_pipeline_job, session_dir, provider, model, job, True, theme, hook_line
+        run_pipeline_job, session_dir, provider, model, job, True, theme
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -349,6 +346,9 @@ def session_confirm(
     proceed: bool = Form(...),
     exclude: list[str] = Form(default=[]),
     shorten: bool = Form(default=False),
+    hook_line: str = Form(""),
+    hook_custom: str = Form(""),
+    more: bool = Form(default=False),
 ) -> RedirectResponse:
     """Unblock a job paused on `awaiting_confirmation` (see `JobState`).
 
@@ -356,7 +356,10 @@ def session_confirm(
     `"verification"` pause, any `exclude` source paths (checked on the
     confirmation form) are dropped from the manifest. For a
     `"low_candidates"` pause, `shorten=True` re-cuts the music to the
-    suggested shorter duration instead of keeping the original one.
+    suggested shorter duration instead of keeping the original one. For a
+    `"hook_choice"` pause, `hook_custom` (if non-empty) wins over the
+    selected `hook_line` radio value, and `more=True` regenerates a fresh
+    batch of 6 lines instead of proceeding to the final render.
     """
     job = _jobs.get(name)
     if job is None or not job.awaiting_confirmation:
@@ -364,6 +367,8 @@ def session_confirm(
     job.cancelled = not proceed
     job.excluded_sources = exclude
     job.shorten = shorten
+    job.hook_choice = hook_custom.strip() or hook_line
+    job.more_hooks = more
     job.confirm_event.set()
     return RedirectResponse(f"/sessions/{name}", status_code=303)
 

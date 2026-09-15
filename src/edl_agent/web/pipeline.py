@@ -16,6 +16,7 @@ from edl_agent.ingest import cut_music, sha256_file, write_manifest
 from edl_agent.llm import get_client
 from edl_agent.render import (
     concat_and_audio,
+    render_hook_previews,
     render_preview_segments,
     render_segments,
     run_render_checks,
@@ -23,6 +24,7 @@ from edl_agent.render import (
 from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session import (
     run_candidates,
+    run_hooks,
     run_ingest,
     run_planner,
     run_selection,
@@ -66,6 +68,7 @@ STAGES = (
     "ingest",
     "candidates",
     "selection",
+    "hooks",
     "planner",
     "render",
     "checks",
@@ -78,6 +81,7 @@ STAGES = (
 STAGE_ARTIFACTS = {
     "candidates": ["candidates.json"],
     "selection": ["selection.json", "selection_meta.json"],
+    "hooks": ["hooks.json", "hook_previews"],
     "planner": ["edl.json"],
     "render": ["reel.mp4", "segments", "preview_segments"],
     "checks": [],
@@ -123,7 +127,7 @@ class JobState:
             `confirm_event`, either after `ingest` (`unverified_sources`
             non-empty) or after `candidates` (`low_candidates` non-empty).
         pause_kind: Which pause `awaiting_confirmation` refers to:
-            `"verification"` or `"low_candidates"`.
+            `"verification"`, `"low_candidates"`, or `"hook_choice"`.
         confirm_event: Set (via `/sessions/{name}/confirm`) to unblock a
             job paused on `awaiting_confirmation`.
         cancelled: `True` if the user chose not to proceed past the
@@ -143,6 +147,15 @@ class JobState:
             with; kept so `/sessions/{name}/retry` can relaunch it.
         model: LLM model this job was (or should be, on retry) run with.
         theme: Selector prompt theme (`"training"` | `"yoga"`).
+        hooks: Latest `hooks.json["lines"]` (`[{"angle", "text"}, ...]`),
+            for the hook-choice template.
+        hook_slot: Slot number of the hook clip, so the template can build
+            preview URLs (`hook_previews/{key}/seg_{hook_slot:02d}.mp4`).
+        hook_choice: Chosen/custom hook text (`""` = no text), set via
+            `/sessions/{name}/confirm` during a `"hook_choice"` pause.
+        more_hooks: `True` (set via `/sessions/{name}/confirm`) to
+            generate a fresh batch of 6 lines instead of proceeding to the
+            final render.
     """
 
     stages: dict[str, str] = field(
@@ -162,7 +175,10 @@ class JobState:
     provider: str = ""
     model: str = ""
     theme: str = "training"
-    hook_line: str = ""
+    hooks: list[dict] = field(default_factory=list)
+    hook_slot: int = 0
+    hook_choice: str = ""
+    more_hooks: bool = False
 
     @contextmanager
     def running(self, stage: str):  # noqa: ANN201 (contextmanager)
@@ -184,7 +200,6 @@ def run_pipeline_job(
     job: JobState,
     resume: bool = False,
     theme: str = "training",
-    hook_line: str = "",
 ) -> None:
     """Run the full ingest->render pipeline for a session, updating `job` along the way.
 
@@ -202,12 +217,10 @@ def run_pipeline_job(
         resume: If `True`, skip any stage whose output file already exists
             on disk (loading it instead), per `/sessions/{name}/retry`.
         theme: Selector prompt theme, a key of `edl_agent.selector.prompts.THEMES`.
-        hook_line: Operator-typed hook text (#6.6); `""` uses the selector's.
     """
     job.provider = provider
     job.model = model
     job.theme = theme
-    job.hook_line = hook_line
     try:
         manifest_path = session_dir / "manifest.json"
         slots_path = session_dir / "slots.json"
@@ -236,6 +249,7 @@ def run_pipeline_job(
                 job.pause_kind = "verification"
                 job.awaiting_confirmation = True
                 job.confirm_event.wait()
+                job.confirm_event.clear()
                 job.awaiting_confirmation = False
                 if job.cancelled:
                     return
@@ -281,6 +295,7 @@ def run_pipeline_job(
                 job.pause_kind = "low_candidates"
                 job.awaiting_confirmation = True
                 job.confirm_event.wait()
+                job.confirm_event.clear()
                 job.awaiting_confirmation = False
                 if job.cancelled:
                     return
@@ -349,10 +364,64 @@ def run_pipeline_job(
                 )
 
         edl_path = session_dir / "edl.json"
+        tonemap_chain = tonemap_chain_for_manifest(manifest)
         if resume and edl_path.exists():
+            job.stages["hooks"] = "done"
             job.stages["planner"] = "done"
             edl = json.loads(edl_path.read_text())
         else:
+            hooks_path = session_dir / "hooks.json"
+            while True:
+                if resume and hooks_path.exists() and not job.more_hooks:
+                    job.stages["hooks"] = "done"
+                    hooks = json.loads(hooks_path.read_text())
+                else:
+                    with job.running("hooks"):
+                        client = get_client(provider)
+                        hooks = run_hooks(
+                            session_dir,
+                            candidates,
+                            slots,
+                            selection,
+                            theme,
+                            client,
+                            model,
+                        )
+                job.hooks = hooks["lines"]
+                first_line = hooks["lines"][0]["text"] if hooks["lines"] else ""
+                preview_edl = run_planner(
+                    session_dir,
+                    manifest,
+                    candidates,
+                    slots,
+                    selection,
+                    selection_meta,
+                    threads=THREADS,
+                    config={"hook_line_override": first_line},
+                )
+                job.hook_slot = next(
+                    c["slot"] for c in preview_edl["clips"] if c["role"] == "hook"
+                )
+                render_hook_previews(
+                    preview_edl,
+                    manifest,
+                    session_dir,
+                    [line["text"] for line in hooks["lines"]],
+                    THREADS,
+                    tonemap_chain,
+                )
+
+                job.pause_kind = "hook_choice"
+                job.awaiting_confirmation = True
+                job.confirm_event.wait()
+                job.confirm_event.clear()
+                job.awaiting_confirmation = False
+                if job.cancelled:
+                    return
+                if not job.more_hooks:
+                    break
+                job.more_hooks = False
+
             with job.running("planner"):
                 edl = run_planner(
                     session_dir,
@@ -362,7 +431,10 @@ def run_pipeline_job(
                     selection,
                     selection_meta,
                     threads=THREADS,
-                    config={"hook_line_override": clean_hook_line(hook_line)},
+                    config={
+                        "hook_line_override": clean_hook_line(job.hook_choice),
+                        "hook_text": bool(clean_hook_line(job.hook_choice)),
+                    },
                 )
 
         reel_path = session_dir / "reel.mp4"
@@ -370,7 +442,6 @@ def run_pipeline_job(
             job.stages["render"] = "done"
         else:
             with job.running("render"):
-                tonemap_chain = tonemap_chain_for_manifest(manifest)
                 render_preview_segments(
                     edl,
                     manifest,

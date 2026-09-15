@@ -7,11 +7,8 @@ import json
 import requests
 
 from edl_agent.selector import admissible_candidates, build_parts, select
-from edl_agent.selector.prompts import (
-    build_system_prompt,
-    build_user_prompt,
-    selection_schema,
-)
+from edl_agent.selector.hooks import HOOK_ANGLES, generate_hooks, hooks_schema
+from edl_agent.selector.prompts import build_system_prompt, build_user_prompt
 
 
 def _cand(cid, admits, peak_frame):
@@ -233,12 +230,6 @@ def test_theme_switches_prompt_wording() -> None:
     assert "Hyrox" in build_user_prompt(6.0, _slots_json(), [])
 
 
-def test_hook_line_in_schema_and_prompt() -> None:
-    schema = selection_schema()
-    assert "hook_line" in schema["required"]
-    assert schema["properties"]["hook_line"]["type"] == "string"
-    assert "hook_line" in build_system_prompt("training")
-    assert "sereno" in build_system_prompt("yoga")
 
 
 def test_build_parts_sends_absolute_speed_and_prompt_explains_it(tmp_path) -> None:
@@ -257,4 +248,74 @@ def test_build_parts_sends_absolute_speed_and_prompt_explains_it(tmp_path) -> No
     del cand["kp_speed_abs"]
     assert "velocidad=0.00" in build_parts([cand], "p")[0]["text"]
     system = build_system_prompt("training")
-    assert "velocidad" in system and "No inventes cifras" in system
+    assert "velocidad" in system
+
+
+def test_hooks_schema_has_six_item_lines_with_angle_enum() -> None:
+    schema = hooks_schema()
+    lines = schema["properties"]["lines"]
+    assert lines["minItems"] == lines["maxItems"] == 6
+    assert lines["items"]["properties"]["angle"]["enum"] == [k for k, _ in HOOK_ANGLES]
+
+
+def _hook_cand():
+    return {
+        "id": "hook1",
+        "kind": "peak",
+        "src": "a.mov",
+        "multi_subject": False,
+        "kp_speed_abs": 1.5,
+        "peak_frames": [],
+    }
+
+
+def _hooks_payload(lines):
+    return {"lines": lines}
+
+
+def test_generate_hooks_cleans_dedupes_and_writes_hooks_json(tmp_path) -> None:
+    lines = [
+        {"angle": "reto", "text": "aguanta un segundo mas"},
+        {"angle": "pregunta", "text": "aguanta un segundo mas"},  # dup, dropped
+        {"angle": "momento", "text": " ".join(["palabra"] * 9)},  # too long, dropped
+        {"angle": "comunidad", "text": "hoy toca dar el cien por cien"},
+        {"angle": "contraste", "text": "antes dudabas, ahora no"},
+        {"angle": "confesion", "text": "esto me costo mas de lo que parece"},
+    ]
+    client = _FakeClient(
+        [_FakeInteraction("completed", json.dumps(_hooks_payload(lines)))]
+    )
+
+    result = generate_hooks(
+        _hook_cand(), "back squat", "training", client, "test-model", tmp_path
+    )
+
+    assert len(result["lines"]) == 4
+    texts = [line["text"] for line in result["lines"]]
+    assert texts.count("aguanta un segundo mas") == 1
+    assert (tmp_path / "hooks.json").exists()
+    assert json.loads((tmp_path / "hooks.json").read_text())["lines"] == result["lines"]
+
+
+def test_generate_hooks_retries_once_when_fewer_than_three_survive(tmp_path) -> None:
+    bad = _hooks_payload([{"angle": "reto", "text": ""}] * 6)
+    good = _hooks_payload(
+        [
+            {"angle": "reto", "text": "vamos, una mas"},
+            {"angle": "pregunta", "text": "hasta donde llegas hoy"},
+            {"angle": "momento", "text": "asi se levanta la barra"},
+        ]
+    )
+    client = _FakeClient(
+        [
+            _FakeInteraction("completed", json.dumps(bad)),
+            _FakeInteraction("completed", json.dumps(good)),
+        ]
+    )
+
+    result = generate_hooks(
+        _hook_cand(), "back squat", "training", client, "test-model", tmp_path
+    )
+
+    assert len(result["lines"]) == 3
+    assert len(client.interactions.calls) == 2

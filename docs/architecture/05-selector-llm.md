@@ -71,10 +71,9 @@ Compatible con structured output de Gemini (sin `$schema`, sin `const`, sin `def
         "required": ["candidate_id", "reason"]
       }
     },
-    "notes": { "type": "string", "description": "Vacío salvo problemas globales (pocos candidatos válidos, todo el material repetido, etc.)." },
-    "hook_line": { "type": "string", "description": "Frase gancho para el primer segundo del Reel, en español, 3–6 palabras, mayúsculas iniciales, sin emojis ni comillas. Concreta y visual: qué se ve, no un eslogan genérico." }
+    "notes": { "type": "string", "description": "Vacío salvo problemas globales (pocos candidatos válidos, todo el material repetido, etc.)." }
   },
-  "required": ["selected", "rejected", "notes", "hook_line"]
+  "required": ["selected", "rejected", "notes"]
 }
 ```
 
@@ -127,4 +126,15 @@ Se adjunta a cada candidato solo `id`, `kind`, `src`, `multi_subject`; no se pas
 - Máximo 2 reintentos al LLM en total por sesión, y solo por `status: incomplete`. El resto se repara en código o con fallback **parcial**.
 - Cada intento se guarda como `selection_attempt_N.json` con `usage` (tokens de entrada, salida y thinking), `status` y coste calculado.
 
+### 5.7 Hook lines — `hooks.json`
+
+Ya no hay un único `hook_line` dentro de `selection.json`. Tras la selección hay una llamada LLM separada (mismo proveedor/modelo) que genera 6 líneas por lote, una por ángulo forzado (`reto`, `pregunta`, `momento`, `comunidad`, `contraste`, `confesion` — ver `HOOK_ANGLES` en `selector/hooks.py`).
+
+Input: los 3 fotogramas de pico del candidato hook elegido, el ejercicio y el tema (`training`/`yoga`), igual que el resto del selector. No se le pasan tiempos ni coordenadas.
+
+Tono: español de España, tuteo, casual/minúsculas, sin nombre de marca ni gimnasio, concreto sobre lo que se ve en pantalla; máximo 6 palabras por línea.
+
+Cada línea se limpia con `clean_hook_line` (mismo saneo que antes se aplicaba al `hook_line` único) y se deduplican. Si sobreviven menos de 3 tras el saneo, se reintenta una vez con el prompt reforzado (`REINFORCED_SUFFIX`). El resultado se escribe en `hooks.json` (`generate_hooks` en `session/hooks.py`) junto con `usage`/`cost_usd` como el resto de llamadas LLM.
+
+El operador ve las 6 líneas renderizadas sobre el hook (más una variante sin texto) en la pausa `hook_choice` de la web UI, y elige una, escribe texto propio, o "sin texto"; el CLI usa la línea #1 sin pausa.
 

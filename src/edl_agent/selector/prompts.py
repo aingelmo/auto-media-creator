@@ -34,12 +34,6 @@ El orden en el montaje lo decide otro sistema.
 4. exercise: usa exactamente un nombre de la lista canónica; si no encaja, "other".
 5. Si hay menos de 3 candidatos válidos para develop o ninguno para hook o close, \
 explícalo en notes. No inventes candidatos ni fuerces rechazos para cumplir cuotas.
-6. hook_line: una frase de 3-6 palabras para sobreimprimir en el hook. Debe \
-describir lo que se ve en el candidato hook (ejercicio, intensidad, momento), \
-no el gimnasio. No inventes cifras (repeticiones, kilos, saltos) ni \
-intensidad que velocidad no respalde. Tono: {hook_line}. Ejemplos: \
-"Última rep, sin excusas", \
-"La barra sube igual", "Así empieza el lunes".
 
 Reglas:
 - Usa solo candidate_id existentes. No emitas tiempos ni coordenadas.
@@ -48,7 +42,7 @@ ejercicio específico salvo que sea exactamente el de "exercise" (si \
 "exercise" es "other", no inventes un nombre de ejercicio en reason).
 - Responde únicamente con el JSON del schema."""
 
-REINFORCED_SUFFIX = "\n\nreason: máximo 8 palabras. hook_line: máximo 6 palabras."
+REINFORCED_SUFFIX = "\n\nreason: máximo 8 palabras."
 
 _CLOSE_FALLBACK = (
     "si no hay ninguno disponible, usa el candidato peak que se vea más "
@@ -100,8 +94,7 @@ def selection_schema() -> dict:
         JSON schema dict (draft-agnostic subset understood by Gemini's
         structured-output feature) requiring `selected` (list of
         `{candidate_id, role, rank, exercise, reason}`), `rejected` (list
-        of `{candidate_id, reason}`), `notes` (string), and `hook_line`
-        (string, the 3-6 word overlay for the hook segment).
+        of `{candidate_id, reason}`), and `notes` (string).
     """
     return {
         "type": "object",
@@ -154,16 +147,8 @@ def selection_schema() -> dict:
                     "todo el material repetido, etc.)."
                 ),
             },
-            "hook_line": {
-                "type": "string",
-                "description": (
-                    "Frase gancho para el primer segundo del Reel, en español, "
-                    "3-6 palabras, mayúsculas iniciales, sin emojis ni comillas. "
-                    "Concreta y visual: qué se ve, no un eslogan genérico."
-                ),
-            },
         },
-        "required": ["selected", "rejected", "notes", "hook_line"],
+        "required": ["selected", "rejected", "notes"],
     }
 
 
@@ -201,9 +186,7 @@ def build_system_prompt(theme: str = "training") -> str:
         System prompt text (in Spanish).
     """
     t = THEMES[theme]
-    return SYSTEM_PROMPT_TEMPLATE.format(
-        hook=t["hook"], close=t["close"], hook_line=t["hook_line"]
-    )
+    return SYSTEM_PROMPT_TEMPLATE.format(hook=t["hook"], close=t["close"])
 
 
 def build_user_prompt(

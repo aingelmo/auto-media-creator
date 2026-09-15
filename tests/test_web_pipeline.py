@@ -40,8 +40,13 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
         candidates_seen["manifest"] = manifest
         return {"candidates": []}
 
-    def fake_run_planner(session_dir, manifest, candidates, slots, selection, meta, **kw):
-        return {"clips": []}
+    def fake_run_planner(
+        session_dir, manifest, candidates, slots, selection, meta, **kw
+    ):
+        return {"clips": [{"slot": 0, "role": "hook", "effect_params": {}}]}
+
+    def fake_run_hooks(session_dir, candidates, slots, selection, theme, client, model):
+        return {"lines": [{"angle": "reto", "text": "vamos"}]}
 
     ollama_reply = _fake_ollama_response(
         {
@@ -62,7 +67,9 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
         patch(
             "edl_agent.web.pipeline.run_candidates", side_effect=fake_run_candidates
         ),
+        patch("edl_agent.web.pipeline.run_hooks", side_effect=fake_run_hooks),
         patch("edl_agent.web.pipeline.run_planner", side_effect=fake_run_planner),
+        patch("edl_agent.web.pipeline.render_hook_previews"),
         patch("edl_agent.web.pipeline.render_preview_segments"),
         patch("edl_agent.web.pipeline.render_segments"),
         patch("edl_agent.web.pipeline.concat_and_audio"),
@@ -86,6 +93,16 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
 
         # Simulate the user excluding the bad clip and continuing.
         job.excluded_sources = ["inputs/bad.mov"]
+        job.cancelled = False
+        job.confirm_event.set()
+
+        # hooks stage pauses for the hook-choice screen next.
+        deadline = time.monotonic() + 5
+        while job.pause_kind != "hook_choice" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert job.pause_kind == "hook_choice"
+        job.hook_choice = ""
+        job.more_hooks = False
         job.cancelled = False
         job.confirm_event.set()
         thread.join(timeout=10)
@@ -148,8 +165,13 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
         ]
     }
 
-    def fake_run_planner(session_dir, manifest, candidates, slots, selection, meta, **kw):
-        return {"clips": []}
+    def fake_run_planner(
+        session_dir, manifest, candidates, slots, selection, meta, **kw
+    ):
+        return {"clips": [{"slot": 0, "role": "hook", "effect_params": {}}]}
+
+    def fake_run_hooks(session_dir, candidates, slots, selection, theme, client, model):
+        return {"lines": [{"angle": "reto", "text": "vamos"}]}
 
     job = JobState()
     with (
@@ -166,7 +188,9 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
             "edl_agent.web.pipeline.run_selection",
             return_value=({"selected": [], "rejected": [], "notes": ""}, {}),
         ),
+        patch("edl_agent.web.pipeline.run_hooks", side_effect=fake_run_hooks),
         patch("edl_agent.web.pipeline.run_planner", side_effect=fake_run_planner),
+        patch("edl_agent.web.pipeline.render_hook_previews"),
         patch("edl_agent.web.pipeline.render_preview_segments"),
         patch("edl_agent.web.pipeline.render_segments"),
         patch("edl_agent.web.pipeline.concat_and_audio"),
@@ -190,6 +214,15 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
         }
 
         job.shorten = True
+        job.cancelled = False
+        job.confirm_event.set()
+
+        deadline = time.monotonic() + 5
+        while job.pause_kind != "hook_choice" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert job.pause_kind == "hook_choice"
+        job.hook_choice = ""
+        job.more_hooks = False
         job.cancelled = False
         job.confirm_event.set()
         thread.join(timeout=10)

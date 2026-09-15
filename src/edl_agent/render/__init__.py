@@ -23,6 +23,7 @@ from edl_agent.render.checks import (
 )
 from edl_agent.render.concat import concat_and_audio
 from edl_agent.render.crop import crop_to_px, is_916
+from edl_agent.render.hook_previews import render_hook_previews
 from edl_agent.render.pipeline import run_render
 from edl_agent.render.profile import get_render_profile
 from edl_agent.render.segments import (
@@ -51,6 +52,7 @@ __all__ = [
     "get_render_profile",
     "is_916",
     "render_end_card_segment",
+    "render_hook_previews",
     "render_image_segment",
     "render_preview_segments",
     "render_segment",

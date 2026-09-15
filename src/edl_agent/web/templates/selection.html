@@ -14,9 +14,6 @@
       <h4>User</h4>
       <pre>{{ a.user_prompt }}</pre>
     </details>
-    {% if a.output and a.output.hook_line %}
-      <p><strong>hook_line:</strong> {{ a.output.hook_line }}</p>
-    {% endif %}
     {% if a.output %}
       <h4>Output</h4>
       <pre>{{ a.output | tojson(indent=2) }}</pre>

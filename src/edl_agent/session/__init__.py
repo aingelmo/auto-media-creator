@@ -14,6 +14,7 @@ from edl_agent.session._common import (
     tonemap_chain_for_manifest,
 )
 from edl_agent.session.candidates import run_candidates
+from edl_agent.session.hooks import run_hooks
 from edl_agent.session.ingest import run_ingest
 from edl_agent.session.planner import run_planner
 from edl_agent.slots import FRAME_RATE
@@ -22,6 +23,7 @@ __all__ = [
     "IMAGE_EXTS",
     "VIDEO_EXTS",
     "run_candidates",
+    "run_hooks",
     "run_ingest",
     "run_planner",
     "run_selection",

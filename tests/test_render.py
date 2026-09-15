@@ -284,3 +284,42 @@ def test_drawtext_escape_survives_both_ffmpeg_parsers() -> None:
         "100% real\\\\: it\\\\\\'s\\, a\\\\\\\\b"
     )
     assert _drawtext_escape("Sube el peso") == "Sube el peso"
+
+
+def test_render_hook_previews_builds_one_variant_per_line_plus_none(
+    session_dir, monkeypatch
+) -> None:
+    from edl_agent.planner._common import DEFAULT_CONFIG
+    from edl_agent.render.hook_previews import render_hook_previews
+
+    hook_clip = _clip(0, "hook", "inputs/a.mp4", 360, 640, 0.0, 1.0, 30, 1.0, 0, 30)
+    hook_clip["effect_params"] = {
+        "text": "Sube el peso",
+        "font": DEFAULT_CONFIG["hook_text_font"],
+    }
+    other_clip = _clip(1, "close", "inputs/a.mp4", 360, 640, 1.0, 2.0, 30, 1.0, 30, 60)
+    edl = {"clips": [hook_clip, other_clip], "brand": None}
+    manifest = {"sources": [{"src": "inputs/a.mp4"}]}
+
+    calls: list[dict] = []
+
+    def fake_render_segment(clip, sources_by_src, sess_dir, out_dir, *a: object, **kw):
+        calls.append({"clip": clip, "out_dir": out_dir})
+        return out_dir / f"seg_{clip['slot']:02d}.mp4"
+
+    monkeypatch.setattr(
+        "edl_agent.render.hook_previews.render_segment", fake_render_segment
+    )
+
+    paths = render_hook_previews(
+        edl, manifest, session_dir, ["primera linea", "segunda linea"], 4, ""
+    )
+
+    assert set(paths) == {"none", "0", "1"}
+    by_key = {out_dir.name: clip for clip, out_dir in (
+        (c["clip"], c["out_dir"]) for c in calls
+    )}
+    assert "text" not in by_key["none"]["effect_params"]
+    assert by_key["0"]["effect_params"]["text"] == "primera linea"
+    assert by_key["1"]["effect_params"]["text"] == "segunda linea"
+    assert all(c["clip"]["slot"] == 0 for c in calls)  # only the hook clip is rendered

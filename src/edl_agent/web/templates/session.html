@@ -6,6 +6,7 @@
     "ingest": "/sessions/" ~ name ~ "/ingest",
     "candidates": "/sessions/" ~ name ~ "/candidates",
     "selection": "/sessions/" ~ name ~ "/selection",
+    "hooks": "/sessions/" ~ name ~ "/files/hooks.json",
     "planner": "/sessions/" ~ name ~ "/planner",
   } %}
   <table id="stages">
@@ -75,6 +76,40 @@
         <button type="submit">Cancel run</button>
       </form>
     </div>
+  {% elif job and job.awaiting_confirmation and job.pause_kind == "hook_choice" %}
+    <div class="warning">
+      <p><strong>Pick a hook line</strong> (or none, or write your own).</p>
+      <form method="post" action="/sessions/{{ name }}/confirm">
+        <input type="hidden" name="proceed" value="true">
+        <div class="hooks">
+          <figure>
+            <video autoplay loop muted playsinline width="180"
+                   src="/sessions/{{ name }}/files/hook_previews/none/seg_{{ "%02d"|format(job.hook_slot) }}.mp4"></video>
+            <figcaption>
+              <label><input type="radio" name="hook_line" value="" checked> sin texto</label>
+            </figcaption>
+          </figure>
+          {% for line in job.hooks %}
+          <figure>
+            <video autoplay loop muted playsinline width="180"
+                   src="/sessions/{{ name }}/files/hook_previews/{{ loop.index0 }}/seg_{{ "%02d"|format(job.hook_slot) }}.mp4"></video>
+            <figcaption>
+              <label><input type="radio" name="hook_line" value="{{ line.text }}"> {{ line.text }} ({{ line.angle }})</label>
+            </figcaption>
+          </figure>
+          {% endfor %}
+        </div>
+        <label>Custom text (wins over the radio above if non-empty)
+          <input type="text" name="hook_custom" maxlength="40" placeholder="Último rep, sin excusas">
+        </label>
+        <button type="submit">Render with this hook</button>
+        <button type="submit" name="more" value="true">Generate 6 more</button>
+      </form>
+      <form method="post" action="/sessions/{{ name }}/confirm">
+        <input type="hidden" name="proceed" value="false">
+        <button type="submit">Cancel run</button>
+      </form>
+    </div>
   {% elif reel_exists and (job is none or job.done and not job.error) %}
     <video controls width="640" src="/sessions/{{ name }}/reel.mp4"></video>
     <p><a href="/sessions/{{ name }}/reel.mp4" download>Download reel.mp4</a></p>
@@ -89,6 +124,7 @@
         <select name="from_stage" id="from_stage">
           <option value="candidates">candidates</option>
           <option value="selection" selected>selection</option>
+          <option value="hooks">hooks</option>
           <option value="planner">planner</option>
           <option value="render">render</option>
         </select>
@@ -108,9 +144,6 @@
           <option value="training">training (CrossFit / Hyrox / funcional)</option>
           <option value="yoga">yoga</option>
         </select>
-      </label>
-      <label>Hook text (optional, max 6 words; blank = let the LLM write it)
-        <input type="text" name="hook_line" maxlength="40" placeholder="Último rep, sin excusas">
       </label>
       <fieldset>
         <legend>Brand (optional; new logo replaces the session's, applies from planner on)</legend>

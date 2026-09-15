@@ -163,14 +163,10 @@ def _build_scenario(n_develop: int, aspect_dims: tuple[int, int], seed: int):
     return slots, selected, candidates_by_id, sources_by_src
 
 
-def test_hook_line_override_wins_over_selector_line() -> None:
+def test_hook_line_override_is_used() -> None:
     slots, selected, candidates_by_id, sources_by_src = _build_scenario(
         2, (1920, 1080), seed=0
     )
-    hook = next(e for e in selected if e["role"] == "hook")
-    hook["hook_line"] = "Del selector"
-    clips, _ = build_clips(slots, selected, candidates_by_id, sources_by_src)
-    assert clips[0]["effect_params"]["text"] == "Del selector"
     clips, _ = build_clips(
         slots,
         selected,

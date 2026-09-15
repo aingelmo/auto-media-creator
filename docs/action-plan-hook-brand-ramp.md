@@ -108,6 +108,8 @@ setpts='if(lt(T,t_a), PTS, if(lt(T,t_b), (t_a + (T - t_a)/s)/TB, (t_a + ramp_fra
 
 ## Step 1 — Hook text overlay
 
+> Superseded 2026-09-15 by the hook-choice flow (see `docs/architecture/05-selector-llm.md` §5.7): the single selector-LLM `hook_line` described below no longer exists. Hook lines now come from a separate LLM call generating 6 lines/angles into `hooks.json`, with an operator pick step (`hook_choice` pause) in the web UI. The text-overlay rendering mechanics below (fade timing, `effect_params`, `_drawtext_escape`) are still accurate.
+
 ### Goal
 A short Spanish hook line (3–6 words) written by the selector LLM, burned into the hook segment: large, centred horizontally, in the upper-middle safe zone, fades in over 8 frames at frame 0 and fades out over 8 frames ending at `min(hook_n_frames, 60)`. Off by default for `theme == "yoga"`? No: on for both, the LLM writes a theme-appropriate line.
 
