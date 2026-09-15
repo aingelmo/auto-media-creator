@@ -74,7 +74,7 @@ def _overlaps_used(
 def _take_develop_pool(
     pool: list[dict],
     candidates_by_id: dict,
-    free_durations: list[int],
+    free_slots: list[dict],
     used: list[dict],
     config: dict,
     k: int,
@@ -90,8 +90,14 @@ def _take_develop_pool(
     `allow_exercise_repeat`/`allow_src_repeat`, and the anti-overlap
     margin used against `used` is `gap_s` instead of
     `config["adjacency_gap_s"]`.
+
+    `free_slots` holds the real develop slot dicts (with their real
+    `beats_rel_f`), not just durations: the anti-overlap check needs
+    `compute_in_out`'s actual beat-aligned `in_s`/`out_s`, or it drifts
+    from what `build_clips` computes later for the real slot and can
+    let a same-source overlap through undetected (P7).
     """
-    free_durations = list(free_durations)
+    free_slots = list(free_slots)
     used = list(used)
     taken: list[dict] = []
     prev_exercise: str | None = None
@@ -100,10 +106,15 @@ def _take_develop_pool(
         if len(taken) >= k:
             break
         cand = candidates_by_id[s["candidate_id"]]
-        admissible_d_f = next(
-            (d for d in free_durations if admits(tuple(cand["window"]), d, 1.0)), None
+        admissible_slot = next(
+            (
+                sl
+                for sl in free_slots
+                if admits(tuple(cand["window"]), sl["end_f"] - sl["start_f"], 1.0)
+            ),
+            None,
         )
-        if admissible_d_f is None:
+        if admissible_slot is None:
             continue
         exercise = _norm_exercise(s["exercise"])
         # "unknown" (rules-fallback, #8.6) and "other" (selector's own
@@ -120,11 +131,7 @@ def _take_develop_pool(
         if not allow_src_repeat and prev_src is not None and cand["src"] == prev_src:
             continue
         timing = compute_in_out(
-            cand,
-            {"start_f": 0, "end_f": admissible_d_f, "beats_rel_f": [0]},
-            role="develop",
-            ramp=None,
-            config=config,
+            cand, admissible_slot, role="develop", ramp=None, config=config
         )
         if _overlaps_used(cand, timing["in_s"], timing["out_s"], used, gap_s):
             continue
@@ -132,7 +139,7 @@ def _take_develop_pool(
         used.append(
             {"src": cand["src"], "in_s": timing["in_s"], "out_s": timing["out_s"]}
         )
-        free_durations.remove(admissible_d_f)
+        free_slots.remove(admissible_slot)
         prev_exercise = exercise
         prev_src = cand["src"]
     return taken
@@ -187,7 +194,7 @@ def select_develop(
         not yet placed into slot order (see `place_develop_arc` for that).
     """
     k = len(develop_slots)
-    free_durations = [s["end_f"] - s["start_f"] for s in develop_slots]
+    free_slots = list(develop_slots)
     pool = sorted(
         (s for s in selected if s["role"] == "develop"),
         key=lambda s: s["rank"],
@@ -205,7 +212,7 @@ def select_develop(
         candidate_taken = _take_develop_pool(
             pool,
             candidates_by_id,
-            free_durations,
+            free_slots,
             used,
             config,
             k,
