@@ -5,9 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from pathlib import Path
 
 from edl_agent.render._common import (
     COLOR_FIX_FILTER_TEMPLATE,
+    HOOK_TEXT_FILTER_TEMPLATE,
     RAMP_SETPTS_TEMPLATE,
     _video_codec_args,
 )
@@ -45,8 +47,17 @@ def _ffmpeg_version_info() -> dict:
     return {"ffmpeg_version": version, "ffmpeg_configuration": configuration}
 
 
+def _file_sha256(path: str | None) -> str | None:
+    if not path or not Path(path).is_file():
+        return None
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
 def get_render_profile(
-    threads: int = 4, tonemap_chain: str = "", tonemap_chain_pq: str | None = None
+    threads: int = 4,
+    tonemap_chain: str = "",
+    tonemap_chain_pq: str | None = None,
+    hook_text_font: str | None = None,
 ) -> dict:
     """Describe everything needed to re-render bit-for-bit, per #7/#10.
 
@@ -56,6 +67,8 @@ def get_render_profile(
             proxies/segments during this session.
         tonemap_chain_pq: HDR (PQ) tonemap filter chain, if applicable;
             `None` otherwise.
+        hook_text_font: Font file used by the hook text overlay (#6.6), so a
+            font change alters `profile_sha256`; `None` if no hook text.
 
     Returns:
         Dict with keys `ffmpeg_version`, `ffmpeg_configuration`,
@@ -66,7 +79,9 @@ def get_render_profile(
         `blur_pad_filter_template`, `image_filter_template`, each a format
         string with `{...}` placeholders filled in per-clip;
         `color_fix_filter_template` fills `{color_fix}`, #6.7;
-        `ramp_setpts_template` fills `{setpts}` for `effect == "ramp"`),
+        `ramp_setpts_template` fills `{setpts}` for `effect == "ramp"`;
+        `hook_text_filter_template` fills `{text}` for the hook, with
+        `hook_text_font`/`hook_text_font_sha256`),
         `audio_codec_args` (str), and `profile_sha256` (str, hash of the
         rest of the dict, for reproducibility checks).
     """
@@ -80,12 +95,12 @@ def get_render_profile(
         "video_codec_args": " ".join(_video_codec_args(threads, preview=False)),
         "segment_filter_template": (
             "crop={w}:{h}:{x}:{y},setpts={setpts},fps=30,"
-            "scale={tw}:{th}:flags=lanczos,{hdr}setsar=1,format=yuv420p"
+            "scale={tw}:{th}:flags=lanczos,{hdr}{color_fix}{text}setsar=1,format=yuv420p"
         ),
         "blur_pad_filter_template": (
             "[0:v]setpts={setpts},fps=30,scale='if(gt(iw,ih),-2,{tw})':'if(gt(iw,ih),{tw},-2)':flags=lanczos,{hdr}split[a][b];"
             "[a]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur={blur_radius}:{blur_power},eq=brightness={bg_brightness}[bg];"
-            "[b]scale={tw}:-2:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[v]"
+            "[b]scale={tw}:-2:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}setsar=1,format=yuv420p[v]"
         ),
         "image_filter_template": (
             "crop={w}:{h}:{x}:{y},scale={ptw}:{pth}:flags=lanczos,"
@@ -94,6 +109,9 @@ def get_render_profile(
         ),
         "color_fix_filter_template": COLOR_FIX_FILTER_TEMPLATE,
         "ramp_setpts_template": RAMP_SETPTS_TEMPLATE,
+        "hook_text_filter_template": HOOK_TEXT_FILTER_TEMPLATE,
+        "hook_text_font": hook_text_font,
+        "hook_text_font_sha256": _file_sha256(hook_text_font),
         "audio_codec_args": "-c:a aac -b:a 192k -ar 48000",
     }
     profile["profile_sha256"] = hashlib.sha256(

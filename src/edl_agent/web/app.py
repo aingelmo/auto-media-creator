@@ -146,6 +146,7 @@ async def create_session(
     provider: str = Form(...),
     model: str = Form(...),
     theme: str = Form("training"),
+    hook_line: str = Form(""),
     clips: list[UploadFile] = Form(...),
     music: UploadFile = Form(...),
 ) -> HTMLResponse | RedirectResponse:
@@ -200,7 +201,13 @@ async def create_session(
     with _lock:
         _jobs[name] = job
     background_tasks.add_task(
-        run_pipeline_job, session_dir, provider, model, job, theme=theme
+        run_pipeline_job,
+        session_dir,
+        provider,
+        model,
+        job,
+        theme=theme,
+        hook_line=hook_line,
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -224,6 +231,7 @@ def retry_session(name: str, background_tasks: BackgroundTasks) -> RedirectRespo
         job,
         True,
         old_job.theme,
+        old_job.hook_line,
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -237,6 +245,7 @@ def regenerate_session(
     provider: str = Form(...),
     model: str = Form(...),
     theme: str = Form("training"),
+    hook_line: str = Form(""),
 ) -> RedirectResponse:
     """Force `from_stage` onward to redo, reusing already-completed earlier stages."""
     session_dir = SESSIONS_DIR / name
@@ -251,7 +260,7 @@ def regenerate_session(
     with _lock:
         _jobs[name] = job
     background_tasks.add_task(
-        run_pipeline_job, session_dir, provider, model, job, True, theme
+        run_pipeline_job, session_dir, provider, model, job, True, theme, hook_line
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)

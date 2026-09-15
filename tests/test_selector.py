@@ -7,7 +7,11 @@ import json
 import requests
 
 from edl_agent.selector import admissible_candidates, build_parts, select
-from edl_agent.selector.prompts import build_system_prompt, build_user_prompt
+from edl_agent.selector.prompts import (
+    build_system_prompt,
+    build_user_prompt,
+    selection_schema,
+)
 
 
 def _cand(cid, admits, peak_frame):
@@ -227,3 +231,11 @@ def test_theme_switches_prompt_wording() -> None:
     assert "savasana" in yoga and "Solo tipo peak" in yoga
     assert "yoga" in build_user_prompt(6.0, _slots_json(), [], "yoga")
     assert "Hyrox" in build_user_prompt(6.0, _slots_json(), [])
+
+
+def test_hook_line_in_schema_and_prompt() -> None:
+    schema = selection_schema()
+    assert "hook_line" in schema["required"]
+    assert schema["properties"]["hook_line"]["type"] == "string"
+    assert "hook_line" in build_system_prompt("training")
+    assert "sereno" in build_system_prompt("yoga")

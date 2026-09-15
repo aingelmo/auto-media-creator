@@ -104,7 +104,7 @@
             "required": ["x", "y", "w", "h"]
           },
           "effect": { "type": "string", "enum": ["none", "kenburns", "ramp"] },
-          "effect_params": { "type": "object" },
+          "effect_params": { "type": "object", "description": "Con clave `text` (+ font, font_size, text_y, text_frames, fade_frames) el render sobreimprime el hook_line del selector (§6.6)" },
           "color_fix": {
             "type": "object",
             "description": "Opcional (§6.7). Ausente => sin igualación de color, render idéntico a v4 previo",

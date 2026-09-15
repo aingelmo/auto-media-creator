@@ -163,6 +163,24 @@ def _build_scenario(n_develop: int, aspect_dims: tuple[int, int], seed: int):
     return slots, selected, candidates_by_id, sources_by_src
 
 
+def test_hook_line_override_wins_over_selector_line() -> None:
+    slots, selected, candidates_by_id, sources_by_src = _build_scenario(
+        2, (1920, 1080), seed=0
+    )
+    hook = next(e for e in selected if e["role"] == "hook")
+    hook["hook_line"] = "Del selector"
+    clips, _ = build_clips(slots, selected, candidates_by_id, sources_by_src)
+    assert clips[0]["effect_params"]["text"] == "Del selector"
+    clips, _ = build_clips(
+        slots,
+        selected,
+        candidates_by_id,
+        sources_by_src,
+        {"hook_line_override": "Del operador"},
+    )
+    assert clips[0]["effect_params"]["text"] == "Del operador"
+
+
 @pytest.mark.parametrize(("aspect_name", "w", "h"), ASPECTS)
 @pytest.mark.parametrize("n_develop", [1, 2, 4, 5, 6])
 def test_planner_invariants(aspect_name, w, h, n_develop) -> None:
@@ -454,3 +472,30 @@ def test_select_develop_relaxation_cant_manufacture_missing_candidates() -> None
 
     with pytest.raises(PlannerError, match="not enough develop candidates"):
         assign_slots(slots, selected, candidates_by_id)
+
+
+def test_effect_for_hook_text_params() -> None:
+    from edl_agent.planner import DEFAULT_CONFIG
+    from edl_agent.planner.effects import effect_for
+
+    cand = {"kind": "peak"}
+    effect, params = effect_for(
+        cand, "crop", DEFAULT_CONFIG, None, ("Sube el peso", 45)
+    )
+    assert effect == "none"
+    assert params["text"] == "Sube el peso"
+    assert params["font_size"] == DEFAULT_CONFIG["hook_text_size"]
+    assert params["text_frames"] == 45
+
+    _, params = effect_for(
+        cand, "crop", DEFAULT_CONFIG, None, ("Último rep, sin excusas", 45)
+    )
+    assert 40 <= params["font_size"] < DEFAULT_CONFIG["hook_text_size"]
+    assert params["fade_frames"] == DEFAULT_CONFIG["hook_text_fade_frames"]
+
+    _, params = effect_for(cand, "crop", DEFAULT_CONFIG, None, ("", 45))
+    assert "text" not in params
+    _, params = effect_for(
+        cand, "crop", {**DEFAULT_CONFIG, "hook_text": False}, None, ("x", 45)
+    )
+    assert "text" not in params

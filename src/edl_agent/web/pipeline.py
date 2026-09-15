@@ -20,6 +20,7 @@ from edl_agent.render import (
     render_segments,
     run_render_checks,
 )
+from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session import (
     run_candidates,
     run_ingest,
@@ -161,6 +162,7 @@ class JobState:
     provider: str = ""
     model: str = ""
     theme: str = "training"
+    hook_line: str = ""
 
     @contextmanager
     def running(self, stage: str):  # noqa: ANN201 (contextmanager)
@@ -182,6 +184,7 @@ def run_pipeline_job(
     job: JobState,
     resume: bool = False,
     theme: str = "training",
+    hook_line: str = "",
 ) -> None:
     """Run the full ingest->render pipeline for a session, updating `job` along the way.
 
@@ -199,10 +202,12 @@ def run_pipeline_job(
         resume: If `True`, skip any stage whose output file already exists
             on disk (loading it instead), per `/sessions/{name}/retry`.
         theme: Selector prompt theme, a key of `edl_agent.selector.prompts.THEMES`.
+        hook_line: Operator-typed hook text (#6.6); `""` uses the selector's.
     """
     job.provider = provider
     job.model = model
     job.theme = theme
+    job.hook_line = hook_line
     try:
         manifest_path = session_dir / "manifest.json"
         slots_path = session_dir / "slots.json"
@@ -357,6 +362,7 @@ def run_pipeline_job(
                     selection,
                     selection_meta,
                     threads=THREADS,
+                    config={"hook_line_override": clean_hook_line(hook_line)},
                 )
 
         reel_path = session_dir / "reel.mp4"

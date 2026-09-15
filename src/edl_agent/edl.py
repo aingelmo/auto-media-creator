@@ -214,7 +214,12 @@ def build_edl(
     warnings = warnings + clip_warnings
     warnings = warnings + _aggregate_warnings(clips, warnings)
 
-    render_profile = get_render_profile(threads, tonemap_chain, tonemap_chain_pq)
+    render_profile = get_render_profile(
+        threads,
+        tonemap_chain,
+        tonemap_chain_pq,
+        hook_text_font=str(config["hook_text_font"]) if config["hook_text"] else None,
+    )
 
     return {
         "version": VERSION,

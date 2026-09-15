@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 FINAL_TARGET = {"w": 1080, "h": 1920}
 PREVIEW_TARGET = {"w": 540, "h": 960}
 
@@ -78,3 +80,46 @@ def setpts_expr(clip: dict) -> str:
     t_a = p["ramp_start_f"] / 30
     t_b = t_a + n / 30 * s
     return RAMP_SETPTS_TEMPLATE.format(t_a=t_a, t_b=t_b, s=s, n=n)
+
+
+# Hook text (#6.6): white, black-bordered, centred, fades in over `fade`
+# frames at 0 and out over `fade` frames ending at `end`. `n` is the frame
+# counter after `fps=30`, i.e. the segment frame index. `expansion=none`
+# makes `%` literal. Applied after `color_fix` so the white isn't tinted.
+HOOK_TEXT_FILTER_TEMPLATE = (
+    "drawtext=fontfile='{font}':expansion=none:text={text}:fontsize={size}:"
+    "fontcolor=white:borderw={border}:bordercolor=black@0.6:"
+    "x=(w-text_w)/2:y={y}:"
+    "alpha='if(lt(n,{fade}),n/{fade},if(lt(n,{end}-{fade}),1,"
+    "if(lt(n,{end}),({end}-n)/{fade},0)))',"
+)
+
+
+def _drawtext_escape(text: str) -> str:
+    r"""Escape `text` for an unquoted `drawtext=text=` value.
+
+    ffmpeg parses it twice: the option parser (`:` separator, `\\` escapes,
+    `'` quotes) and, before that, the filtergraph parser (`,;[]` terminators,
+    same escapes/quotes). Inside single quotes nothing is escaped, so the
+    value stays unquoted and every special char is backslashed at both
+    levels.
+    """
+    s = re.sub(r"([\\:'])", r"\\\1", text)
+    return re.sub(r"([\\',;\[\]])", r"\\\1", s)
+
+
+def hook_text_filter(clip: dict, target: dict) -> str:
+    """Hook-text `drawtext` filter (#6.6), trailing comma included; "" if absent."""
+    p = clip.get("effect_params", {})
+    if not p.get("text"):
+        return ""
+    scale = target["w"] / 1080
+    return HOOK_TEXT_FILTER_TEMPLATE.format(
+        font=p["font"],
+        text=_drawtext_escape(p["text"]),
+        size=round(p["font_size"] * scale),
+        border=max(2, round(4 * scale)),
+        y=round(p["text_y"] * target["h"]),
+        fade=p["fade_frames"],
+        end=p["text_frames"],
+    )

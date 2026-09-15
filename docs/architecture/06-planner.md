@@ -100,6 +100,7 @@ y_px = even(round(crop.y * H)); y_px = max(0, min(y_px, H - h_px))
 - `effect ∈ {none, kenburns, ramp}`; `kenburns` solo en `kind == image` y si `config.ken_burns` (por defecto true). Parámetros (`zoom_per_frame = 0.0015`, `zoom_max = 1.08`) se copian de config a `clip.effect_params`.
 - `ramp` solo en el hook (§6.3): `effect_params` lleva `ramp_speed`, `ramp_frames`, `ramp_start_f` (mezclados con los de `blur_pad` si aplica).
 - `blur_pad` copia `{blur_radius: 20, blur_power: 2, bg_brightness: -0.1}` a `clip.effect_params`.
+- **Texto del hook** (`config.hook_text`, por defecto true): si `config.hook_line_override` (texto tecleado por el operador en el formulario web, saneado con `clean_hook_line`) o, en su defecto, la entrada del hook trae `hook_line` no vacío (la escribe el selector, §5.3, y la sanea `apply_s_checks`, §8.1), `effect_params` añade `text`, `font` (`hook_text_font`), `font_size` (88 px a 1080, reducido de 4 en 4 con Pillow hasta que la línea quepa en 1000 px; mínimo 40), `text_y` (0.28·h, borde superior de la caja, dentro de la zona segura de Reels), `text_frames = min(hook_text_max_frames=60, d_f)`, `fade_frames` (8). `effect` no cambia (puede ser `ramp`); la presencia de `effect_params.text` es el interruptor del render (§10.1). Sin ajuste de línea: el prompt limita a ≤ 6 palabras.
 
 ### 6.7 Igualación de color por clip (`color_fix`)
 

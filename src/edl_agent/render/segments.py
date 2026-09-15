@@ -11,6 +11,7 @@ from edl_agent.render._common import (
     PREVIEW_TARGET,
     _video_codec_args,
     color_fix_filter,
+    hook_text_filter,
     setpts_expr,
 )
 from edl_agent.render.crop import crop_to_px
@@ -39,7 +40,8 @@ def render_video_segment(
             `n_frames`, `speed`, `in_s`, `out_s`, `hdr`, `layout`, `effect`
             and `effect_params` (`blur_radius`, `blur_power`,
             `bg_brightness` for `blur_pad`; `ramp_*` for `effect == "ramp"`,
-            see `_common.setpts_expr`).
+            see `_common.setpts_expr`; `text`/`font`/... for the hook text,
+            see `_common.hook_text_filter`).
         src_path: Path to the source video (proxy if `preview`, original
             otherwise).
         crop_px: Pixel crop rect `{x, y, w, h}`, as returned by
@@ -67,13 +69,14 @@ def render_video_segment(
     # preview.
     hdr_prefix = "" if preview else _hdr_prefix(clip["hdr"], tonemap_chain)
     color_fix = color_fix_filter(clip)
+    text = hook_text_filter(clip, target)
 
     if clip["layout"] == "crop":
         vf = (
             f"crop={crop_px['w']}:{crop_px['h']}:{crop_px['x']}:{crop_px['y']},"
             f"setpts={setpts},fps=30,"
             f"scale={target['w']}:{target['h']}:flags=lanczos,"
-            f"{hdr_prefix}{color_fix}setsar=1,format=yuv420p"
+            f"{hdr_prefix}{color_fix}{text}setsar=1,format=yuv420p"
         )
         cmd = [
             "ffmpeg",
@@ -106,7 +109,7 @@ def render_video_segment(
             f"boxblur={params['blur_radius']}:{params['blur_power']},"
             f"eq=brightness={params['bg_brightness']}[bg];"
             f"[b]scale={target['w']}:-2:flags=lanczos[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[v]"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}setsar=1,format=yuv420p[v]"
         )
         cmd = [
             "ffmpeg",

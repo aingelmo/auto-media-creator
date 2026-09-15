@@ -71,9 +71,10 @@ Compatible con structured output de Gemini (sin `$schema`, sin `const`, sin `def
         "required": ["candidate_id", "reason"]
       }
     },
-    "notes": { "type": "string", "description": "Vacío salvo problemas globales (pocos candidatos válidos, todo el material repetido, etc.)." }
+    "notes": { "type": "string", "description": "Vacío salvo problemas globales (pocos candidatos válidos, todo el material repetido, etc.)." },
+    "hook_line": { "type": "string", "description": "Frase gancho para el primer segundo del Reel, en español, 3–6 palabras, mayúsculas iniciales, sin emojis ni comillas. Concreta y visual: qué se ve, no un eslogan genérico." }
   },
-  "required": ["selected", "rejected", "notes"]
+  "required": ["selected", "rejected", "notes", "hook_line"]
 }
 ```
 

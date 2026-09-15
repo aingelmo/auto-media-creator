@@ -177,6 +177,13 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
                     "ramp_speed": 0.4,
                     "ramp_frames": 12,
                     "ramp_start_f": 9,
+                    # hook text (#6.6) rides on top of the ramp
+                    "text": "Prueba: 100% real",
+                    "font": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                    "font_size": 88,
+                    "text_y": 0.28,
+                    "text_frames": 45,
+                    "fade_frames": 8,
                 },
             },
             _clip(1, "close", "inputs/b.mp4", 360, 640, 0.5, 2.0, 45, 1.0, 45, 90),
@@ -207,3 +214,12 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
     edl_rerun = json.loads(json.dumps(edl))
     run_render(edl_rerun, manifest, session_dir, threads=2)
     assert sha256_file(reel) == sha1
+
+
+def test_drawtext_escape_survives_both_ffmpeg_parsers() -> None:
+    from edl_agent.render._common import _drawtext_escape
+
+    assert _drawtext_escape("100% real: it's, a\\b") == (
+        "100% real\\\\: it\\\\\\'s\\, a\\\\\\\\b"
+    )
+    assert _drawtext_escape("Sube el peso") == "Sube el peso"

@@ -409,3 +409,35 @@ def test_fallback_hook_no_warning_when_pool_is_single_source() -> None:
         candidates_json, slots_json, selection=None
     )
     assert "sharpness_cross_clip" not in warnings
+
+
+def test_hook_line_attached_to_hook_entry() -> None:
+    candidates_by_id = {"c1": _cand("c1", "a.mov", "peak")}
+    entry = {
+        "candidate_id": "c1",
+        "role": "hook",
+        "rank": 1,
+        "exercise": "other",
+        "reason": "x",
+    }
+    slots = _slots(0)["slots"]
+
+    cleaned, warnings = apply_s_checks(
+        {"selected": [entry], "hook_line": '  "Sube el peso" '}, candidates_by_id, slots
+    )
+    assert cleaned[0]["hook_line"] == "Sube el peso"
+    assert "hook_line_invalid" not in warnings
+
+    cleaned, warnings = apply_s_checks(
+        {"selected": [dict(entry)], "hook_line": " ".join(["palabra"] * 12)},
+        candidates_by_id,
+        slots,
+    )
+    assert cleaned[0]["hook_line"] == ""
+    assert "hook_line_invalid" in warnings
+
+    cleaned, warnings = apply_s_checks(
+        {"selected": [dict(entry)]}, candidates_by_id, slots
+    )
+    assert cleaned[0]["hook_line"] == ""
+    assert "hook_line_invalid" not in warnings
