@@ -11,6 +11,8 @@ from edl_agent.render._common import (
     PREVIEW_TARGET,
     _video_codec_args,
     color_fix_filter,
+    end_card_graph,
+    finish_graph,
     hook_text_filter,
     setpts_expr,
 )
@@ -24,6 +26,34 @@ def _hdr_prefix(hdr: str, tonemap_chain: str) -> str:
     return f"{tonemap_chain}," if hdr in ("hlg", "dv84") and tonemap_chain else ""
 
 
+def _run(
+    inputs: list[str], graph: str, n_frames: int, threads: int, preview: bool, out: Path
+) -> None:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "ffmpeg",
+        "-y",
+        *inputs,
+        "-filter_complex",
+        graph,
+        "-map",
+        "[v]",
+        "-fps_mode",
+        "cfr",
+        "-frames:v",
+        str(n_frames),
+        *COLOR_ARGS,
+        "-an",
+        *_video_codec_args(threads, preview),
+        str(out),
+    ]
+    subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+
+def _logo_input(logo: dict | None) -> list[str]:
+    return ["-i", logo["path"]] if logo else []
+
+
 def render_video_segment(
     clip: dict,
     src_path: str,
@@ -32,6 +62,7 @@ def render_video_segment(
     threads: int,
     tonemap_chain: str,
     preview: bool = False,
+    logo: dict | None = None,
 ) -> None:
     """Render one video segment (`crop` or `blur_pad` layout) to `out_path`.
 
@@ -53,15 +84,15 @@ def render_video_segment(
             `preview` is `True` (see note below).
         preview: If `True`, render at `PREVIEW_TARGET` resolution;
             otherwise at `FINAL_TARGET`. Defaults to `False`.
+        logo: Watermark spec (`edl["brand"]["watermark"]` plus an absolute
+            `path`), or `None` for no watermark. See `_common.finish_graph`.
 
     Raises:
         subprocess.CalledProcessError: If the ffmpeg invocation fails.
     """
     target = PREVIEW_TARGET if preview else FINAL_TARGET
-    n_frames = clip["n_frames"]
     t_safety = clip["out_s"] - clip["in_s"] + 0.5
     setpts = setpts_expr(clip)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # The proxy (source of the preview) already comes out of build_proxy
     # tonemapped to bt709 SDR (#3.2); reapplying the chain here would
@@ -72,36 +103,16 @@ def render_video_segment(
     text = hook_text_filter(clip, target)
 
     if clip["layout"] == "crop":
-        vf = (
+        chain = (
             f"crop={crop_px['w']}:{crop_px['h']}:{crop_px['x']}:{crop_px['y']},"
             f"setpts={setpts},fps=30,"
             f"scale={target['w']}:{target['h']}:flags=lanczos,"
-            f"{hdr_prefix}{color_fix}{text}setsar=1,format=yuv420p"
+            f"{hdr_prefix}{color_fix}{text}"
         )
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            str(clip["in_s"]),
-            "-t",
-            str(t_safety),
-            "-i",
-            src_path,
-            "-vf",
-            vf,
-            "-fps_mode",
-            "cfr",
-            "-frames:v",
-            str(n_frames),
-            *COLOR_ARGS,
-            "-an",
-            *_video_codec_args(threads, preview),
-            str(out_path),
-        ]
     else:  # blur_pad
         params = clip["effect_params"]
-        filter_complex = (
-            f"[0:v]setpts={setpts},fps=30,"
+        chain = (
+            f"setpts={setpts},fps=30,"
             f"scale='if(gt(iw,ih),-2,{target['w']})':'if(gt(iw,ih),{target['w']},-2)':flags=lanczos,"
             f"{hdr_prefix}{color_fix}split[a][b];"
             f"[a]scale={target['w']}:{target['h']}:force_original_aspect_ratio=increase,"
@@ -109,31 +120,17 @@ def render_video_segment(
             f"boxblur={params['blur_radius']}:{params['blur_power']},"
             f"eq=brightness={params['bg_brightness']}[bg];"
             f"[b]scale={target['w']}:-2:flags=lanczos[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}setsar=1,format=yuv420p[v]"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}"
         )
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-ss",
-            str(clip["in_s"]),
-            "-t",
-            str(t_safety),
-            "-i",
-            src_path,
-            "-filter_complex",
-            filter_complex,
-            "-map",
-            "[v]",
-            "-fps_mode",
-            "cfr",
-            "-frames:v",
-            str(n_frames),
-            *COLOR_ARGS,
-            "-an",
-            *_video_codec_args(threads, preview),
-            str(out_path),
-        ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    inputs = ["-ss", str(clip["in_s"]), "-t", str(t_safety), "-i", src_path]
+    _run(
+        inputs + _logo_input(logo),
+        finish_graph(chain, logo, target),
+        clip["n_frames"],
+        threads,
+        preview,
+        out_path,
+    )
 
 
 def render_image_segment(
@@ -143,6 +140,7 @@ def render_image_segment(
     out_path: Path,
     threads: int,
     preview: bool = False,
+    logo: dict | None = None,
 ) -> None:
     """Render one image segment (Ken Burns or static crop) to `out_path`.
 
@@ -159,51 +157,55 @@ def render_image_segment(
         threads: ffmpeg thread count.
         preview: If `True`, render at `PREVIEW_TARGET` resolution;
             otherwise at `FINAL_TARGET`. Defaults to `False`.
+        logo: Watermark spec or `None`; see `render_video_segment`.
 
     Raises:
         subprocess.CalledProcessError: If the ffmpeg invocation fails.
     """
     target = PREVIEW_TARGET if preview else FINAL_TARGET
-    n_frames = clip["n_frames"]
     color_fix = color_fix_filter(clip)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     if clip["effect"] == "kenburns":
         params = clip["effect_params"]
         prescale_w, prescale_h = target["w"] * 3, target["h"] * 3
-        vf = (
+        chain = (
             f"crop={crop_px['w']}:{crop_px['h']}:{crop_px['x']}:{crop_px['y']},"
             f"scale={prescale_w}:{prescale_h}:flags=lanczos,"
             f"zoompan=z='min(1.0+{params['zoom_per_frame']}*(on-1),{params['zoom_max']})':"
             f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={target['w']}x{target['h']}:fps=30,"
-            f"{color_fix}setsar=1,format=yuv420p"
+            f"{color_fix}"
         )
     else:
-        vf = (
+        chain = (
             f"crop={crop_px['w']}:{crop_px['h']}:{crop_px['x']}:{crop_px['y']},"
-            f"scale={target['w']}:{target['h']}:flags=lanczos,{color_fix}setsar=1,format=yuv420p"
+            f"scale={target['w']}:{target['h']}:flags=lanczos,{color_fix}"
         )
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-framerate",
-        "30",
-        "-loop",
-        "1",
-        "-i",
-        image_path,
-        "-vf",
-        vf,
-        "-fps_mode",
-        "cfr",
-        "-frames:v",
-        str(n_frames),
-        *COLOR_ARGS,
-        "-an",
-        *_video_codec_args(threads, preview),
-        str(out_path),
-    ]
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    inputs = ["-framerate", "30", "-loop", "1", "-i", image_path]
+    _run(
+        inputs + _logo_input(logo),
+        finish_graph(chain, logo, target),
+        clip["n_frames"],
+        threads,
+        preview,
+        out_path,
+    )
+
+
+def render_end_card_segment(
+    clip: dict, logo_path: str, out_path: Path, threads: int, preview: bool = False
+) -> None:
+    """Render an `end_card` clip (#6.8): solid canvas + centred logo + handle/line.
+
+    Reads `n_frames` and `effect_params` (`bg`, `fg`, `font`, `handle`,
+    `line`, `logo_w`, `logo_h`, `text_size`, all at 1080 wide). No watermark
+    is drawn on the card.
+    """
+    target = PREVIEW_TARGET if preview else FINAL_TARGET
+    p = clip["effect_params"]
+    canvas = f"color=c={p['bg']}:s={target['w']}x{target['h']}:r=30"
+    inputs = ["-f", "lavfi", "-i", canvas, "-i", logo_path]
+    graph = end_card_graph(p, target)
+    _run(inputs, graph, clip["n_frames"], threads, preview, out_path)
 
 
 def _proxy_wh(proxy_path: Path) -> tuple[int, int]:
@@ -237,8 +239,9 @@ def render_segment(
     threads: int,
     tonemap_chain: str,
     preview: bool = False,
+    brand: dict | None = None,
 ) -> Path:
-    """Render one clip (video or image), delegating to the matching renderer.
+    """Render one clip (video, image, or end card) with the matching renderer.
 
     Args:
         clip: Clip dict, as produced by `planner.build_clips`.
@@ -253,6 +256,9 @@ def render_segment(
             (recomputing the crop over the proxy's own dimensions);
             otherwise render at final resolution using the original
             source. Defaults to `False`.
+        brand: `edl["brand"]` (see `edl.build_edl`) or `None`. Its
+            `watermark` block, if any, is overlaid on every non-end-card
+            clip.
 
     Returns:
         Path to the rendered segment, `out_dir / f"seg_{clip['slot']:02d}.mp4"`.
@@ -261,19 +267,35 @@ def render_segment(
         subprocess.CalledProcessError: If the underlying ffmpeg invocation
             fails.
     """
-    src_path, w, h = _src_path_and_dims(clip, sources_by_src, session_dir, preview)
     out_path = out_dir / f"seg_{clip['slot']:02d}.mp4"
+    if clip["effect"] == "end_card":
+        render_end_card_segment(
+            clip, str(session_dir / clip["src"]), out_path, threads, preview
+        )
+        return out_path
+
+    logo = None
+    if brand and brand.get("watermark"):
+        logo = {**brand["watermark"], "path": str(session_dir / brand["logo"])}
+    src_path, w, h = _src_path_and_dims(clip, sources_by_src, session_dir, preview)
     crop_px = (
         crop_to_px(clip["crop"], w, h, clip["layout"]) if preview else clip["crop_px"]
     )
 
     if clip["type"] == "image":
         render_image_segment(
-            clip, src_path, crop_px, out_path, threads, preview=preview
+            clip, src_path, crop_px, out_path, threads, preview=preview, logo=logo
         )
     else:
         render_video_segment(
-            clip, src_path, crop_px, out_path, threads, tonemap_chain, preview=preview
+            clip,
+            src_path,
+            crop_px,
+            out_path,
+            threads,
+            tonemap_chain,
+            preview=preview,
+            logo=logo,
         )
     return out_path
 
@@ -284,7 +306,7 @@ def render_segments(
     """Render every clip of the EDL at final resolution, per #10.1.
 
     Args:
-        edl: EDL dict, as returned by `edl.build_edl`. Reads `clips`.
+        edl: EDL dict, as returned by `edl.build_edl`. Reads `clips`, `brand`.
         manifest: Manifest dict. Reads `sources`.
         session_dir: Session root directory.
         threads: ffmpeg thread count.
@@ -305,6 +327,7 @@ def render_segments(
             threads,
             tonemap_chain,
             preview=False,
+            brand=edl.get("brand"),
         )
         for clip in edl["clips"]
     ]
@@ -320,7 +343,7 @@ def render_preview_segments(
     """Render every clip of the EDL at preview resolution, per #10.2.
 
     Args:
-        edl: EDL dict, as returned by `edl.build_edl`. Reads `clips`.
+        edl: EDL dict, as returned by `edl.build_edl`. Reads `clips`, `brand`.
         manifest: Manifest dict. Reads `sources`.
         session_dir: Session root directory.
         threads: ffmpeg thread count.
@@ -341,6 +364,7 @@ def render_preview_segments(
             threads,
             tonemap_chain,
             preview=True,
+            brand=edl.get("brand"),
         )
         for clip in edl["clips"]
     ]

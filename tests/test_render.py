@@ -10,6 +10,7 @@ import subprocess
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from PIL import Image
 
 from edl_agent.ingest import build_proxy, probe_video_source, sha256_file
 from edl_agent.render import crop_to_px, is_916, run_render
@@ -145,6 +146,10 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
 
     _make_sine(session_dir / "music" / "track_cut.wav", duration=4)
 
+    (session_dir / "brand").mkdir()
+    logo = Image.new("RGBA", (200, 80), (255, 0, 0, 255))
+    logo.save(session_dir / "brand" / "logo.png")
+
     manifest = {
         "session_id": "sess",
         "target": {"w": 1080, "h": 1920, "fps": 30},
@@ -168,6 +173,18 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
         "version": 4,
         "session_id": "sess",
         "target": {"w": 1080, "h": 1920, "fps": 30, "duration_f": 90},
+        "brand": {
+            "logo": "brand/logo.png",
+            "logo_sha256": "x",
+            "logo_w": 200,
+            "logo_h": 80,
+            "watermark": {
+                "w": 160,
+                "opacity": 0.6,
+                "inset_x": 48,
+                "bottom_frac": 0.177,
+            },
+        },
         "clips": [
             {
                 # 45 frames = 33 at 1.0x + 12 at 0.4x -> 1.1 + 0.16 = 1.26 s
@@ -186,7 +203,25 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
                     "fade_frames": 8,
                 },
             },
-            _clip(1, "close", "inputs/b.mp4", 360, 640, 0.5, 2.0, 45, 1.0, 45, 90),
+            # close gives its last 15 frames to the end card
+            _clip(1, "close", "inputs/b.mp4", 360, 640, 0.5, 1.5, 30, 1.0, 45, 75),
+            {
+                **_clip(
+                    2, "end_card", "brand/logo.png", 1080, 1920, 0, 0.5, 15, 1.0, 75, 90
+                ),
+                "type": "image",
+                "effect": "end_card",
+                "effect_params": {
+                    "bg": "#111111",
+                    "fg": "#FFFFFF",
+                    "font": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                    "handle": "@gym",
+                    "line": "C/ Toro 12 · Salamanca",
+                    "logo_w": 480,
+                    "logo_h": 192,
+                    "text_size": 48,
+                },
+            },
         ],
         "audio": {
             "music_cut_path": "music/track_cut.wav",
@@ -214,6 +249,32 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
     edl_rerun = json.loads(json.dumps(edl))
     run_render(edl_rerun, manifest, session_dir, threads=2)
     assert sha256_file(reel) == sha1
+
+    # Watermark landed: the bottom-right logo box of the close's frame 0 is
+    # red-tinted, and the end card's canvas is the brand bg.
+    def _pixel(seg: str, x: int, y: int) -> Any:
+        png = session_dir / f"{seg}.png"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(session_dir / "segments" / f"{seg}.mp4"),
+                "-frames:v",
+                "1",
+                str(png),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        with Image.open(png) as im:
+            return im.convert("RGB").getpixel((x, y))
+
+    r, g, b = _pixel("seg_01", 1080 - 48 - 80, 1920 - 340 - 32)
+    assert r > g + 40 and r > b + 40
+    r, g, b = _pixel("seg_02", 20, 20)
+    assert max(r, g, b) < 40
 
 
 def test_drawtext_escape_survives_both_ffmpeg_parsers() -> None:

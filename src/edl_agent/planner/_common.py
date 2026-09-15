@@ -35,6 +35,15 @@ DEFAULT_CONFIG = {
     "adjacency_gap_s": 0.25,  # #6.2.3 anti-overlap margin for the same source
     "color_match": True,  # #6.7
     "color_match_strength": 0.7,
+    "brand": True,  # #6.8: logo watermark on every clip (needs edl["brand"])
+    "logo_w": 160,  # px at 1080 wide
+    "logo_opacity": 0.6,
+    "logo_inset_x": 48,
+    "logo_bottom_frac": 0.177,  # bottom offset as a fraction of height (clears Reels UI)
+    "end_card": True,  # #6.8: brand card taking the last frames of the close slot
+    "end_card_frames": 45,
+    "end_card_logo_w": 480,
+    "end_card_text_size": 48,
 }
 
 

@@ -26,6 +26,7 @@ from edl_agent.render.crop import crop_to_px, is_916
 from edl_agent.render.pipeline import run_render
 from edl_agent.render.profile import get_render_profile
 from edl_agent.render.segments import (
+    render_end_card_segment,
     render_image_segment,
     render_preview_segments,
     render_segment,
@@ -49,6 +50,7 @@ __all__ = [
     "crop_to_px",
     "get_render_profile",
     "is_916",
+    "render_end_card_segment",
     "render_image_segment",
     "render_preview_segments",
     "render_segment",

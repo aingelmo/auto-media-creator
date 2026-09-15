@@ -22,6 +22,7 @@ def build_clips(
     candidates_by_id: dict,
     sources_by_src: dict,
     config: dict | None = None,
+    brand: dict | None = None,
 ) -> tuple[list[dict], list[str]]:
     """Run the full planner pipeline (#6): from slots+selected to EDL clips.
 
@@ -33,10 +34,16 @@ def build_clips(
         sources_by_src: Mapping `src -> source dict` (from
             `manifest.json["sources"]`, keyed by `src`).
         config: Planner config overrides, merged over `DEFAULT_CONFIG`.
+        brand: `edl["brand"]` (see `session.planner.load_brand`) or `None`.
+            With `config["end_card"]`, the close clip gives its last
+            `end_card_frames` to a synthetic `role == "end_card"` clip
+            (`_split_end_card`); warns `end_card_skipped` if the close is
+            too short.
 
     Returns:
         `(clips, warnings)`:
-        - `clips`: one dict per slot, in slot order, each with keys `slot`,
+        - `clips`: one dict per slot, in slot order (plus the end card,
+          if any), each with keys `slot`,
           `role`, `candidate_id`, `src`, `src_sha256`, `type`, `src_w`,
           `src_h`, `src_rotation`, `src_color` (dict, see
           `ingest.probe_video_source`'s `color` field), `hdr`, `in_s`,
@@ -132,5 +139,82 @@ def build_clips(
         )
 
     clips.sort(key=lambda c: c["slot"])
-    assert_invariants(clips, slots, candidates_by_id, sources_by_src)
+    extra_slots: list[dict] = []
+    if brand and config["end_card"]:
+        end_slot = _split_end_card(clips, config, brand)
+        if end_slot is None:
+            warnings.append("end_card_skipped")
+        else:
+            extra_slots.append(end_slot)
+    assert_invariants(clips, slots + extra_slots, candidates_by_id, sources_by_src)
     return clips, warnings
+
+
+def _split_end_card(clips: list[dict], config: dict, brand: dict) -> dict | None:
+    """Move the last `end_card_frames` of the close clip into an `end_card` clip (#6.8).
+
+    The close keeps >= 30 frames (P9); the card needs >= 15 or it is
+    skipped (returns `None`). Returns the synthetic slot for P1/P6.
+    """
+    close = clips[-1]
+    k = min(config["end_card_frames"], close["n_frames"] - 30)
+    if k < 15:
+        return None
+    close["n_frames"] -= k
+    close["out_s"] = close["in_s"] + close["n_frames"] / FPS  # close is 1.0x
+    close["timeline_end_f"] -= k
+    start_f = close["timeline_end_f"]
+    # ponytail: the card's "source" is the 1080x1920 canvas, so crop is full-frame
+    # and 9:16 by construction; the logo path in `src` is what the render reads.
+    clips.append(
+        {
+            "slot": close["slot"] + 1,
+            "role": "end_card",
+            "candidate_id": "end_card",
+            "src": brand["logo"],
+            "src_sha256": brand["logo_sha256"],
+            "type": "image",
+            "src_w": 1080,
+            "src_h": 1920,
+            "src_rotation": 0,
+            "src_color": {
+                "primaries": "bt709",
+                "trc": "bt709",
+                "space": "bt709",
+                "range": "tv",
+            },
+            "hdr": "none",
+            "in_s": 0.0,
+            "out_s": k / FPS,
+            "n_frames": k,
+            "speed": 1.0,
+            "timeline_start_f": start_f,
+            "timeline_end_f": start_f + k,
+            "layout": "crop",
+            "crop": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+            "crop_px": {"x": 0, "y": 0, "w": 1080, "h": 1920},
+            "subject_cropped": False,
+            "src_fps_nominal": FPS,
+            "effect": "end_card",
+            "effect_params": {
+                "bg": brand["bg"],
+                "fg": brand["fg"],
+                "font": brand["font"],
+                "handle": brand["handle"],
+                "line": brand["line"],
+                "logo_w": config["end_card_logo_w"],
+                "logo_h": round(
+                    brand["logo_h"] * config["end_card_logo_w"] / brand["logo_w"]
+                ),
+                "text_size": config["end_card_text_size"],
+            },
+            "warnings": [],
+        }
+    )
+    return {
+        "slot": close["slot"] + 1,
+        "role": "end_card",
+        "start_f": start_f,
+        "end_f": start_f + k,
+        "beats_rel_f": [],
+    }

@@ -181,6 +181,43 @@ def test_hook_line_override_wins_over_selector_line() -> None:
     assert clips[0]["effect_params"]["text"] == "Del operador"
 
 
+_BRAND = {
+    "logo": "brand/logo.png",
+    "logo_sha256": "x",
+    "logo_w": 200,
+    "logo_h": 80,
+    "handle": "@gym",
+    "line": "",
+    "bg": "#111111",
+    "fg": "#FFFFFF",
+    "font": DEFAULT_CONFIG["hook_text_font"],
+}
+
+
+@pytest.mark.parametrize(
+    ("close_f", "expect_card"),
+    [(60, 30), (90, 45), (40, None)],
+)
+def test_end_card_splits_close_slot(close_f, expect_card) -> None:
+    slots, selected, candidates_by_id, sources_by_src = _build_scenario(
+        2, (1920, 1080), seed=1
+    )
+    slots = _slots(2, close_f=close_f)
+    clips, warnings = build_clips(
+        slots, selected, candidates_by_id, sources_by_src, brand=_BRAND
+    )
+    assert sum(c["n_frames"] for c in clips) == slots[-1]["end_f"]
+    if expect_card is None:
+        assert "end_card_skipped" in warnings
+        assert clips[-1]["role"] == "close"
+        return
+    card, close = clips[-1], clips[-2]
+    assert card["role"] == "end_card" and card["n_frames"] == expect_card
+    assert close["n_frames"] == close_f - expect_card
+    assert card["timeline_start_f"] == close["timeline_end_f"]
+    assert card["effect_params"]["logo_h"] == 192  # 480 * 80 / 200
+
+
 @pytest.mark.parametrize(("aspect_name", "w", "h"), ASPECTS)
 @pytest.mark.parametrize("n_develop", [1, 2, 4, 5, 6])
 def test_planner_invariants(aspect_name, w, h, n_develop) -> None:

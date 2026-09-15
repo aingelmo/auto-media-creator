@@ -138,6 +138,28 @@ def new_session_form(request: Request) -> HTMLResponse:
     )
 
 
+def _save_brand(
+    session_dir: Path, logo: UploadFile | None, handle: str, line: str
+) -> None:
+    """Write `brand/{logo.png,brand.json}` if a logo was uploaded; else leave as is.
+
+    Per-session brand (#6.8): one business per session, nothing repo-level.
+    """
+    if logo is None or not logo.filename:
+        return
+    brand_dir = session_dir / "brand"
+    brand_dir.mkdir(exist_ok=True)
+    with (brand_dir / "logo.png").open("wb") as f:
+        shutil.copyfileobj(logo.file, f)
+    (brand_dir / "brand.json").write_text(
+        json.dumps(
+            {"logo": "brand/logo.png", "handle": handle.strip(), "line": line.strip()},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
 @app.post("/sessions", response_model=None)
 async def create_session(
     background_tasks: BackgroundTasks,
@@ -149,8 +171,11 @@ async def create_session(
     hook_line: str = Form(""),
     clips: list[UploadFile] = Form(...),
     music: UploadFile = Form(...),
+    logo: UploadFile | None = None,
+    handle: str = Form(""),
+    line: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
-    """Save uploaded media into a new session dir and launch the pipeline."""
+    """Save uploaded media (+ optional brand logo) into a new session dir and launch."""
     key_env = PROVIDER_API_KEY_ENV.get(provider)
     if key_env and not os.environ.get(key_env):
         return templates.TemplateResponse(
@@ -196,6 +221,8 @@ async def create_session(
         )
     with (music_dir / f"track{music_ext}").open("wb") as f:
         shutil.copyfileobj(music.file, f)
+
+    _save_brand(session_dir, logo, handle, line)
 
     job = JobState()
     with _lock:
@@ -246,14 +273,25 @@ def regenerate_session(
     model: str = Form(...),
     theme: str = Form("training"),
     hook_line: str = Form(""),
+    logo: UploadFile | None = None,
+    handle: str = Form(""),
+    line: str = Form(""),
 ) -> RedirectResponse:
-    """Force `from_stage` onward to redo, reusing already-completed earlier stages."""
+    """Force `from_stage` onward to redo, reusing already-completed earlier stages.
+
+    A new logo replaces the session brand; it only takes effect from `planner`
+    on, so the stage is pulled back to `planner` if a later one was chosen.
+    """
     session_dir = SESSIONS_DIR / name
     if not session_dir.is_dir():
         raise HTTPException(status_code=404, detail="no such session")
     if from_stage not in STAGES:
         raise HTTPException(status_code=400, detail=f"unknown stage {from_stage!r}")
 
+    if logo is not None and logo.filename:
+        _save_brand(session_dir, logo, handle, line)
+        if STAGES.index(from_stage) > STAGES.index("planner"):
+            from_stage = "planner"
     clear_stage_artifacts(session_dir, from_stage)
 
     job = JobState()

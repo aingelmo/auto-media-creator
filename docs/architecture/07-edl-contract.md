@@ -1,6 +1,6 @@
 [← README](README.md)
 
-## 7. Contrato EDL v4 (`edl.json`, lo genera código)
+## 7. Contrato EDL v5 (`edl.json`, lo genera código)
 
 ```json
 {
@@ -103,8 +103,8 @@
             },
             "required": ["x", "y", "w", "h"]
           },
-          "effect": { "type": "string", "enum": ["none", "kenburns", "ramp"] },
-          "effect_params": { "type": "object", "description": "Con clave `text` (+ font, font_size, text_y, text_frames, fade_frames) el render sobreimprime el hook_line del selector (§6.6)" },
+          "effect": { "type": "string", "enum": ["none", "kenburns", "ramp", "end_card"] },
+          "effect_params": { "type": "object", "description": "Con clave `text` (+ font, font_size, text_y, text_frames, fade_frames) el render sobreimprime el hook_line del selector (§6.6). Para `end_card`: bg, fg, font, handle, line, logo_w, logo_h, text_size (§6.8)" },
           "color_fix": {
             "type": "object",
             "description": "Opcional (§6.7). Ausente => sin igualación de color, render idéntico a v4 previo",
@@ -158,6 +158,8 @@
   "required": ["version", "session_id", "inputs", "render_profile", "target", "clips", "audio", "provenance"]
 }
 ```
+
+Cambios frente a v4 (v5): `effect` admite `end_card` y `role` admite `end_card` (clip sintético que toma los últimos frames del close, §6.8); nuevo top-level opcional `brand` (`logo` relativo a la sesión, `logo_sha256`, `logo_w`, `logo_h`, `handle`, `line`, `bg`, `fg`, `font`, `watermark: {w, opacity, inset_x, bottom_frac} | null`) o `null`; `render_profile` añade `logo_filter_template`, `end_card_filter_template`, `brand_sha256`. `speed` es siempre 1.0 desde el ramp (§6.3).
 
 Cambios frente a v3: `render_profile` (versiones, configuración de FFmpeg, hilos, cadenas y flags exactos, hash); `crop_px`, `src_rotation`, `src_color`, `effect`/`effect_params` por clip; `music_cut_*` y `music_src_*` con hashes; `target_tp/target_lra`; `loudnorm_applied`; `sdk_version`, `api_revision`, `llm_usage`; hashes de config de features y del modelo de pose. `audio.music_cut_path = null` es válido y produce un render con `-an` (derechos de música). Este schema se valida localmente con `jsonschema` (draft-07 sí soporta `const` y `exclusiveMinimum`); **no se envía a Gemini**.
 

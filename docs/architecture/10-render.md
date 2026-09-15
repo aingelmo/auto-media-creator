@@ -67,6 +67,11 @@ zoompan=z='min(1.0+{zoom_per_frame}*(on-1),{zoom_max})':x='iw/2-(iw/zoom/2)':y='
 - `on` es el contador acumulado de frames de salida y empieza en 1 `[verificado: lista ffmpeg-user]`; con `-loop 1` y `d=1` no se reinicia. `(on-1)` hace que el primer frame tenga zoom exactamente 1.0.
 - Con `effect == none`: se elimina `zoompan` y el `scale` intermedio es `scale=1080:1920:flags=lanczos`; `{color_fix}` sigue justo antes de `setsar`.
 
+### 10.6 Capa de marca (§6.8)
+
+- Los tres renderers (10.1–10.3) usan ya `-filter_complex` con la cadena principal como `[0:v]…` y cierran con `_common.finish_graph`: sin marca, `…setsar=1,format=yuv420p[v]`; con `edl.brand.watermark`, el logo entra como segundo input (`-i brand/logo.png`) y la cola es `[v0];[1:v]scale={lw}:-1:flags=lanczos,format=rgba,colorchannelmixer=aa={opacity}[lg];[v0][lg]overlay=W-w-{inset}:H-h-{bottom}:format=auto,setsar=1,format=yuv420p[v]`, con `lw`, `inset` escalados por `target.w/1080` y `bottom = bottom_frac·target.h`. Va después de `color_fix` y del texto del hook.
+- **End card** (`effect == end_card`, `render_end_card_segment`): `-f lavfi -i color=c={bg}:s={tw}x{th}:r=30 -i {logo}` + `[1:v]scale={lw}:-1[lg];[0:v][lg]overlay=(W-w)/2:(H-h)/2-{1.5·ts}[v1];[v1]drawtext(handle),drawtext(line, 0.7·ts, fg@0.8),fade=t=in:st=0:d=0.25,setsar=1,format=yuv420p[v]` con `-frames:v n_frames`. Sin watermark sobre la card. Preview y final usan el mismo grafo con tamaños escalados, así que R1/R2 aplican igual.
+
 ### 10.4 Concat + audio (dos pasadas de loudnorm)
 
 ```bash

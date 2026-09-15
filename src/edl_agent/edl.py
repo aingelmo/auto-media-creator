@@ -13,7 +13,7 @@ from edl_agent.planner import DEFAULT_CONFIG, build_clips
 from edl_agent.render import get_render_profile
 from edl_agent.selection import build_selected
 
-VERSION = 4
+VERSION = 5
 
 DEFAULT_AUDIO_TARGETS = {
     "target_lufs": -14.0,
@@ -151,6 +151,7 @@ def build_edl(
     tonemap_chain: str = "",
     tonemap_chain_pq: str | None = None,
     config: dict | None = None,
+    brand: dict | None = None,
 ) -> dict:
     """Run the full #8.5 pipeline: selection -> S-checks/fallback -> planner -> edl.
 
@@ -185,13 +186,20 @@ def build_edl(
             `None` if not applicable.
         config: Planner/audio config overrides, merged over
             `planner.DEFAULT_CONFIG` and `DEFAULT_AUDIO_TARGETS`.
+        brand: Session brand (see `session.planner.load_brand`: `logo`
+            session-relative path, `logo_sha256`, `logo_w`, `logo_h`, and
+            optional `handle`, `line`, `bg`, `fg`, `font`), or `None` for
+            no brand layer.
 
     Returns:
         The full `edl.json` dict, with keys `version`, `session_id`,
         `inputs` (hashes of all inputs, for reproducibility), `render_profile`
         (see `render.get_render_profile`), `target` (`w`, `h`, `fps`,
-        `duration_f`), `clips` (list, see `planner.build_clips`), `audio`
-        (see `_audio_block`), and `provenance` (see `_provenance`).
+        `duration_f`), `brand` (the merged brand dict with a `watermark`
+        block `{w, opacity, inset_x, bottom_frac}` or `None` when
+        `config["brand"]` is off; `None` if no brand), `clips` (list, see
+        `planner.build_clips`), `audio` (see `_audio_block`), and
+        `provenance` (see `_provenance`).
 
     Raises:
         PlannerError: If no candidate admits a mandatory role (hook/close),
@@ -206,10 +214,28 @@ def build_edl(
         candidates_json, slots_json, selection
     )
 
+    if brand:
+        brand = {
+            "handle": "",
+            "line": "",
+            "bg": "#111111",
+            "fg": "#FFFFFF",
+            "font": config["hook_text_font"],
+            **brand,
+            "watermark": {
+                "w": config["logo_w"],
+                "opacity": config["logo_opacity"],
+                "inset_x": config["logo_inset_x"],
+                "bottom_frac": config["logo_bottom_frac"],
+            }
+            if config["brand"]
+            else None,
+        }
+
     candidates_by_id = {c["id"]: c for c in candidates_json["candidates"]}
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
     clips, clip_warnings = build_clips(
-        slots, selected, candidates_by_id, sources_by_src, config
+        slots, selected, candidates_by_id, sources_by_src, config, brand
     )
     warnings = warnings + clip_warnings
     warnings = warnings + _aggregate_warnings(clips, warnings)
@@ -219,6 +245,7 @@ def build_edl(
         tonemap_chain,
         tonemap_chain_pq,
         hook_text_font=str(config["hook_text_font"]) if config["hook_text"] else None,
+        brand_sha256=_hash(brand) if brand else None,
     )
 
     return {
@@ -240,6 +267,7 @@ def build_edl(
             "fps": 30,
             "duration_f": slots_json["duration_f"],
         },
+        "brand": brand or None,
         "clips": clips,
         "audio": _audio_block(manifest, config),
         "provenance": _provenance(

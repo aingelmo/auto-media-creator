@@ -123,3 +123,70 @@ def hook_text_filter(clip: dict, target: dict) -> str:
         fade=p["fade_frames"],
         end=p["text_frames"],
     )
+
+
+# Brand watermark (#6.8): the logo is ffmpeg input `[1:v]`, scaled to `lw` px
+# wide, alpha multiplied by `opacity`, bottom-right, raised `bottom` px so it
+# clears the Reels caption/UI. Applied after color_fix and hook text.
+LOGO_FILTER_TEMPLATE = (
+    "[1:v]scale={lw}:-1:flags=lanczos,format=rgba,colorchannelmixer=aa={opacity}[lg];"
+    "[v0][lg]overlay=W-w-{inset}:H-h-{bottom}:format=auto"
+)
+
+# End card (#6.8): solid `bg` canvas, logo centred above two text lines.
+END_CARD_FILTER_TEMPLATE = (
+    "[1:v]scale={lw}:-1:flags=lanczos[lg];"
+    "[0:v][lg]overlay=(W-w)/2:(H-h)/2-{lift}[v1];"
+    "[v1]{handle}{line}fade=t=in:st=0:d=0.25,setsar=1,format=yuv420p[v]"
+)
+END_CARD_TEXT_TEMPLATE = (
+    "drawtext=fontfile='{font}':expansion=none:text={text}:fontsize={size}:"
+    "fontcolor={color}:x=(w-text_w)/2:y={y},"
+)
+
+
+def finish_graph(chain: str, logo: dict | None, target: dict) -> str:
+    """`-filter_complex` graph: `[0:v]chain` + optional watermark + `setsar/format`.
+
+    `logo` is `edl["brand"]["watermark"]` (`w`, `opacity`, `inset_x`,
+    `bottom_frac`, at 1080 wide) or `None`; the logo file must be input 1.
+    """
+    if not logo:
+        return f"[0:v]{chain}setsar=1,format=yuv420p[v]"
+    scale = target["w"] / 1080
+    overlay = LOGO_FILTER_TEMPLATE.format(
+        lw=round(logo["w"] * scale),
+        opacity=logo["opacity"],
+        inset=round(logo["inset_x"] * scale),
+        bottom=round(logo["bottom_frac"] * target["h"]),
+    )
+    return f"[0:v]{chain.rstrip(',')}[v0];{overlay},setsar=1,format=yuv420p[v]"
+
+
+def end_card_graph(params: dict, target: dict) -> str:
+    """`-filter_complex` graph for an `end_card` clip (input 0 canvas, input 1 logo)."""
+    scale = target["w"] / 1080
+    ts = round(params["text_size"] * scale)
+    lh = round(params["logo_h"] * scale)
+    lift = round(ts * 1.5)
+    y0 = f"H/2+{lh // 2 - lift}+{ts}"
+
+    def text(key: str, size: int, color: str, y: str) -> str:
+        if not params.get(key):
+            return ""
+        return END_CARD_TEXT_TEMPLATE.format(
+            font=params["font"],
+            text=_drawtext_escape(params[key]),
+            size=size,
+            color=color,
+            y=y,
+        )
+
+    return END_CARD_FILTER_TEMPLATE.format(
+        lw=round(params["logo_w"] * scale),
+        lift=lift,
+        handle=text("handle", ts, params["fg"], y0),
+        line=text(
+            "line", round(ts * 0.7), f"{params['fg']}@0.8", f"{y0}+{round(ts * 1.4)}"
+        ),
+    )

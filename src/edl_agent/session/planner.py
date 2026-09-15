@@ -5,9 +5,38 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from PIL import Image
+
 from edl_agent.edl import build_edl
+from edl_agent.ingest import sha256_file
 from edl_agent.planner import DEFAULT_CONFIG, apply_color_match
 from edl_agent.session._common import tonemap_chain_for_manifest
+
+
+def load_brand(session_dir: Path) -> dict | None:
+    """Read `session_dir/brand/brand.json` + its logo PNG (#6.8), or `None`.
+
+    `brand.json` holds `logo` (session-relative, default `brand/logo.png`)
+    and optional `handle`, `line`, `bg`, `fg`, `font`. Returns it with
+    `logo_sha256`, `logo_w`, `logo_h` added; `None` if the JSON or the
+    logo file is missing (brand layer off, no error).
+    """
+    path = session_dir / "brand" / "brand.json"
+    if not path.is_file():
+        return None
+    brand = json.loads(path.read_text())
+    logo = session_dir / brand.get("logo", "brand/logo.png")
+    if not logo.is_file():
+        return None
+    with Image.open(logo) as im:
+        w, h = im.size
+    return {
+        **brand,
+        "logo": str(logo.relative_to(session_dir)),
+        "logo_sha256": sha256_file(logo),
+        "logo_w": w,
+        "logo_h": h,
+    }
 
 
 def run_planner(
@@ -22,7 +51,8 @@ def run_planner(
 ) -> dict:
     """Run selection (LLM, optional) -> S-checks/fallback -> planner -> edl.json.
 
-    Per #8.5. Writes `edl.json` to `session_dir`.
+    Per #8.5. Writes `edl.json` to `session_dir`. Picks up the session
+    brand from `session_dir/brand/` if present (see `load_brand`).
 
     Args:
         session_dir: Session directory to write `edl.json` to.
@@ -56,6 +86,7 @@ def run_planner(
         threads=threads,
         tonemap_chain=tonemap_chain,
         config=config,
+        brand=load_brand(session_dir),
     )
     apply_color_match(edl, manifest, session_dir, {**DEFAULT_CONFIG, **(config or {})})
     with (session_dir / "edl.json").open("w") as f:

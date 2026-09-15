@@ -84,7 +84,7 @@
     {% endif %}
 
     <h3>Regenerate</h3>
-    <form method="post" action="/sessions/{{ name }}/regenerate">
+    <form method="post" action="/sessions/{{ name }}/regenerate" enctype="multipart/form-data">
       <label>From stage
         <select name="from_stage" id="from_stage">
           <option value="candidates">candidates</option>
@@ -112,6 +112,18 @@
       <label>Hook text (optional, max 6 words; blank = let the LLM write it)
         <input type="text" name="hook_line" maxlength="40" placeholder="Último rep, sin excusas">
       </label>
+      <fieldset>
+        <legend>Brand (optional; new logo replaces the session's, applies from planner on)</legend>
+        <label>Logo (PNG with alpha)
+          <input type="file" name="logo" accept="image/png">
+        </label>
+        <label>Handle
+          <input type="text" name="handle" maxlength="40" placeholder="@migimnasio">
+        </label>
+        <label>Second line
+          <input type="text" name="line" maxlength="60" placeholder="C/ Toro 12 · Salamanca">
+        </label>
+      </fieldset>
       <button type="submit">Regenerate from this stage</button>
     </form>
     <script>

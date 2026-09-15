@@ -9,7 +9,10 @@ from pathlib import Path
 
 from edl_agent.render._common import (
     COLOR_FIX_FILTER_TEMPLATE,
+    END_CARD_FILTER_TEMPLATE,
+    END_CARD_TEXT_TEMPLATE,
     HOOK_TEXT_FILTER_TEMPLATE,
+    LOGO_FILTER_TEMPLATE,
     RAMP_SETPTS_TEMPLATE,
     _video_codec_args,
 )
@@ -58,6 +61,7 @@ def get_render_profile(
     tonemap_chain: str = "",
     tonemap_chain_pq: str | None = None,
     hook_text_font: str | None = None,
+    brand_sha256: str | None = None,
 ) -> dict:
     """Describe everything needed to re-render bit-for-bit, per #7/#10.
 
@@ -69,6 +73,8 @@ def get_render_profile(
             `None` otherwise.
         hook_text_font: Font file used by the hook text overlay (#6.6), so a
             font change alters `profile_sha256`; `None` if no hook text.
+        brand_sha256: Hash of `edl["brand"]` (logo bytes + brand.json
+            fields, #6.8), or `None` when the brand layer is off.
 
     Returns:
         Dict with keys `ffmpeg_version`, `ffmpeg_configuration`,
@@ -81,7 +87,9 @@ def get_render_profile(
         `color_fix_filter_template` fills `{color_fix}`, #6.7;
         `ramp_setpts_template` fills `{setpts}` for `effect == "ramp"`;
         `hook_text_filter_template` fills `{text}` for the hook, with
-        `hook_text_font`/`hook_text_font_sha256`),
+        `hook_text_font`/`hook_text_font_sha256`; `logo_filter_template`
+        and `end_card_filter_template` for the brand layer, with
+        `brand_sha256`),
         `audio_codec_args` (str), and `profile_sha256` (str, hash of the
         rest of the dict, for reproducibility checks).
     """
@@ -95,23 +103,26 @@ def get_render_profile(
         "video_codec_args": " ".join(_video_codec_args(threads, preview=False)),
         "segment_filter_template": (
             "crop={w}:{h}:{x}:{y},setpts={setpts},fps=30,"
-            "scale={tw}:{th}:flags=lanczos,{hdr}{color_fix}{text}setsar=1,format=yuv420p"
+            "scale={tw}:{th}:flags=lanczos,{hdr}{color_fix}{text}{logo}setsar=1,format=yuv420p"
         ),
         "blur_pad_filter_template": (
             "[0:v]setpts={setpts},fps=30,scale='if(gt(iw,ih),-2,{tw})':'if(gt(iw,ih),{tw},-2)':flags=lanczos,{hdr}split[a][b];"
             "[a]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur={blur_radius}:{blur_power},eq=brightness={bg_brightness}[bg];"
-            "[b]scale={tw}:-2:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}setsar=1,format=yuv420p[v]"
+            "[b]scale={tw}:-2:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}{logo}setsar=1,format=yuv420p[v]"
         ),
         "image_filter_template": (
             "crop={w}:{h}:{x}:{y},scale={ptw}:{pth}:flags=lanczos,"
             "zoompan=z='min(1.0+{zoom_per_frame}*(on-1),{zoom_max})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={tw}x{th}:fps=30,"
-            "setsar=1,format=yuv420p"
+            "{logo}setsar=1,format=yuv420p"
         ),
         "color_fix_filter_template": COLOR_FIX_FILTER_TEMPLATE,
         "ramp_setpts_template": RAMP_SETPTS_TEMPLATE,
         "hook_text_filter_template": HOOK_TEXT_FILTER_TEMPLATE,
         "hook_text_font": hook_text_font,
         "hook_text_font_sha256": _file_sha256(hook_text_font),
+        "logo_filter_template": LOGO_FILTER_TEMPLATE,
+        "end_card_filter_template": END_CARD_FILTER_TEMPLATE + END_CARD_TEXT_TEMPLATE,
+        "brand_sha256": brand_sha256,
         "audio_codec_args": "-c:a aac -b:a 192k -ar 48000",
     }
     profile["profile_sha256"] = hashlib.sha256(

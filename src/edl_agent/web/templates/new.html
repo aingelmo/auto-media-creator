@@ -38,6 +38,18 @@
     <label>Hook text (optional, max 6 words; blank = let the LLM write it)
       <input type="text" name="hook_line" maxlength="40" placeholder="Último rep, sin excusas">
     </label>
+    <fieldset>
+      <legend>Brand (optional; no logo = no watermark / end card)</legend>
+      <label>Logo (PNG with alpha)
+        <input type="file" name="logo" accept="image/png">
+      </label>
+      <label>Handle
+        <input type="text" name="handle" maxlength="40" placeholder="@migimnasio">
+      </label>
+      <label>Second line
+        <input type="text" name="line" maxlength="60" placeholder="C/ Toro 12 · Salamanca">
+      </label>
+    </fieldset>
     <p><button type="submit">Start run</button></p>
   </form>
   <script>

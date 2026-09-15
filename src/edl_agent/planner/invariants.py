@@ -87,8 +87,8 @@ def assert_invariants(
             msg = f"P8: crop_px does not respect 9:16 in slot {c['slot']}"
             raise PlannerError(msg)
 
-        # P9
-        if c["n_frames"] < 30:
+        # P9 (the end card may be as short as 15 frames, see pipeline._split_end_card)
+        if c["n_frames"] < 30 and c["role"] != "end_card":
             msg = f"P9: n_frames < 30 in slot {c['slot']}"
             raise PlannerError(msg)
 

@@ -99,11 +99,12 @@ def apply_color_match(
         session_dir: Session root, to resolve those paths.
         config: Merged planner config (`color_match`, `color_match_strength`).
     """
-    if not config.get("color_match") or not edl["clips"]:
+    clips = [c for c in edl["clips"] if c.get("effect") != "end_card"]
+    if not config.get("color_match") or not clips:
         return
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
     measured = []
-    for clip in edl["clips"]:
+    for clip in clips:
         source = sources_by_src[clip["src"]]
         if clip["type"] == "image":
             measured.append(
@@ -118,5 +119,5 @@ def apply_color_match(
             )
     target = {k: statistics.median(m[k] for m in measured) for k in _KEYS}
     strength = config["color_match_strength"]
-    for clip, m in zip(edl["clips"], measured, strict=True):
+    for clip, m in zip(clips, measured, strict=True):
         clip["color_fix"] = color_fix_for(m, target, strength)
