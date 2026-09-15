@@ -245,4 +245,5 @@ def test_run_ingest_end_to_end(session_dir) -> None:
     assert len(manifest["sources"]) == 1
     src = manifest["sources"][0]
     assert src["proxy_verified"] is True
+    assert src["has_audio"] is False
     assert (session_dir / "manifest.json").exists()

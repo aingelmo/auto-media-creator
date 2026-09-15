@@ -137,6 +137,7 @@ class VideoSourceInfo:
     src_fps_nominal: float
     hdr: str
     color: dict
+    has_audio: bool
 
 
 def post_rotation_dims(raw_w: int, raw_h: int, rotation: int) -> tuple[int, int]:
@@ -212,4 +213,5 @@ def probe_video_source(path: Path) -> VideoSourceInfo:
         src_fps_nominal=fps_nominal,
         hdr=hdr,
         color=color,
+        has_audio=any(s["codec_type"] == "audio" for s in probe["streams"]),
     )

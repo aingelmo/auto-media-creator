@@ -19,25 +19,15 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _make_clip(path: Path, *, w=360, h=640, fps=30, duration=3) -> None:
+def _make_clip(path: Path, *, w=360, h=640, fps=30, duration=3, audio=False) -> None:
     vf = f"life=size={w}x{h}:rate={fps}:ratio=0.5:mold=2:death_color=#000000"
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "lavfi",
-        "-i",
-        vf,
-        "-t",
-        str(duration),
-        "-c:v",
-        "libx264",
-        "-preset",
-        "ultrafast",
-        "-pix_fmt",
-        "yuv420p",
-        str(path),
-    ]
+    cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", vf]
+    if audio:
+        cmd += ["-f", "lavfi", "-i", "sine=frequency=1000"]
+    cmd += ["-t", str(duration), "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
+    if audio:
+        cmd += ["-c:a", "aac", "-shortest"]
+    cmd.append(str(path))
     subprocess.run(cmd, check=True, capture_output=True, text=True)
 
 
@@ -135,7 +125,7 @@ def test_is_916() -> None:
 
 def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
     clip_a = session_dir / "inputs" / "a.mp4"  # hook: 60 fps, ramp 0.4x
-    _make_clip(clip_a, w=360, h=640, fps=60, duration=3)
+    _make_clip(clip_a, w=360, h=640, fps=60, duration=3, audio=True)
     clip_b = session_dir / "inputs" / "b.mp4"  # close: 30 fps, speed 1.0
     _make_clip(clip_b, w=360, h=640, fps=30, duration=3)
 
@@ -245,6 +235,17 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
             "loudnorm_measured": None,
             "loudnorm_applied": None,
             "fade_out_s": 0.3,
+            "sfx": [
+                {
+                    "slot": 0,
+                    "src": "inputs/a.mp4",
+                    "in_s": 0.0,
+                    "dur_s": 1.26,
+                    "delay_ms": 0,
+                    "gain_db": -18.0,
+                    "ramp": {"start_f": 9, "frames": 12, "speed": 0.4},
+                }
+            ],
         },
     }
 
@@ -259,6 +260,12 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
     edl_rerun = json.loads(json.dumps(edl))
     run_render(edl_rerun, manifest, session_dir, threads=2)
     assert sha256_file(reel) == sha1
+
+    # sfx mix was actually applied: dropping it changes the reel's audio.
+    edl_no_sfx = json.loads(json.dumps(edl))
+    edl_no_sfx["audio"]["sfx"] = []
+    run_render(edl_no_sfx, manifest, session_dir, threads=2)
+    assert sha256_file(reel) != sha1
 
     # Watermark landed: the bottom-right logo box of the close's frame 0 is
     # red-tinted, and the end card's canvas is the brand bg.
@@ -293,6 +300,24 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
     assert min(r, g, b) > 230
     r10, g10, b10 = _pixel("seg_00", 180, 320, frame=10)
     assert sum((r10, g10, b10)) < sum((r, g, b))
+
+
+def test_sfx_chain_ramp_vs_plain() -> None:
+    from edl_agent.render.concat import _sfx_chain
+
+    ramp_entry = {
+        "gain_db": -18.0,
+        "delay_ms": 100,
+        "ramp": {"start_f": 9, "frames": 12, "speed": 0.4},
+    }
+    plain_entry = {"gain_db": -18.0, "delay_ms": 100, "ramp": None}
+
+    ramp_chain = _sfx_chain(ramp_entry)
+    assert "asetrate=48000*0.4" in ramp_chain
+    assert "adelay=100:all=1" in ramp_chain
+    assert "concat=" in ramp_chain
+
+    assert "concat=" not in _sfx_chain(plain_entry)
 
 
 def test_drawtext_escape_survives_both_ffmpeg_parsers() -> None:

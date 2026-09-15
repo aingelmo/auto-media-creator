@@ -7,7 +7,7 @@ import re
 import subprocess
 from typing import TYPE_CHECKING
 
-from edl_agent.render._common import RenderError
+from edl_agent.render._common import SFX_FILTER_TEMPLATE, RenderError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,6 +21,30 @@ def _parse_loudnorm_json(stderr: str) -> dict:
         msg = f"no loudnorm JSON found in ffmpeg output:\n{stderr}"
         raise RenderError(msg)
     return json.loads(match.group(0))
+
+
+def _sfx_chain(entry: dict) -> str:
+    """ffmpeg audio filter chain for one `audio.sfx[]` entry (#10.4, idea #5).
+
+    `{ramp}` is empty for a plain entry, or a 3-way split/concat that slows
+    only the middle piece (the hook's speed ramp, #6.3) so the diegetic
+    sound pitch-drops in sync with the video's slow window.
+    """
+    ramp = entry["ramp"]
+    ramp_chain = ""
+    if ramp:
+        t_a = ramp["start_f"] / 30
+        t_b = t_a + ramp["frames"] / 30 * ramp["speed"]
+        ramp_chain = (
+            f"asplit=3[p0][p1][p2];"
+            f"[p0]atrim=0:{t_a}[q0];"
+            f"[p1]atrim={t_a}:{t_b},asetrate=48000*{ramp['speed']},aresample=48000[q1];"
+            f"[p2]atrim={t_b}[q2];"
+            f"[q0][q1][q2]concat=n=3:v=0:a=1,"
+        )
+    return SFX_FILTER_TEMPLATE.format(
+        ramp=ramp_chain, gain_db=entry["gain_db"], delay_ms=entry["delay_ms"]
+    )
 
 
 def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
@@ -95,13 +119,32 @@ def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
     )
     audio["loudnorm_measured"] = measured
 
-    render_af = (
+    sfx = audio["sfx"]
+    music_chain = (
         f"loudnorm=I={audio['target_lufs']}:TP={audio['target_tp']}:LRA={audio['target_lra']}:linear=true:"
         f"measured_I={measured['input_i']}:measured_TP={measured['input_tp']}:"
         f"measured_LRA={measured['input_lra']}:measured_thresh={measured['input_thresh']}:"
         f"offset={measured['target_offset']}:print_format=json,"
-        f"aresample=48000,aformat=channel_layouts=stereo,"
-        f"afade=t=out:st={duration_s - audio['fade_out_s']}:d={audio['fade_out_s']}"
+        f"aresample=48000,aformat=channel_layouts=stereo"
+    )
+    # Duck the music under each sfx window so the diegetic sound isn't
+    # masked by the (much louder, broadband) music bed.
+    for entry in sfx:
+        start_s = entry["delay_ms"] / 1000
+        end_s = start_s + entry["dur_s"]
+        music_chain += f",volume=0.3:enable='between(t,{start_s:.3f},{end_s:.3f})'"
+    sfx_inputs = []
+    sfx_labels = []
+    graph = f"[1:a]{music_chain}[m];"
+    for i, entry in enumerate(sfx):
+        sfx_inputs += ["-ss", str(entry["in_s"]), "-t", str(entry["dur_s"]), "-i", str(session_dir / entry["src"])]
+        label = f"s{i}"
+        sfx_labels.append(label)
+        graph += f"[{i + 2}:a]{_sfx_chain(entry)}[{label}];"
+    mix_inputs = "".join(f"[{label}]" for label in sfx_labels)
+    graph += (
+        f"[m]{mix_inputs}amix=inputs={len(sfx) + 1}:duration=first:normalize=0,"
+        f"afade=t=out:st={duration_s - audio['fade_out_s']}:d={audio['fade_out_s']}[a]"
     )
     render_cmd = [
         "ffmpeg",
@@ -116,14 +159,15 @@ def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
         str(duration_s),
         "-i",
         str(music_path),
+        *sfx_inputs,
+        "-filter_complex",
+        graph,
         "-map",
         "0:v",
         "-map",
-        "1:a",
+        "[a]",
         "-c:v",
         "copy",
-        "-af",
-        render_af,
         "-c:a",
         "aac",
         "-b:a",

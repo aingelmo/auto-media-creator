@@ -108,6 +108,15 @@ def _drawtext_escape(text: str) -> str:
     return re.sub(r"([\\',;\[\]])", r"\\\1", s)
 
 
+# Diegetic sfx mix (#audio §5): per-entry gain, resample to the music's
+# format, and delay to the timeline position; `{ramp}` is the slow-mo split
+# (see `render.concat._sfx_chain`), "" for non-ramp entries.
+SFX_FILTER_TEMPLATE = (
+    "{ramp}volume={gain_db}dB,aresample=48000,aformat=channel_layouts=stereo,"
+    "adelay={delay_ms}:all=1"
+)
+
+
 def hook_text_filter(clip: dict, target: dict) -> str:
     """Hook-text `drawtext` filter (#6.6), trailing comma included; "" if absent."""
     p = clip.get("effect_params", {})

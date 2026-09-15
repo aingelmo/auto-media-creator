@@ -82,13 +82,19 @@ ffmpeg -t {duration_s} -i music/track_cut.wav \
   -af "loudnorm=I={target_lufs}:TP={target_tp}:LRA={target_lra}:print_format=json" -f null - 2> loudnorm_1.log
 # parsear el JSON del log → input_i, input_tp, input_lra, input_thresh, target_offset → edl.audio.loudnorm_measured
 
-# Pasada 2: render final
+# Pasada 2: render final (filter_complex: música + N entradas de audio.sfx)
 ffmpeg -y -f concat -safe 0 -i segments.txt \
   -t {duration_s} -i music/track_cut.wav \
-  -map 0:v -map 1:a -c:v copy \
-  -af "loudnorm=I={target_lufs}:TP={target_tp}:LRA={target_lra}:linear=true:\
+  -ss {sfx0.in_s} -t {sfx0.dur_s} -i {session_dir}/{sfx0.src} \
+  ... \
+  -filter_complex "
+    [1:a]loudnorm=I={target_lufs}:TP={target_tp}:LRA={target_lra}:linear=true:\
 measured_I={input_i}:measured_TP={input_tp}:measured_LRA={input_lra}:measured_thresh={input_thresh}:offset={target_offset}:print_format=json,\
-aresample=48000,afade=t=out:st={duration_s - fade_out_s}:d={fade_out_s}" \
+aresample=48000,aformat=channel_layouts=stereo[m];
+    [2:a]volume={sfx0.gain_db}dB,aresample=48000,aformat=channel_layouts=stereo,adelay={sfx0.delay_ms}:all=1[s0];
+    ...
+    [m][s0]...amix=inputs={N+1}:duration=first:normalize=0,afade=t=out:st={duration_s - fade_out_s}:d={fade_out_s}[a]" \
+  -map 0:v -map "[a]" -c:v copy \
   -c:a aac -b:a 192k -ar 48000 -threads {threads} -movflags +faststart reel.mp4 2> loudnorm_2.log
 # parsear el JSON de loudnorm_2.log → edl.audio.loudnorm_applied (debe traer normalization_type)
 ```
@@ -97,7 +103,8 @@ aresample=48000,afade=t=out:st={duration_s - fade_out_s}:d={fade_out_s}" \
 - Entrada de audio = `track_cut.wav` sin `-ss`: es el mismo fichero sobre el que se detectaron los beats.
 - `linear=true` exige los cuatro `measured_*` `[verificado: doc loudnorm]` y **cae en silencio a modo dinámico** si el LRA medido supera el objetivo o el TP no cabe `[verificado: fuente secundaria]`; por eso la pasada 2 también imprime JSON y R5 comprueba `normalization_type`.
 - **Sin `-shortest`**: vídeo y audio tienen exactamente `duration_s` por construcción; `-shortest` introducía una carrera entre el último paquete de vídeo y el padding AAC que podía recortar el último frame.
-- Con `audio.music_cut_path == null`: `ffmpeg -f concat -safe 0 -i segments.txt -c:v copy -an -movflags +faststart reel.mp4`.
+- Con `audio.music_cut_path == null`: `ffmpeg -f concat -safe 0 -i segments.txt -c:v copy -an -movflags +faststart reel.mp4` (independiente de `audio.sfx`).
+- **`audio.sfx[]`** (idea #5, sonido diegético del hook/peak bajo la música a `gain_db` fijo, −18 dB por defecto): cada entrada es una entrada de ffmpeg extra (`-ss in_s -t dur_s -i {src}`, solo se referencia `:a`, así que el stream 4K no se decodifica). `adelay=…:all=1` coloca el sonido en su posición del timeline; `amix=…:normalize=0` evita que ffmpeg divida el nivel de la música entre N+1 pistas (ffmpeg 5.1+). Si la entrada tiene `ramp` (el hook con speed ramp, §6.3), el audio se separa en 3 tramos con `asplit`/`atrim`/`concat` y el tramo central se re-samplea con `asetrate=48000*speed` para que el tono baje igual que la imagen se ralentiza, sin recurrir a `atempo` (que necesitaría encadenarse para `speed < 0.5`).
 
 ### 10.5 Checks de render (R)
 

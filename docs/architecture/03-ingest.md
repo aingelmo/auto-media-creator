@@ -28,6 +28,7 @@
       "src_fps_nominal": 30.0,
       "hdr": "hlg",
       "color": { "primaries": "bt2020", "trc": "arib-std-b67", "space": "bt2020nc", "range": "tv" },
+      "has_audio": true,
       "proxy": "proxies/take_01.mp4",
       "proxy_verified": false
     },
@@ -48,6 +49,7 @@ Reglas de cálculo:
 - `hdr` ∈ `none | hlg | pq | dv84`. Detección: `color_transfer` = `arib-std-b67` → `hlg`; `smpte2084` → `pq`; presencia de `side_data` Dolby Vision con base HLG → `dv84` (se trata como `hlg`: el RPU se ignora y se usa la capa base; el perfil 8.4 es por definición compatible con HLG en la capa base `[verificado]`, la validación pendiente es solo visual). Si `color_transfer` es `unknown` o falta en un fichero de 10 bits → **error de ingesta**, no se asume SDR (evita el "vídeo lavado etiquetado bt709").
 - `vfr` = `r_frame_rate ≠ avg_frame_rate` o desviación de `pkt_duration_time` > 5 %. `src_fps_nominal` = `avg_frame_rate` redondeado; se usa solo para el warning `slowmo_duplicates` (hook con `effect == ramp` sobre fuente ≤ 30 fps).
 - `start_time_s` y `color` se registran para diagnóstico y para la EDL. **No entran en ningún cálculo de tiempo.**
+- `has_audio` = presencia de un stream `codec_type == "audio"` en el original (no en el proxy, que siempre es `-an`). Se usa en Capa 2 para decidir qué clips llevan sfx diegético.
 - `proxy_verified` pasa a `true` en Capa 2 (§4.4), no aquí.
 
 ### 3.2 Proxies

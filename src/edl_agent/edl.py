@@ -20,6 +20,8 @@ DEFAULT_AUDIO_TARGETS = {
     "target_tp": -1.0,
     "target_lra": 11.0,
     "fade_out_s": 0.5,
+    "sfx": True,
+    "sfx_gain_db": -9.0,
 }
 
 
@@ -29,7 +31,62 @@ def _hash(obj: dict) -> str:
     ).hexdigest()
 
 
-def _audio_block(manifest: dict, config: dict) -> dict:
+def _sfx_entries(
+    clips: list[dict],
+    candidates_by_id: dict,
+    sources_by_src: dict,
+    config: dict,
+) -> list[dict]:
+    """Diegetic sfx entries for the hook and peak clips (idea #5).
+
+    Args:
+        clips: Clips as built by `planner.build_clips`.
+        candidates_by_id: Mapping `candidate_id -> candidate dict`.
+        sources_by_src: Mapping `src -> source dict` (from
+            `manifest.json["sources"]`).
+        config: Merged config; reads `sfx` (bool) and `sfx_gain_db`.
+
+    Returns:
+        List of self-contained entries (`slot`, `src`, `in_s`, `dur_s`,
+        `delay_ms`, `gain_db`, `ramp`), one per eligible clip: `type ==
+        "video"`, its source has audio, and it's the hook or a peak-kind
+        candidate. Empty if `config["sfx"]` is off.
+    """
+    if not config["sfx"]:
+        return []
+    entries = []
+    for clip in clips:
+        if clip["type"] != "video":
+            continue
+        if not sources_by_src[clip["src"]].get("has_audio"):
+            continue
+        cand = candidates_by_id.get(clip["candidate_id"])
+        is_peak = cand is not None and cand["kind"] == "peak"
+        if clip["role"] != "hook" and not is_peak:
+            continue
+        ramp = None
+        if clip["effect"] == "ramp":
+            p = clip["effect_params"]
+            ramp = {
+                "start_f": p["ramp_start_f"],
+                "frames": p["ramp_frames"],
+                "speed": p["ramp_speed"],
+            }
+        entries.append(
+            {
+                "slot": clip["slot"],
+                "src": clip["src"],
+                "in_s": clip["in_s"],
+                "dur_s": clip["out_s"] - clip["in_s"],
+                "delay_ms": round(clip["timeline_start_f"] / 30 * 1000),
+                "gain_db": config["sfx_gain_db"],
+                "ramp": ramp,
+            }
+        )
+    return entries
+
+
+def _audio_block(manifest: dict, config: dict, sfx: list[dict]) -> dict:
     music = manifest.get("music")
     return {
         "music_cut_path": music["cut"] if music else None,
@@ -43,6 +100,7 @@ def _audio_block(manifest: dict, config: dict) -> dict:
         "loudnorm_measured": None,
         "loudnorm_applied": None,
         "fade_out_s": config["fade_out_s"],
+        "sfx": sfx,
     }
 
 
@@ -240,6 +298,8 @@ def build_edl(
     warnings = warnings + clip_warnings
     warnings = warnings + _aggregate_warnings(clips, warnings)
 
+    sfx = _sfx_entries(clips, candidates_by_id, sources_by_src, config)
+
     render_profile = get_render_profile(
         threads,
         tonemap_chain,
@@ -269,7 +329,7 @@ def build_edl(
         },
         "brand": brand or None,
         "clips": clips,
-        "audio": _audio_block(manifest, config),
+        "audio": _audio_block(manifest, config, sfx),
         "provenance": _provenance(
             fallback_roles, has_develop, warnings, selection_meta
         ),

@@ -135,9 +135,34 @@
         "target_lra": { "type": "number" },
         "loudnorm_measured": { "type": ["object", "null"], "description": "Salida JSON de la 1.ª pasada; null hasta el render." },
         "loudnorm_applied": { "type": ["object", "null"], "description": "Salida JSON de la 2.ª pasada (incluye normalization_type); null hasta el render." },
-        "fade_out_s": { "type": "number", "minimum": 0 }
+        "fade_out_s": { "type": "number", "minimum": 0 },
+        "sfx": {
+          "type": "array",
+          "description": "Sonido diegético del hook y de los clips peak, mezclado bajo la música a `gain_db` fijo (idea #5). Autocontenido: no referencia `clips`.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": { "type": "integer" },
+              "src": { "type": "string" },
+              "in_s": { "type": "number", "minimum": 0 },
+              "dur_s": { "type": "number", "minimum": 0 },
+              "delay_ms": { "type": "integer", "minimum": 0 },
+              "gain_db": { "type": "number" },
+              "ramp": {
+                "type": ["object", "null"],
+                "properties": {
+                  "start_f": { "type": "integer" },
+                  "frames": { "type": "integer" },
+                  "speed": { "type": "number" }
+                },
+                "required": ["start_f", "frames", "speed"]
+              }
+            },
+            "required": ["slot", "src", "in_s", "dur_s", "delay_ms", "gain_db", "ramp"]
+          }
+        }
       },
-      "required": ["music_cut_path", "music_cut_sha256", "music_src_path", "music_src_sha256", "music_offset_s", "target_lufs", "target_tp", "target_lra", "loudnorm_measured", "loudnorm_applied", "fade_out_s"]
+      "required": ["music_cut_path", "music_cut_sha256", "music_src_path", "music_src_sha256", "music_offset_s", "target_lufs", "target_tp", "target_lra", "loudnorm_measured", "loudnorm_applied", "fade_out_s", "sfx"]
     },
     "provenance": {
       "type": "object",
@@ -159,7 +184,7 @@
 }
 ```
 
-Cambios frente a v4 (v5): `effect` admite `end_card` y `role` admite `end_card` (clip sintético que toma los últimos frames del close, §6.8); nuevo top-level opcional `brand` (`logo` relativo a la sesión, `logo_sha256`, `logo_w`, `logo_h`, `handle`, `line`, `bg`, `fg`, `font`, `watermark: {w, opacity, inset_x, bottom_frac} | null`) o `null`; `render_profile` añade `logo_filter_template`, `end_card_filter_template`, `brand_sha256`. `speed` es siempre 1.0 desde el ramp (§6.3).
+Cambios frente a v4 (v5): `effect` admite `end_card` y `role` admite `end_card` (clip sintético que toma los últimos frames del close, §6.8); nuevo top-level opcional `brand` (`logo` relativo a la sesión, `logo_sha256`, `logo_w`, `logo_h`, `handle`, `line`, `bg`, `fg`, `font`, `watermark: {w, opacity, inset_x, bottom_frac} | null`) o `null`; `render_profile` añade `logo_filter_template`, `end_card_filter_template`, `brand_sha256`. `speed` es siempre 1.0 desde el ramp (§6.3). Aditivo, sigue v5: `audio.sfx[]` (sonido diegético del hook/peak bajo la música, idea #5) y `render_profile.sfx_filter_template`.
 
 Cambios frente a v3: `render_profile` (versiones, configuración de FFmpeg, hilos, cadenas y flags exactos, hash); `crop_px`, `src_rotation`, `src_color`, `effect`/`effect_params` por clip; `music_cut_*` y `music_src_*` con hashes; `target_tp/target_lra`; `loudnorm_applied`; `sdk_version`, `api_revision`, `llm_usage`; hashes de config de features y del modelo de pose. `audio.music_cut_path = null` es válido y produce un render con `-an` (derechos de música). Este schema se valida localmente con `jsonschema` (draft-07 sí soporta `const` y `exclusiveMinimum`); **no se envía a Gemini**.
 

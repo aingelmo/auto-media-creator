@@ -91,6 +91,7 @@ def run_ingest(
                 "src_fps_nominal": info.src_fps_nominal,
                 "hdr": info.hdr,
                 "color": info.color,
+                "has_audio": info.has_audio,
                 "proxy": str(proxy_path.relative_to(session_dir)),
                 "proxy_verified": verified,
             }

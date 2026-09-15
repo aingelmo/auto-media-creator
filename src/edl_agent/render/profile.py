@@ -16,6 +16,7 @@ from edl_agent.render._common import (
     LOGO_FILTER_TEMPLATE,
     PUNCH_FILTER_TEMPLATE,
     RAMP_SETPTS_TEMPLATE,
+    SFX_FILTER_TEMPLATE,
     _video_codec_args,
 )
 
@@ -128,6 +129,7 @@ def get_render_profile(
         "logo_filter_template": LOGO_FILTER_TEMPLATE,
         "end_card_filter_template": END_CARD_FILTER_TEMPLATE + END_CARD_TEXT_TEMPLATE,
         "brand_sha256": brand_sha256,
+        "sfx_filter_template": SFX_FILTER_TEMPLATE,
         "audio_codec_args": "-c:a aac -b:a 192k -ar 48000",
     }
     profile["profile_sha256"] = hashlib.sha256(
