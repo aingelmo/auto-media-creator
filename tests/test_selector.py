@@ -100,7 +100,7 @@ def test_build_parts_embeds_id_line_and_base64_image(tmp_path) -> None:
     parts = build_parts([_cand("c1", [0], jpg)], "USER_PROMPT")
     assert parts[0] == {
         "type": "text",
-        "text": "id=c1 kind=peak src=a.mov multi_subject=False",
+        "text": "id=c1 kind=peak src=a.mov multi_subject=False velocidad=0.00",
     }
     assert parts[1]["type"] == "image"
     assert parts[1]["resolution"] == "low"
@@ -239,3 +239,22 @@ def test_hook_line_in_schema_and_prompt() -> None:
     assert schema["properties"]["hook_line"]["type"] == "string"
     assert "hook_line" in build_system_prompt("training")
     assert "sereno" in build_system_prompt("yoga")
+
+
+def test_build_parts_sends_absolute_speed_and_prompt_explains_it(tmp_path) -> None:
+    jpg = tmp_path / "p.jpg"
+    jpg.write_bytes(b"\xff\xd8\xff")
+    cand = {
+        "id": "c1",
+        "kind": "peak",
+        "src": "a.mov",
+        "multi_subject": False,
+        "kp_speed_abs": 2.345,
+        "peak_frames": [str(jpg)],
+    }
+    text = build_parts([cand], "prompt")[0]["text"]
+    assert "velocidad=2.35" in text
+    del cand["kp_speed_abs"]
+    assert "velocidad=0.00" in build_parts([cand], "p")[0]["text"]
+    system = build_system_prompt("training")
+    assert "velocidad" in system and "No inventes cifras" in system

@@ -26,6 +26,7 @@ def save_features(features: dict, path: Path) -> None:
         {
             "t_s": features["t_s"],
             "kp_speed": features["kp_speed"],
+            "kp_speed_abs": features.get("kp_speed_abs", [0.0] * len(bbox)),
             "motion_bg": features["motion_bg"],
             "motion": features["motion"],
             "sharpness": features["sharpness"],
@@ -50,7 +51,8 @@ def load_features(path: Path) -> dict:
         path: Input `.parquet` path.
 
     Returns:
-        Feature series dict with keys `t_s`, `kp_speed`, `motion_bg`,
+        Feature series dict with keys `t_s`, `kp_speed`, `kp_speed_abs`
+        (zeros for parquet files written before the column existed), `motion_bg`,
         `motion`, `sharpness`, `subject_visible`, `multi_subject`,
         `subject_bbox` (reconstructed as `(x0, y0, x1, y1)` tuples, or
         `None` where any coordinate was `NaN`). Does not restore
@@ -74,6 +76,11 @@ def load_features(path: Path) -> dict:
     return {
         "t_s": df["t_s"].tolist(),
         "kp_speed": df["kp_speed"].tolist(),
+        "kp_speed_abs": (
+            df["kp_speed_abs"].tolist()
+            if "kp_speed_abs" in df
+            else [0.0] * len(df)
+        ),
         "motion_bg": df["motion_bg"].tolist(),
         "motion": df["motion"].tolist(),
         "sharpness": df["sharpness"].tolist(),

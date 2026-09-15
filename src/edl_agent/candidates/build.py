@@ -60,6 +60,9 @@ def build_video_candidates(
         - `t_peak` (float): peak/representative timestamp, in seconds.
         - `window` (list[float]): `[start_s, end_s]` bounds.
         - `kp_speed` (float): normalized action speed at `t_peak`.
+        - `kp_speed_abs` (float): un-normalized action speed at `t_peak`, in
+          bbox-heights per second (see `features.extract_features`); 0.0 if
+          the feature file predates the column.
         - `motion_bg` (float): normalized background motion at `t_peak`.
         - `sharpness` (float): normalized sharpness at `t_peak`.
         - `subject_bbox` (list[float]): `[x0, y0, x1, y1]`, normalized;
@@ -87,6 +90,11 @@ def build_video_candidates(
             features["kp_speed"][i]
             if i is not None
             else _value_at(features, "kp_speed", w["t_peak"])
+        )
+        kp_speed_abs = (
+            features.get("kp_speed_abs", [0.0] * len(features["t_s"]))[
+                i if i is not None else _nearest_index(features, w["t_peak"])
+            ]
         )
         sharpness = (
             features["sharpness"][i]
@@ -117,6 +125,7 @@ def build_video_candidates(
                 "t_peak": w["t_peak"],
                 "window": w["window"],
                 "kp_speed": kp_speed,
+                "kp_speed_abs": round(float(kp_speed_abs), 3),
                 "motion_bg": motion_bg,
                 "sharpness": sharpness,
                 "subject_bbox": list(bbox) if bbox else [0.0, 0.0, 1.0, 1.0],

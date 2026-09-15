@@ -64,6 +64,10 @@ def extract_features(
           tracked at each sample.
         - `kp_speed` (list[float]): principal subject's EMA action speed,
           normalized to [0, 1] via 5th/95th percentile clipping.
+        - `kp_speed_abs` (list[float]): the same EMA speed un-normalized, in
+          bbox-heights per second, so it is comparable across clips (a slow
+          step-down and a box jump both peak at `kp_speed` 1.0 within their
+          own clip but differ by an order of magnitude here).
         - `motion_bg` (list[float]): background motion, normalized the same
           way.
         - `motion` (list[float]): whole-frame motion (diagnostic),
@@ -122,6 +126,7 @@ def extract_features(
         "subject_bbox": subject_bbox,
         "subject_visible": subject_visible,
         "kp_speed": normalize_p5_95(kp_speed_raw).tolist(),
+        "kp_speed_abs": (kp_speed_raw * source_fps / stride).tolist(),
         "motion_bg": normalize_p5_95(motion_bg_raw).tolist(),
         "motion": normalize_p5_95(motion_raw).tolist(),
         "sharpness": normalize_p5_95(sharpness_raw).tolist(),

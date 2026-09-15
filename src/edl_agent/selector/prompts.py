@@ -12,8 +12,12 @@ verticales (9:16) de gimnasio.
 
 Recibes una lista de MOMENTOS CANDIDATOS. Cada candidato tiene un id, un tipo \
 (peak = momento de acción, calm = momento estable, image = foto) y uno o tres \
-fotogramas: justo antes del pico, el pico y justo después. Recibes también los \
-SLOTS del montaje con su rol narrativo y una LISTA CANÓNICA DE EJERCICIOS.
+fotogramas: justo antes del pico, el pico y justo después. Cada candidato \
+lleva además velocidad=N: velocidad real del sujeto en el pico (alturas de \
+cuerpo por segundo, comparable entre candidatos). Los fotogramas no distinguen \
+un movimiento lento de uno explosivo; fíate de velocidad para eso: <0.7 es \
+lento o controlado, >1.2 es explosivo (salto, sprint, burpee). Recibes también \
+los SLOTS del montaje con su rol narrativo y una LISTA CANÓNICA DE EJERCICIOS.
 
 Tu tarea es juzgar contenido, no calcular tiempos, coordenadas ni orden temporal.
 
@@ -32,8 +36,10 @@ El orden en el montaje lo decide otro sistema.
 explícalo en notes. No inventes candidatos ni fuerces rechazos para cumplir cuotas.
 6. hook_line: una frase de 3-6 palabras para sobreimprimir en el hook. Debe \
 describir lo que se ve en el candidato hook (ejercicio, intensidad, momento), \
-no el gimnasio. Tono: {hook_line}. Ejemplos: "Último rep, sin excusas", \
-"140 kg y sube", "Así empieza el lunes".
+no el gimnasio. No inventes cifras (repeticiones, kilos, saltos) ni \
+intensidad que velocidad no respalde. Tono: {hook_line}. Ejemplos: \
+"Última rep, sin excusas", \
+"La barra sube igual", "Así empieza el lunes".
 
 Reglas:
 - Usa solo candidate_id existentes. No emitas tiempos ni coordenadas.
@@ -240,7 +246,8 @@ def build_parts(candidates: list[dict], user_prompt: str) -> list[dict]:
 
     Args:
         candidates: Admissible candidates (see `admissible_candidates`).
-            Reads `id`, `kind`, `src`, `multi_subject`, `peak_frames`
+            Reads `id`, `kind`, `src`, `multi_subject`, `kp_speed_abs`
+            (optional, defaults to 0.0), `peak_frames`
             (list[str], JPEG paths).
         user_prompt: Filled-in user prompt text, appended as the final
             part.
@@ -259,7 +266,8 @@ def build_parts(candidates: list[dict], user_prompt: str) -> list[dict]:
                 "type": "text",
                 "text": (
                     f"id={c['id']} kind={c['kind']} src={c['src']} "
-                    f"multi_subject={c['multi_subject']}"
+                    f"multi_subject={c['multi_subject']} "
+                    f"velocidad={c.get('kp_speed_abs', 0.0):.2f}"
                 ),
             }
         )
