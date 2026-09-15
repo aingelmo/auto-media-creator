@@ -288,9 +288,11 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
     r, g, b = _pixel("seg_02", 20, 20)
     assert max(r, g, b) < 40
 
-    # Hook flash: frame 9 (peak beat) of seg_00 is white.
+    # Hook flash: frame 9 (peak beat) of seg_00 is white, decaying by frame 10.
     r, g, b = _pixel("seg_00", 180, 320, frame=9)
     assert min(r, g, b) > 230
+    r10, g10, b10 = _pixel("seg_00", 180, 320, frame=10)
+    assert sum((r10, g10, b10)) < sum((r, g, b))
 
 
 def test_drawtext_escape_survives_both_ffmpeg_parsers() -> None:

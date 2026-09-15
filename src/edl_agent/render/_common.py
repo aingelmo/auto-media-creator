@@ -126,15 +126,19 @@ def hook_text_filter(clip: dict, target: dict) -> str:
 
 
 # Punch-in (#6.6): 3x pre-scale + zoompan, same trick as Ken Burns so the
-# zoom crops on a fine grid. `on` is 1-based; z ramps 1.0 -> zoom over k
-# frames then holds (the next cut resets to 1.0 - that is the punch).
+# zoom crops on a fine grid. `on` is 1-based; the cut lands already at `zoom`
+# and z eases back down to 1.0 over k frames (snap-in, ease-out punch).
 PUNCH_FILTER_TEMPLATE = (
     "scale={pw}:{ph}:flags=lanczos,"
-    "zoompan=z='1+({zoom}-1)*min(on-1,{k})/{k}':"
+    "zoompan=z='1+({zoom}-1)*(1-min(on-1,{k})/{k})':"
     "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={tw}x{th}:fps=30,"
 )
-# Hook flash (#6.6): full-frame white for `k` frames starting at frame `f`.
-FLASH_FILTER_TEMPLATE = "drawbox=c=white:t=fill:enable='between(n,{f},{f}+{k}-1)',"
+# Hook flash (#6.6): frame `f` peaks full white, decaying linearly back to
+# the untouched picture over `k` frames (bloom-and-fade, not a hard cut).
+FLASH_FILTER_TEMPLATE = (
+    "eq=brightness='if(between(n,{f},{f}+{k}-1),1-(n-{f})/{k},0)':"
+    "saturation='if(between(n,{f},{f}+{k}-1),(n-{f})/{k},1)':eval=frame,"
+)
 
 
 def cut_fx_filter(clip: dict, target: dict) -> str:

@@ -44,11 +44,11 @@ DEFAULT_CONFIG = {
     "end_card_frames": 45,
     "end_card_logo_w": 480,
     "end_card_text_size": 48,
-    "punch_in": True,  # #6.6: 1.0->punch_zoom over punch_frames on each develop cut
-    "punch_frames": 5,
-    "punch_zoom": 1.06,
+    "punch_in": True,  # #6.6: punch_zoom->1.0 over punch_frames on each develop cut
+    "punch_frames": 8,
+    "punch_zoom": 1.15,
     "hook_flash": True,  # #6.6: white flash on the hook's peak beat
-    "flash_frames": 2,
+    "flash_frames": 6,
 }
 
 
