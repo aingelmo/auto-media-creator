@@ -201,10 +201,20 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
                     "text_y": 0.28,
                     "text_frames": 45,
                     "fade_frames": 8,
+                    # hook flash (#6.6) on the peak beat
+                    "flash_frame": 9,
+                    "flash_frames": 2,
                 },
             },
             # close gives its last 15 frames to the end card
-            _clip(1, "close", "inputs/b.mp4", 360, 640, 0.5, 1.5, 30, 1.0, 45, 75),
+            {
+                **_clip(
+                    1, "close", "inputs/b.mp4", 360, 640, 0.5, 1.5, 30, 1.0, 45, 75
+                ),
+                # punch-in (#6.6), normally develop-only; exercised here
+                # since this EDL is hand-written rather than planner-built
+                "effect_params": {"punch_frames": 5, "punch_zoom": 1.06},
+            },
             {
                 **_clip(
                     2, "end_card", "brand/logo.png", 1080, 1920, 0, 0.5, 15, 1.0, 75, 90
@@ -252,7 +262,7 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
 
     # Watermark landed: the bottom-right logo box of the close's frame 0 is
     # red-tinted, and the end card's canvas is the brand bg.
-    def _pixel(seg: str, x: int, y: int) -> Any:
+    def _pixel(seg: str, x: int, y: int, frame: int = 0) -> Any:
         png = session_dir / f"{seg}.png"
         subprocess.run(
             [
@@ -260,6 +270,8 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
                 "-y",
                 "-i",
                 str(session_dir / "segments" / f"{seg}.mp4"),
+                "-vf",
+                f"select=eq(n\\,{frame})",
                 "-frames:v",
                 "1",
                 str(png),
@@ -275,6 +287,10 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
     assert r > g + 40 and r > b + 40
     r, g, b = _pixel("seg_02", 20, 20)
     assert max(r, g, b) < 40
+
+    # Hook flash: frame 9 (peak beat) of seg_00 is white.
+    r, g, b = _pixel("seg_00", 180, 320, frame=9)
+    assert min(r, g, b) > 230
 
 
 def test_drawtext_escape_survives_both_ffmpeg_parsers() -> None:

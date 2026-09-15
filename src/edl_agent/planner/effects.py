@@ -22,6 +22,8 @@ def effect_for(
     config: dict,
     ramp: dict | None = None,
     hook_text: tuple[str, int] | None = None,
+    role: str | None = None,
+    peak_f: int | None = None,
 ) -> tuple[str, dict]:
     """Pick the effect and its parameters for a clip, per #6.6.
 
@@ -30,12 +32,16 @@ def effect_for(
         layout: Crop layout for this clip, as returned by `compute_crop`
             (`"crop"` or `"blur_pad"`).
         config: Planner config; reads `ken_burns`, `zoom_per_frame`,
-            `zoom_max` (for image candidates), and `blur_radius`,
-            `blur_power`, `bg_brightness` (for `blur_pad` layouts).
+            `zoom_max` (for image candidates), `blur_radius`,
+            `blur_power`, `bg_brightness` (for `blur_pad` layouts),
+            `punch_in`, `punch_frames`, `punch_zoom`, `hook_flash`,
+            `flash_frames`.
         ramp: `compute_in_out`'s `ramp` output (`{"speed", "frames",
             "start_f"}`) or `None`.
         hook_text: `(hook_line, d_f)` for the hook slot, or `None`. Ignored
             when `hook_line` is empty or `config["hook_text"]` is off.
+        role: Slot role (`"hook"`, `"develop"`, `"close"`), or `None`.
+        peak_f: `compute_in_out`'s `peak_f` output, or `None`.
 
     Returns:
         `(effect, effect_params)`:
@@ -51,6 +57,11 @@ def effect_for(
           `font_size` (shrunk by `fit_font_size` so the line fits 1000 px
           at 1080 wide), `text_y`, `text_frames`, `fade_frames`; `effect`
           is unchanged (presence of `text` is the render's switch).
+        - For `role == "develop"` video clips with `config["punch_in"]`,
+          `effect_params` also has `punch_frames`, `punch_zoom`.
+        - For `role == "hook"` video clips with `peak_f is not None` and
+          `config["hook_flash"]`, `effect_params` also has `flash_frame`
+          (`= peak_f`), `flash_frames`.
     """
     if candidate["kind"] == "image" and config.get("ken_burns", True):
         return "kenburns", {
@@ -84,4 +95,11 @@ def effect_for(
             "text_frames": min(config["hook_text_max_frames"], d_f),
             "fade_frames": config["hook_text_fade_frames"],
         }
+    if role == "develop" and config.get("punch_in", True):
+        params |= {
+            "punch_frames": config["punch_frames"],
+            "punch_zoom": config["punch_zoom"],
+        }
+    if role == "hook" and peak_f is not None and config.get("hook_flash", True):
+        params |= {"flash_frame": peak_f, "flash_frames": config["flash_frames"]}
     return effect, params

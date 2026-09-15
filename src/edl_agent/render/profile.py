@@ -11,8 +11,10 @@ from edl_agent.render._common import (
     COLOR_FIX_FILTER_TEMPLATE,
     END_CARD_FILTER_TEMPLATE,
     END_CARD_TEXT_TEMPLATE,
+    FLASH_FILTER_TEMPLATE,
     HOOK_TEXT_FILTER_TEMPLATE,
     LOGO_FILTER_TEMPLATE,
+    PUNCH_FILTER_TEMPLATE,
     RAMP_SETPTS_TEMPLATE,
     _video_codec_args,
 )
@@ -87,9 +89,10 @@ def get_render_profile(
         `color_fix_filter_template` fills `{color_fix}`, #6.7;
         `ramp_setpts_template` fills `{setpts}` for `effect == "ramp"`;
         `hook_text_filter_template` fills `{text}` for the hook, with
-        `hook_text_font`/`hook_text_font_sha256`; `logo_filter_template`
-        and `end_card_filter_template` for the brand layer, with
-        `brand_sha256`),
+        `hook_text_font`/`hook_text_font_sha256`; `punch_filter_template`
+        and `flash_filter_template` fill `{fx}` for the cut effects
+        (#6.6); `logo_filter_template` and `end_card_filter_template` for
+        the brand layer, with `brand_sha256`),
         `audio_codec_args` (str), and `profile_sha256` (str, hash of the
         rest of the dict, for reproducibility checks).
     """
@@ -103,12 +106,12 @@ def get_render_profile(
         "video_codec_args": " ".join(_video_codec_args(threads, preview=False)),
         "segment_filter_template": (
             "crop={w}:{h}:{x}:{y},setpts={setpts},fps=30,"
-            "scale={tw}:{th}:flags=lanczos,{hdr}{color_fix}{text}{logo}setsar=1,format=yuv420p"
+            "scale={tw}:{th}:flags=lanczos,{hdr}{color_fix}{text}{fx}{logo}setsar=1,format=yuv420p"
         ),
         "blur_pad_filter_template": (
             "[0:v]setpts={setpts},fps=30,scale='if(gt(iw,ih),-2,{tw})':'if(gt(iw,ih),{tw},-2)':flags=lanczos,{hdr}split[a][b];"
             "[a]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur={blur_radius}:{blur_power},eq=brightness={bg_brightness}[bg];"
-            "[b]scale={tw}:-2:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}{logo}setsar=1,format=yuv420p[v]"
+            "[b]scale={tw}:-2:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}{fx}{logo}setsar=1,format=yuv420p[v]"
         ),
         "image_filter_template": (
             "crop={w}:{h}:{x}:{y},scale={ptw}:{pth}:flags=lanczos,"
@@ -120,6 +123,8 @@ def get_render_profile(
         "hook_text_filter_template": HOOK_TEXT_FILTER_TEMPLATE,
         "hook_text_font": hook_text_font,
         "hook_text_font_sha256": _file_sha256(hook_text_font),
+        "punch_filter_template": PUNCH_FILTER_TEMPLATE,
+        "flash_filter_template": FLASH_FILTER_TEMPLATE,
         "logo_filter_template": LOGO_FILTER_TEMPLATE,
         "end_card_filter_template": END_CARD_FILTER_TEMPLATE + END_CARD_TEXT_TEMPLATE,
         "brand_sha256": brand_sha256,

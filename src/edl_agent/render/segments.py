@@ -11,6 +11,7 @@ from edl_agent.render._common import (
     PREVIEW_TARGET,
     _video_codec_args,
     color_fix_filter,
+    cut_fx_filter,
     end_card_graph,
     finish_graph,
     hook_text_filter,
@@ -72,7 +73,9 @@ def render_video_segment(
             and `effect_params` (`blur_radius`, `blur_power`,
             `bg_brightness` for `blur_pad`; `ramp_*` for `effect == "ramp"`,
             see `_common.setpts_expr`; `text`/`font`/... for the hook text,
-            see `_common.hook_text_filter`).
+            see `_common.hook_text_filter`; `punch_frames`/`punch_zoom` and
+            `flash_frame`/`flash_frames` for the cut effects, see
+            `_common.cut_fx_filter`).
         src_path: Path to the source video (proxy if `preview`, original
             otherwise).
         crop_px: Pixel crop rect `{x, y, w, h}`, as returned by
@@ -101,13 +104,14 @@ def render_video_segment(
     hdr_prefix = "" if preview else _hdr_prefix(clip["hdr"], tonemap_chain)
     color_fix = color_fix_filter(clip)
     text = hook_text_filter(clip, target)
+    fx = cut_fx_filter(clip, target)
 
     if clip["layout"] == "crop":
         chain = (
             f"crop={crop_px['w']}:{crop_px['h']}:{crop_px['x']}:{crop_px['y']},"
             f"setpts={setpts},fps=30,"
             f"scale={target['w']}:{target['h']}:flags=lanczos,"
-            f"{hdr_prefix}{color_fix}{text}"
+            f"{hdr_prefix}{color_fix}{text}{fx}"
         )
     else:  # blur_pad
         params = clip["effect_params"]
@@ -120,7 +124,7 @@ def render_video_segment(
             f"boxblur={params['blur_radius']}:{params['blur_power']},"
             f"eq=brightness={params['bg_brightness']}[bg];"
             f"[b]scale={target['w']}:-2:flags=lanczos[fg];"
-            f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}{fx}"
         )
     inputs = ["-ss", str(clip["in_s"]), "-t", str(t_safety), "-i", src_path]
     _run(

@@ -95,7 +95,13 @@ def build_clips(
         if role == "hook":
             hook_text = (config["hook_line_override"], timing["n_frames"])
         effect, effect_params = effect_for(
-            cand, crop_info["layout"], config, timing["ramp"], hook_text
+            cand,
+            crop_info["layout"],
+            config,
+            timing["ramp"],
+            hook_text,
+            role=role,
+            peak_f=timing["peak_f"],
         )
 
         clip_warnings = list(timing["warnings"]) + list(crop_info["warnings"])

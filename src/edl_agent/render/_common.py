@@ -125,6 +125,36 @@ def hook_text_filter(clip: dict, target: dict) -> str:
     )
 
 
+# Punch-in (#6.6): 3x pre-scale + zoompan, same trick as Ken Burns so the
+# zoom crops on a fine grid. `on` is 1-based; z ramps 1.0 -> zoom over k
+# frames then holds (the next cut resets to 1.0 - that is the punch).
+PUNCH_FILTER_TEMPLATE = (
+    "scale={pw}:{ph}:flags=lanczos,"
+    "zoompan=z='1+({zoom}-1)*min(on-1,{k})/{k}':"
+    "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={tw}x{th}:fps=30,"
+)
+# Hook flash (#6.6): full-frame white for `k` frames starting at frame `f`.
+FLASH_FILTER_TEMPLATE = "drawbox=c=white:t=fill:enable='between(n,{f},{f}+{k}-1)',"
+
+
+def cut_fx_filter(clip: dict, target: dict) -> str:
+    """Punch-in and/or flash filters (#6.6), trailing comma included; "" if absent."""
+    p = clip.get("effect_params", {})
+    out = ""
+    if p.get("punch_frames"):
+        out += PUNCH_FILTER_TEMPLATE.format(
+            pw=target["w"] * 3,
+            ph=target["h"] * 3,
+            zoom=p["punch_zoom"],
+            k=p["punch_frames"],
+            tw=target["w"],
+            th=target["h"],
+        )
+    if p.get("flash_frames"):
+        out += FLASH_FILTER_TEMPLATE.format(f=p["flash_frame"], k=p["flash_frames"])
+    return out
+
+
 # Brand watermark (#6.8): the logo is ffmpeg input `[1:v]`, scaled to `lw` px
 # wide, alpha multiplied by `opacity`, bottom-right, raised `bottom` px so it
 # clears the Reels caption/UI. Applied after color_fix and hook text.

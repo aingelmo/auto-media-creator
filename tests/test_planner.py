@@ -356,6 +356,7 @@ def test_compute_in_out_ramp_peak_on_beat() -> None:
     assert timing["in_s"] == pytest.approx(6.0 - lead_src_s)
     assert timing["out_s"] == pytest.approx(6.0 - lead_src_s + need_s)
     assert timing["ramp"] == {"speed": 0.4, "frames": 12, "start_f": 9}
+    assert timing["peak_f"] == 15
     assert timing["warnings"] == []
 
     # Ramp is a no-op on calm candidates and single-beat slots.
@@ -532,3 +533,39 @@ def test_effect_for_hook_text_params() -> None:
         cand, "crop", {**DEFAULT_CONFIG, "hook_text": False}, None, ("x", 45)
     )
     assert "text" not in params
+
+
+def test_effect_for_cut_fx() -> None:
+    from edl_agent.planner import DEFAULT_CONFIG
+    from edl_agent.planner.effects import effect_for
+
+    cand = {"kind": "peak"}
+    _, params = effect_for(cand, "crop", DEFAULT_CONFIG, role="develop", peak_f=15)
+    assert params["punch_frames"] == DEFAULT_CONFIG["punch_frames"]
+    assert params["punch_zoom"] == DEFAULT_CONFIG["punch_zoom"]
+    assert "flash_frame" not in params
+
+    _, params = effect_for(cand, "crop", DEFAULT_CONFIG, role="hook", peak_f=15)
+    assert params["flash_frame"] == 15
+    assert params["flash_frames"] == DEFAULT_CONFIG["flash_frames"]
+    assert "punch_frames" not in params
+
+    _, params = effect_for(cand, "crop", DEFAULT_CONFIG, role="close", peak_f=None)
+    assert "punch_frames" not in params
+    assert "flash_frame" not in params
+
+    _, params = effect_for(
+        cand, "crop", {**DEFAULT_CONFIG, "punch_in": False}, role="develop", peak_f=15
+    )
+    assert "punch_frames" not in params
+    _, params = effect_for(
+        cand, "crop", {**DEFAULT_CONFIG, "hook_flash": False}, role="hook", peak_f=15
+    )
+    assert "flash_frame" not in params
+
+    img_cand = {"kind": "image"}
+    effect, params = effect_for(
+        img_cand, "crop", DEFAULT_CONFIG, role="develop", peak_f=None
+    )
+    assert effect == "kenburns"
+    assert "punch_frames" not in params

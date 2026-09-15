@@ -40,6 +40,8 @@ def compute_in_out(
         - `ramp` (dict | None): `{"speed", "frames", "start_f"}` when a
           ramp applies (`frames` is clamped to the slot, `start_f` is the
           first slowed output frame); `None` otherwise.
+        - `peak_f` (int | None): output frame index of the peak beat
+          (`= lead_f`); `None` for `kind == "image"`.
     """
     d_f = slot["end_f"] - slot["start_f"]
     warnings: list[str] = []
@@ -53,6 +55,7 @@ def compute_in_out(
             "timeline_end_f": slot["end_f"],
             "warnings": warnings,
             "ramp": None,
+            "peak_f": None,
         }
 
     window = tuple(candidate["window"])
@@ -98,4 +101,5 @@ def compute_in_out(
         "timeline_end_f": slot["end_f"],
         "warnings": warnings,
         "ramp": ramp_out,
+        "peak_f": lead_f,
     }
