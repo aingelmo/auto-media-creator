@@ -239,7 +239,7 @@ def test_frame_seek_time_snaps_to_nearest_frame_not_next() -> None:
 
 
 def test_run_ingest_end_to_end(session_dir) -> None:
-    _make_clip(session_dir / "inputs" / "a.mp4", w=640, h=360, duration=2)
+    _make_clip(session_dir / "inputs" / "a.mp4", w=360, h=640, duration=2)
     manifest = run_ingest(session_dir, threads=2)
 
     assert manifest["session_id"] == session_dir.name
@@ -248,6 +248,14 @@ def test_run_ingest_end_to_end(session_dir) -> None:
     assert src["proxy_verified"] is True
     assert src["has_audio"] is False
     assert (session_dir / "manifest.json").exists()
+
+
+def test_run_ingest_skips_horizontal_video(session_dir) -> None:
+    _make_clip(session_dir / "inputs" / "a_vertical.mp4", w=360, h=640, duration=2)
+    _make_clip(session_dir / "inputs" / "b_horizontal.mp4", w=640, h=360, duration=2)
+    manifest = run_ingest(session_dir, threads=2)
+
+    assert [s["src"] for s in manifest["sources"]] == ["inputs/a_vertical.mp4"]
 
 
 def test_run_ingest_reuses_cache_across_sessions(tmp_path, monkeypatch) -> None:
@@ -272,7 +280,7 @@ def test_run_ingest_reuses_cache_across_sessions(tmp_path, monkeypatch) -> None:
     import shutil
 
     clip = tmp_path / "a.mp4"
-    _make_clip(clip, w=640, h=360, duration=2)
+    _make_clip(clip, w=360, h=640, duration=2)
 
     def make_session(name: str) -> Path:
         d = tmp_path / name

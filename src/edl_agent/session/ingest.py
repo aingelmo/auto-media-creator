@@ -34,7 +34,9 @@ def run_ingest(
 
     Probes and builds proxies for each video source, verifies each proxy
     against its original, normalizes each image source, and cuts the music
-    track. Writes `manifest.json` to `session_dir`.
+    track. Writes `manifest.json` to `session_dir`. Horizontal videos
+    (`w > h` after rotation) are skipped entirely -- this pipeline targets
+    vertical (9:16) output and horizontal sources render incorrectly.
 
     Args:
         session_dir: Session directory; must already contain `inputs/` (and
@@ -73,9 +75,15 @@ def run_ingest(
             hit = cached_info(cache_root, sha, path) if cache_root else None
             if cache_root and hit:
                 info, verified = hit
+                if info.w > info.h:
+                    print(f"WARNING: skipping horizontal video {path} ({info.w}x{info.h})")
+                    continue
                 link_into(proxy_path, cache_root / sha / "proxy.mp4")
             else:
                 info = probe_video_source(path)
+                if info.w > info.h:
+                    print(f"WARNING: skipping horizontal video {path} ({info.w}x{info.h})")
+                    continue
                 proxy_target = (
                     cache_root / sha / "proxy.mp4" if cache_root else proxy_path
                 )
