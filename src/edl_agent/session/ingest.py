@@ -9,10 +9,14 @@ from edl_agent.ingest import (
     IngestError,
     build_manifest,
     build_proxy,
+    cached_info,
     cut_music,
+    link_into,
     normalize_image,
     probe_video_source,
     sha256_file,
+    store_info,
+    tmp_path,
     write_manifest,
 )
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
@@ -24,6 +28,7 @@ def run_ingest(
     threads: int = 4,
     music_offset_s: float = 0.0,
     music_max_duration_s: float | None = None,
+    cache_root: Path | None = None,
 ) -> dict:
     """Ingest a full session, per #1/#3.
 
@@ -38,6 +43,10 @@ def run_ingest(
         music_offset_s: Start offset into the music track, in seconds.
         music_max_duration_s: Max duration of the cut music clip, in
             seconds. Required if a music track exists.
+        cache_root: If given, a content-addressed cache directory (keyed
+            by source sha256) reused across sessions for `probe`+
+            `build_proxy`+`verify_source`; `proxies/<stem>.mp4` becomes a
+            symlink into it. `None` disables caching.
 
     Returns:
         The `manifest.json` dict (see `ingest.build_manifest`).
@@ -59,21 +68,36 @@ def run_ingest(
     for path in sorted(inputs.iterdir()):
         ext = path.suffix.lower()
         if ext in VIDEO_EXTS:
-            info = probe_video_source(path)
             proxy_path = proxies_dir / f"{path.stem}.mp4"
-            build_proxy(info, proxy_path, threads=threads)
-
-            tonemap_chain = TONEMAP_CHAIN_HLG if info.hdr in ("hlg", "dv84") else ""
-            verified, results = verify_source(
-                original=str(path),
-                proxy=str(proxy_path),
-                tonemap_chain=tonemap_chain,
-            )
-            if not verified:
-                print(
-                    f"WARNING: proxy/original temporal mismatch for {path}: "
-                    f"{[(r.t_s, r.distances) for r in results]}"
+            sha = sha256_file(path)
+            hit = cached_info(cache_root, sha, path) if cache_root else None
+            if cache_root and hit:
+                info, verified = hit
+                link_into(proxy_path, cache_root / sha / "proxy.mp4")
+            else:
+                info = probe_video_source(path)
+                proxy_target = (
+                    cache_root / sha / "proxy.mp4" if cache_root else proxy_path
                 )
+                build_target = tmp_path(proxy_target) if cache_root else proxy_target
+                build_proxy(info, build_target, threads=threads)
+                if cache_root:
+                    build_target.replace(proxy_target)
+
+                tonemap_chain = TONEMAP_CHAIN_HLG if info.hdr in ("hlg", "dv84") else ""
+                verified, results = verify_source(
+                    original=str(path),
+                    proxy=str(proxy_target),
+                    tonemap_chain=tonemap_chain,
+                )
+                if not verified:
+                    print(
+                        f"WARNING: proxy/original temporal mismatch for {path}: "
+                        f"{[(r.t_s, r.distances) for r in results]}"
+                    )
+                if cache_root:
+                    store_info(cache_root, info, verified)
+                    link_into(proxy_path, proxy_target)
 
             entry = {
                 "src": str(path.relative_to(session_dir)),

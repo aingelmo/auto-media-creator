@@ -9,6 +9,7 @@ from pathlib import Path
 
 from edl_agent.selector import select as selector_select
 from edl_agent.session._common import (
+    DEFAULT_CACHE_DIR,
     IMAGE_EXTS,
     VIDEO_EXTS,
     tonemap_chain_for_manifest,
@@ -20,6 +21,7 @@ from edl_agent.session.planner import run_planner
 from edl_agent.slots import FRAME_RATE
 
 __all__ = [
+    "DEFAULT_CACHE_DIR",
     "IMAGE_EXTS",
     "VIDEO_EXTS",
     "run_candidates",

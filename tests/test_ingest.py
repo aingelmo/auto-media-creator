@@ -8,6 +8,7 @@ ffprobe fabricado a mano.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -247,3 +248,98 @@ def test_run_ingest_end_to_end(session_dir) -> None:
     assert src["proxy_verified"] is True
     assert src["has_audio"] is False
     assert (session_dir / "manifest.json").exists()
+
+
+def test_run_ingest_reuses_cache_across_sessions(tmp_path, monkeypatch) -> None:
+    import edl_agent.session.ingest as ingest_module
+
+    cache_root = tmp_path / "cache"
+    calls = {"build_proxy": 0, "verify_source": 0}
+    real_build_proxy = ingest_module.build_proxy
+    real_verify_source = ingest_module.verify_source
+
+    def counting_build_proxy(*args: object, **kwargs: object):
+        calls["build_proxy"] += 1
+        return real_build_proxy(*args, **kwargs)
+
+    def counting_verify_source(*args: object, **kwargs: object):
+        calls["verify_source"] += 1
+        return real_verify_source(*args, **kwargs)
+
+    monkeypatch.setattr(ingest_module, "build_proxy", counting_build_proxy)
+    monkeypatch.setattr(ingest_module, "verify_source", counting_verify_source)
+
+    import shutil
+
+    clip = tmp_path / "a.mp4"
+    _make_clip(clip, w=640, h=360, duration=2)
+
+    def make_session(name: str) -> Path:
+        d = tmp_path / name
+        (d / "inputs").mkdir(parents=True)
+        shutil.copy(clip, d / "inputs" / "a.mp4")
+        return d
+
+    session1 = make_session("sess1")
+    run_ingest(session1, threads=2, cache_root=cache_root)
+    assert calls == {"build_proxy": 1, "verify_source": 1}
+
+    session2 = make_session("sess2")
+    manifest2 = run_ingest(session2, threads=2, cache_root=cache_root)
+    assert calls == {"build_proxy": 1, "verify_source": 1}
+    assert manifest2["sources"][0]["proxy_verified"] is True
+
+    proxy2 = session2 / "proxies" / "a.mp4"
+    assert proxy2.is_symlink()
+    cached_sha = manifest2["sources"][0]["sha256"]
+    assert proxy2.resolve() == cache_root / cached_sha / "proxy.mp4"
+
+
+def _race_writer(target: Path, payload: str) -> None:
+    from edl_agent.ingest.cache import atomic_write_text
+
+    for _ in range(30):
+        atomic_write_text(target, payload)
+
+
+def test_atomic_write_text_never_exposes_partial_file(tmp_path) -> None:
+    """Two processes racing on the same cache path (#concurrency): a
+    concurrent reader only ever sees a complete file, never a torn one, and
+    no leftover per-pid temp files remain once both writers finish."""
+    import multiprocessing
+    import threading
+
+    from edl_agent.ingest.cache import atomic_write_text
+
+    target = tmp_path / "sha" / "info.json"
+    payload_a = json.dumps({"who": "a", "pad": "x" * 5000})
+    payload_b = json.dumps({"who": "b", "pad": "y" * 5000})
+    atomic_write_text(target, payload_a)  # ensure it exists before racing
+    seen_partial = []
+    stop = threading.Event()
+
+    def reader() -> None:
+        while not stop.is_set():
+            try:
+                data = json.loads(target.read_text())
+            except (ValueError, OSError):
+                seen_partial.append(True)
+                continue
+            if data["who"] not in ("a", "b"):
+                seen_partial.append(True)
+
+    reader_thread = threading.Thread(target=reader)
+    reader_thread.start()
+    ctx = multiprocessing.get_context("fork")
+    p1 = ctx.Process(target=_race_writer, args=(target, payload_a))
+    p2 = ctx.Process(target=_race_writer, args=(target, payload_b))
+    p1.start()
+    p2.start()
+    p1.join()
+    p2.join()
+    stop.set()
+    reader_thread.join()
+
+    assert not seen_partial
+    assert json.loads(target.read_text())["who"] in ("a", "b")
+    assert not list(tmp_path.rglob("*.tmp.*"))

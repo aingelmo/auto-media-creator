@@ -73,6 +73,15 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Operator-typed hook text; skips the hook-copy LLM call",
     )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=Path("data/cache"),
+        help="Content-addressed cache dir for per-source ingest/features work",
+    )
+    parser.add_argument(
+        "--no-cache", action="store_true", help="Disable the source cache"
+    )
     args = parser.parse_args()
     if args.model is None:
         args.model = DEFAULT_MODELS[args.provider]
@@ -88,6 +97,8 @@ def main() -> None:
     session = args.session
     resume = args.resume
 
+    cache_root = None if args.no_cache else args.cache_dir
+
     manifest_path = session / "manifest.json"
     if resume and manifest_path.exists():
         manifest = _load_json(manifest_path)
@@ -97,6 +108,7 @@ def main() -> None:
             threads=args.threads,
             music_offset_s=args.music_offset_s,
             music_max_duration_s=args.music_max_duration_s,
+            cache_root=cache_root,
         )
 
     slots_path = session / "slots.json"
@@ -112,7 +124,12 @@ def main() -> None:
     else:
         detector = yolo_pose_detector(args.pose_model)
         candidates = run_candidates(
-            session, manifest, slots, detector, pose_model_path=args.pose_model
+            session,
+            manifest,
+            slots,
+            detector,
+            pose_model_path=args.pose_model,
+            cache_root=cache_root,
         )
 
     selection_path = session / "selection.json"

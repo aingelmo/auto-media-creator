@@ -11,9 +11,11 @@ from edl_agent.features import (
     Detector,
     detect_scene_cuts,
     extract_features,
+    load_features,
     save_features,
 )
-from edl_agent.ingest import sha256_file
+from edl_agent.features import features_config_sha256 as compute_features_config_sha256
+from edl_agent.ingest import atomic_write_text, link_into, sha256_file, tmp_path
 
 
 def run_candidates(
@@ -22,6 +24,7 @@ def run_candidates(
     slots: dict,
     detector: Detector,
     pose_model_path: str | None = None,
+    cache_root: Path | None = None,
 ) -> dict:
     """Extract features and build `candidates.json` from the session's proxies.
 
@@ -38,6 +41,10 @@ def run_candidates(
         detector: Pose detector callable, per `features.Detector`.
         pose_model_path: Path to the pose model weights, hashed into
             `pose_model_sha256`; `None` if not applicable.
+        cache_root: If given, a content-addressed cache directory (keyed
+            by source sha256) reused across sessions for `extract_features`
+            + `detect_scene_cuts`; `features/<stem>.parquet` becomes a
+            symlink into it. `None` disables caching.
 
     Returns:
         The `candidates.json` dict, with `session_id`, `manifest_sha256`,
@@ -59,6 +66,7 @@ def run_candidates(
     candidates: list[dict] = []
     next_id = 1
     features_config_sha256 = ""
+    cur_features_config_sha256 = compute_features_config_sha256()
 
     for src_info in manifest["sources"]:
         src = src_info["src"]
@@ -73,10 +81,37 @@ def run_candidates(
             continue
 
         proxy_path = session_dir / src_info["proxy"]
-        feats = extract_features(str(proxy_path), detector)
+        feat_path = features_dir / f"{Path(src).stem}.parquet"
+        cache_entry = cache_root / src_info["sha256"] if cache_root else None
+        feat_name = (
+            f"features.{cur_features_config_sha256[:12]}.{pose_model_sha256[:12]}.parquet"
+        )
+        cached_feat_path = cache_entry / feat_name if cache_entry else None
+        cached_cuts_path = cache_entry / "scene_cuts.json" if cache_entry else None
+
+        if (
+            cached_feat_path
+            and cached_cuts_path
+            and cached_feat_path.exists()
+            and cached_cuts_path.exists()
+        ):
+            feats = load_features(cached_feat_path)
+            feats["features_config_sha256"] = cur_features_config_sha256
+            link_into(feat_path, cached_feat_path)
+            scene_cuts_s = json.loads(cached_cuts_path.read_text())
+        else:
+            feats = extract_features(str(proxy_path), detector)
+            scene_cuts_s = detect_scene_cuts(str(proxy_path))
+            if cached_feat_path and cached_cuts_path:
+                tmp_feat_path = tmp_path(cached_feat_path)
+                save_features(feats, tmp_feat_path)
+                tmp_feat_path.replace(cached_feat_path)
+                atomic_write_text(cached_cuts_path, json.dumps(scene_cuts_s))
+                link_into(feat_path, cached_feat_path)
+            else:
+                save_features(feats, feat_path)
+
         features_config_sha256 = feats["features_config_sha256"]
-        save_features(feats, features_dir / f"{Path(src).stem}.parquet")
-        scene_cuts_s = detect_scene_cuts(str(proxy_path))
 
         video_cands = build_video_candidates(
             src,

@@ -23,6 +23,7 @@ from edl_agent.render import (
 )
 from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session import (
+    DEFAULT_CACHE_DIR,
     run_candidates,
     run_hooks,
     run_ingest,
@@ -259,6 +260,7 @@ def run_pipeline_job(
                     threads=THREADS,
                     music_offset_s=MUSIC_OFFSET_S,
                     music_max_duration_s=MUSIC_MAX_DURATION_S,
+                    cache_root=DEFAULT_CACHE_DIR,
                 )
                 slots = slots_from_file(str(session_dir / "music" / "track_cut.wav"))
                 slots_json = json.dumps(slots, indent=2, ensure_ascii=False)
@@ -293,7 +295,12 @@ def run_pipeline_job(
             with job.running("candidates"):
                 detector = yolo_pose_detector(POSE_MODEL)
                 candidates = run_candidates(
-                    session_dir, manifest, slots, detector, pose_model_path=POSE_MODEL
+                    session_dir,
+                    manifest,
+                    slots,
+                    detector,
+                    pose_model_path=POSE_MODEL,
+                    cache_root=DEFAULT_CACHE_DIR,
                 )
 
             real_sources = len(
