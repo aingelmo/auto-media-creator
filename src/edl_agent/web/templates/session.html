@@ -186,7 +186,48 @@
       </form>
     </div>
   {% elif job is none and stage_statuses.values() | select("equalto", "pending") | list | length == stages | length %}
-    <p>No run found for this session.</p>
+    <p>No run found for this session (server restarted before any stage finished).</p>
+    <form method="post" action="/sessions/{{ name }}/start">
+      <label>LLM provider
+        <select name="provider" id="start_provider">
+          {% for p in providers %}
+          <option value="{{ p }}">{{ p }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Model
+        <input type="text" name="model" id="start_model">
+      </label>
+      <label>Theme
+        <select name="theme">
+          <option value="training">training (CrossFit / Hyrox / funcional)</option>
+          <option value="yoga">yoga</option>
+        </select>
+      </label>
+      <label>Audience
+        <select name="audience">
+          <option value="prospects">prospects (sell the gym/class)</option>
+          <option value="members">members (recognise the session)</option>
+        </select>
+      </label>
+      <label>Brief (optional; only applies from the hooks stage on)
+        <input type="text" name="brief" maxlength="200">
+      </label>
+      <label>Hook text (manual, skips the LLM; only applies from the hooks stage on)
+        <input type="text" name="hook_line" maxlength="40" placeholder="La barra despega del suelo">
+      </label>
+      <button type="submit">Start / resume run</button>
+    </form>
+    <script>
+      const startDefaultModels = {{ default_models | tojson }};
+      const startProviderSelect = document.getElementById("start_provider");
+      const startModelInput = document.getElementById("start_model");
+      function syncStartModel() {
+        startModelInput.value = startDefaultModels[startProviderSelect.value] || "";
+      }
+      startProviderSelect.addEventListener("change", syncStartModel);
+      syncStartModel();
+    </script>
   {% elif job is none or job.done and not job.error %}
     {% if reel_exists %}
     <video controls width="640" src="/sessions/{{ name }}/reel.mp4"></video>

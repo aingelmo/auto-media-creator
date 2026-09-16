@@ -249,6 +249,46 @@ async def create_session(
     return RedirectResponse(f"/sessions/{name}", status_code=303)
 
 
+@app.post("/sessions/{name}/start", response_model=None)
+def start_session(
+    name: str,
+    background_tasks: BackgroundTasks,
+    provider: str = Form(...),
+    model: str = Form(...),
+    theme: str = Form("training"),
+    hook_line: str = Form(""),
+    brief: str = Form(""),
+    audience: str = Form("prospects"),
+) -> RedirectResponse:
+    """Launch the pipeline for a session whose inputs exist but never got a job.
+
+    Covers a session directory left behind by a server restart (or a
+    process that died) before any stage completed, so there's neither a
+    live `JobState` for `/retry` nor a finished stage for `/regenerate`.
+    """
+    session_dir = SESSIONS_DIR / name
+    if not session_dir.is_dir():
+        raise HTTPException(status_code=404, detail="no such session")
+
+    job = JobState()
+    with _lock:
+        _jobs[name] = job
+    background_tasks.add_task(
+        run_pipeline_job,
+        session_dir,
+        provider,
+        model,
+        job,
+        True,
+        theme,
+        clean_hook_line(hook_line),
+        brief.strip(),
+        audience,
+    )
+
+    return RedirectResponse(f"/sessions/{name}", status_code=303)
+
+
 @app.post("/sessions/{name}/retry", response_model=None)
 def retry_session(name: str, background_tasks: BackgroundTasks) -> RedirectResponse:
     """Relaunch a failed session's pipeline, resuming past stages already on disk."""

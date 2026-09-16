@@ -112,10 +112,11 @@ def _generate_music_candidates(
         ranked = []
     batch = ranked[already : already + count]
     if len(batch) < count:
-        step = usable / max(count, 1)
+        total = already + count
+        step = usable / max(total, 1)
         batch += [
             {"offset_s": round(step * i, 1), "score": None}
-            for i in range(already + len(batch), already + count)
+            for i in range(already + len(batch), total)
         ]
 
     out_dir.mkdir(parents=True, exist_ok=True)
