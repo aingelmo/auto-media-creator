@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     "logo_w": 160,  # px at 1080 wide
     "logo_opacity": 0.6,
     "logo_inset_x": 48,
-    "logo_bottom_frac": 0.177,  # bottom offset as a fraction of height (clears Reels UI)
+    "logo_bottom_frac": 0.177,  # offset as fraction of height (clears Reels UI)
     "end_card": True,  # #6.8: brand card taking the last frames of the close slot
     "end_card_frames": 45,
     "end_card_logo_w": 480,

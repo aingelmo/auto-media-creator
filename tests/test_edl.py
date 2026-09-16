@@ -407,7 +407,9 @@ def test_sfx_entries_picks_hook_and_peak_video_clips_only() -> None:
         _sfx_clip(2, "close", "c.mov", "c3"),  # peak, but source has no audio
     ]
 
-    entries = _sfx_entries(clips, candidates_by_id, sources_by_src, DEFAULT_AUDIO_TARGETS)
+    entries = _sfx_entries(
+        clips, candidates_by_id, sources_by_src, DEFAULT_AUDIO_TARGETS
+    )
 
     assert len(entries) == 1
     entry = entries[0]

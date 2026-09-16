@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from edl_agent.ingest import TONEMAP_CHAIN_HLG, VideoSourceInfo, build_proxy, probe_video_source
+from edl_agent.ingest import TONEMAP_CHAIN_HLG, build_proxy, probe_video_source
 from edl_agent.verify import verify_source
 
 VIDEOS = sorted(
@@ -64,8 +64,9 @@ def build_proxy_cache() -> None:
             )
             cached[path.name] = {**asdict(info), "verified": verified}
             if not verified:
-                print(f"  FAILED verification: {[(r.t_s, r.distances) for r in results]}")
-        except Exception as e:  # noqa: BLE001 - log and skip, don't abort the whole cache build
+                msg = f"  FAILED verification: {[(r.t_s, r.distances) for r in results]}"
+                print(msg)
+        except Exception as e:
             print(f"  FAILED: {e}", flush=True)
             cached[path.name] = {"verified": False, "error": str(e)}
 
@@ -77,24 +78,35 @@ def build_proxy_cache() -> None:
 def main() -> None:
     build_proxy_cache()
 
-    results_log = []
+    results_log: list[dict[str, object]] = []
     for i in range(1, N_SESSIONS + 1):
         name = f"gap_eval_{i:02d}"
         print(f"=== {name} ===", flush=True)
         proc = subprocess.run(
-            [sys.executable, str(ROOT / "scripts/run_gap_eval_session.py"), name, str(i)],
+            [
+                sys.executable,
+                str(ROOT / "scripts/run_gap_eval_session.py"),
+                name,
+                str(i),
+            ],
+            check=False,
         )
         result_path = ROOT / "sessions" / name / "_gap_eval_result.json"
         if proc.returncode == 0 and result_path.exists():
             results_log.append(json.loads(result_path.read_text()))
         else:
-            results_log.append(
-                {"name": name, "ok": False, "error": f"subprocess exit={proc.returncode}"}
-            )
+            result: dict[str, object] = {
+                "name": name,
+                "ok": False,
+                "error": f"subprocess exit={proc.returncode}",
+            }
+            results_log.append(result)
 
     print("\n=== SUMMARY ===")
     for r in results_log:
-        print(r["name"], "OK" if r.get("ok") else f"FAIL: {r.get('error', '')[:150]}")
+        error_msg = r.get("error", "")  # type: ignore[attr-defined]
+        error_str = str(error_msg)[:150] if error_msg else ""
+        print(r["name"], "OK" if r.get("ok") else f"FAIL: {error_str}")
 
     (ROOT / "sessions" / "_gap_eval_report.json").write_text(
         json.dumps(results_log, indent=2, ensure_ascii=False)

@@ -12,7 +12,10 @@ if TYPE_CHECKING:
 
 
 def build_manifest(
-    session_id: str, sources: list[dict], music: dict | None = None
+    session_id: str,
+    sources: list[dict],
+    music: dict | None = None,
+    warnings: list[str] | None = None,
 ) -> dict:
     """Assemble the manifest.json dict from already-probed sources.
 
@@ -24,10 +27,14 @@ def build_manifest(
         music: Music entry, or `None` if no music track was provided. Keys:
             `src`, `src_sha256`, `offset_s`, `max_duration_s`, `cut`,
             `cut_sha256`.
+        warnings: Non-fatal issues hit during ingest (e.g. a horizontal
+            source skipped, a proxy/original temporal mismatch). Omitted
+            if empty.
 
     Returns:
         Manifest dict with keys `session_id`, `target` (copy of `TARGET`),
-        `sources`, and `music` (only present if `music` was given).
+        `sources`, `music` (only present if `music` was given), and
+        `warnings` (only present if non-empty).
     """
     manifest = {
         "session_id": session_id,
@@ -36,6 +43,8 @@ def build_manifest(
     }
     if music is not None:
         manifest["music"] = music
+    if warnings:
+        manifest["warnings"] = warnings
     return manifest
 
 

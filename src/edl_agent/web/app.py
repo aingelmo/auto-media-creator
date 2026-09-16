@@ -416,7 +416,7 @@ def session_reel(name: str) -> FileResponse:
 
 @app.get("/sessions/{name}/files/{path:path}")
 def session_file(name: str, path: str) -> FileResponse:
-    """Serve a session-relative file (peak frames, proxies, segments) for debug views."""
+    """Serve a session-relative file for debug views."""
     session_dir = (SESSIONS_DIR / name).resolve()
     file_path = (session_dir / path).resolve()
     if session_dir not in file_path.parents or not file_path.is_file():
@@ -435,7 +435,7 @@ def ingest_page(request: Request, name: str) -> HTMLResponse:
 
 @app.get("/sessions/{name}/candidates", response_class=HTMLResponse)
 def candidates_page(request: Request, name: str) -> HTMLResponse:
-    """Show `candidates.json` with peak-frame thumbnails for debugging selection input."""
+    """Show `candidates.json` with thumbnails for debugging selection input."""
     session_dir = SESSIONS_DIR / name
     payload = _load_json(name, "candidates.json")
     candidates = payload["candidates"]

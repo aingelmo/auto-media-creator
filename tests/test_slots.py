@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import itertools
 
+import numpy as np
 import pytest
 
-import numpy as np
-
-from edl_agent.slots import FRAME_RATE, UNIFORM_GRID_S, build_slots, correct_octave_error
+from edl_agent.slots import (
+    FRAME_RATE,
+    UNIFORM_GRID_S,
+    build_slots,
+    correct_octave_error,
+)
 
 
 def _periodic_beats(bpm: float, duration_s: float) -> list[float]:

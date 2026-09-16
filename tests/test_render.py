@@ -24,7 +24,16 @@ def _make_clip(path: Path, *, w=360, h=640, fps=30, duration=3, audio=False) -> 
     cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", vf]
     if audio:
         cmd += ["-f", "lavfi", "-i", "sine=frequency=1000"]
-    cmd += ["-t", str(duration), "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
+    cmd += [
+        "-t",
+        str(duration),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+    ]
     if audio:
         cmd += ["-c:a", "aac", "-shortest"]
     cmd.append(str(path))

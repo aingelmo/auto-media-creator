@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from edl_agent.session import run_candidates
 
@@ -59,7 +59,7 @@ def test_run_candidates_reuses_cache_across_sessions(tmp_path, monkeypatch) -> N
     calls = {"extract_features": 0}
     real_extract_features = candidates_module.extract_features
 
-    def counting_extract_features(*args: object, **kwargs: object):
+    def counting_extract_features(*args: Any, **kwargs: Any):
         calls["extract_features"] += 1
         return real_extract_features(*args, **kwargs)
 

@@ -17,6 +17,7 @@ def _cand(
     multi_subject=False,
     score_cv=0.5,
     admits_slots=None,
+    window=(0.0, 5.0),
 ):
     return {
         "id": cid,
@@ -29,6 +30,7 @@ def _cand(
         "multi_subject": multi_subject,
         "score_cv": score_cv,
         "admits_slots": admits_slots if admits_slots is not None else [0, 1, 2, 3],
+        "window": list(window),
     }
 
 
@@ -69,6 +71,38 @@ def test_s2_drops_unknown_and_duplicate_ids() -> None:
     cleaned, warnings = apply_s_checks(selection, candidates_by_id, _slots(1)["slots"])
     assert [e["candidate_id"] for e in cleaned] == ["c1"]
     assert any("ghost" in w for w in warnings)
+
+
+def test_s2_drops_duplicate_footage_under_a_different_id() -> None:
+    # Two candidate ids for the same src+window (e.g. one per subject bbox
+    # in a multi-subject scene) are the same physical clip; keeping both
+    # would let assignment "take" a slot twice from footage that can only
+    # be placed once.
+    candidates_by_id = {
+        "c1": _cand("c1", "a.mov", "peak", window=(10.0, 15.0)),
+        "c2": _cand("c2", "a.mov", "peak", window=(10.0, 15.0)),
+    }
+    selection = {
+        "selected": [
+            {
+                "candidate_id": "c1",
+                "role": "develop",
+                "rank": 1,
+                "exercise": "lunge",
+                "reason": "x",
+            },
+            {
+                "candidate_id": "c2",
+                "role": "develop",
+                "rank": 2,
+                "exercise": "lunge",
+                "reason": "dup footage",
+            },
+        ]
+    }
+    cleaned, warnings = apply_s_checks(selection, candidates_by_id, _slots(2)["slots"])
+    assert [e["candidate_id"] for e in cleaned] == ["c1"]
+    assert any("c2" in w for w in warnings)
 
 
 def test_s4_moves_mistyped_hook_but_trusts_peak_close() -> None:

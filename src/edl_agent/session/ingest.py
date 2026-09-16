@@ -66,6 +66,7 @@ def run_ingest(
     music_dir = session_dir / "music"
 
     sources: list[dict] = []
+    warnings: list[str] = []
 
     for path in sorted(inputs.iterdir()):
         ext = path.suffix.lower()
@@ -76,13 +77,15 @@ def run_ingest(
             if cache_root and hit:
                 info, verified = hit
                 if info.w > info.h:
-                    print(f"WARNING: skipping horizontal video {path} ({info.w}x{info.h})")
+                    dims = f"{info.w}x{info.h}"
+                    warnings.append(f"skipped horizontal video {path} ({dims})")
                     continue
                 link_into(proxy_path, cache_root / sha / "proxy.mp4")
             else:
                 info = probe_video_source(path)
                 if info.w > info.h:
-                    print(f"WARNING: skipping horizontal video {path} ({info.w}x{info.h})")
+                    dims = f"{info.w}x{info.h}"
+                    warnings.append(f"skipped horizontal video {path} ({dims})")
                     continue
                 proxy_target = (
                     cache_root / sha / "proxy.mp4" if cache_root else proxy_path
@@ -99,8 +102,8 @@ def run_ingest(
                     tonemap_chain=tonemap_chain,
                 )
                 if not verified:
-                    print(
-                        f"WARNING: proxy/original temporal mismatch for {path}: "
+                    warnings.append(
+                        f"proxy/original temporal mismatch for {path}: "
                         f"{[(r.t_s, r.distances) for r in results]}"
                     )
                 if cache_root:
@@ -164,6 +167,6 @@ def run_ingest(
             "cut_sha256": sha256_file(cut_path),
         }
 
-    manifest = build_manifest(session_dir.name, sources, music)
+    manifest = build_manifest(session_dir.name, sources, music, warnings)
     write_manifest(manifest, session_dir / "manifest.json")
     return manifest

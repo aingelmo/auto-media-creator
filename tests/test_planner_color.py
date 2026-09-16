@@ -68,12 +68,11 @@ def test_measure_and_apply_on_two_clips(tmp_path: Path) -> None:
             {"src": "bright.mp4", "proxy": "bright.mp4"},
         ]
     }
-    edl: dict[str, Any] = {
-        "clips": [
-            {"src": s, "type": "video", "in_s": 0.0, "out_s": 0.5, "n_frames": 15}
-            for s in ("dark.mp4", "bright.mp4")
-        ]
-    }
+    clips: list[dict[str, Any]] = [
+        {"src": s, "type": "video", "in_s": 0.0, "out_s": 0.5, "n_frames": 15}
+        for s in ("dark.mp4", "bright.mp4")
+    ]
+    edl: dict[str, Any] = {"clips": clips}
     apply_color_match(
         edl, manifest, tmp_path, {"color_match": True, "color_match_strength": 0.7}
     )

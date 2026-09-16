@@ -92,12 +92,14 @@ def build_clips(
             crop_info["crop"], src_info["w"], src_info["h"], crop_info["layout"]
         )
 
-        hook_text = None
+        hook_text: tuple[str, int] | None = None
         if role == "hook":
-            hook_text = (config["hook_line_override"], timing["n_frames"])
+            hook_text = (str(config["hook_line_override"]), int(timing["n_frames"]))
         clip_config = config
         if role == "develop":
-            assert develop_i is not None
+            if develop_i is None:
+                msg = "develop role requires a develop index"
+                raise ValueError(msg)
             punch_every = int(config["punch_every"])
             punch_in = config["punch_in"] and develop_i % punch_every == 0
             clip_config = config | {"punch_in": punch_in}

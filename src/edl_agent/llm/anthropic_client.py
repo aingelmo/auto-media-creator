@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, cast
 
 import anthropic
+
+if TYPE_CHECKING:
+    from anthropic.types import MessageParam, ToolParam
 
 
 @dataclass
@@ -97,18 +101,23 @@ class _Interactions:
             }
             for p in input
         ]
-        tool = {
+        tool: ToolParam = {
             "name": _TOOL_NAME,
             "description": "Emite la selección de candidatos.",
             "input_schema": response_format["schema"],
         }
 
+        messages: list[MessageParam] = cast(
+            "list[MessageParam]", [{"role": "user", "content": content}]
+        )
+        tools: list[ToolParam] = [tool]
+
         message = self._client.messages.create(
             model=model,
             max_tokens=generation_config["max_output_tokens"],
             system=system_instruction,
-            messages=[{"role": "user", "content": content}],
-            tools=[tool],
+            messages=messages,
+            tools=tools,
             tool_choice={"type": "tool", "name": _TOOL_NAME},
             thinking={"type": "disabled"},
         )

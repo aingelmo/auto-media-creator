@@ -93,7 +93,9 @@ def source_entry(name: str, info: VideoSourceInfo) -> dict:
     }
 
 
-def build_session(session_dir: Path, seed: int, pool: dict[str, VideoSourceInfo]) -> dict:
+def build_session(
+    session_dir: Path, seed: int, pool: dict[str, VideoSourceInfo]
+) -> dict:
     rng = random.Random(seed)
     names = list(pool)
     n_clips = rng.randint(13, 16)
@@ -110,7 +112,8 @@ def build_session(session_dir: Path, seed: int, pool: dict[str, VideoSourceInfo]
     sources = []
     for name in clips:
         (inputs / name).symlink_to(next(p for p in VIDEOS if p.name == name))
-        (proxies / f"{Path(name).stem}.mp4").symlink_to(CACHE_PROXIES / f"{Path(name).stem}.mp4")
+        proxy_src = CACHE_PROXIES / f"{Path(name).stem}.mp4"
+        (proxies / f"{Path(name).stem}.mp4").symlink_to(proxy_src)
         sources.append(source_entry(name, pool[name]))
     (music_dir / "track.mp3").symlink_to(song)
 
@@ -166,7 +169,13 @@ def run_one(name: str, seed: int, pool: dict[str, VideoSourceInfo]) -> dict:
                 json.dumps(selection or {}, indent=2, ensure_ascii=False)
             )
             edl = run_planner(
-                session, manifest, candidates, slots, selection, selection_meta, threads=THREADS
+                session,
+                manifest,
+                candidates,
+                slots,
+                selection,
+                selection_meta,
+                threads=THREADS,
             )
             tonemap_chain = tonemap_chain_for_manifest(manifest)
             render_preview_segments(

@@ -12,7 +12,7 @@ from typing import Any
 PROVIDERS = ("gemini", "anthropic", "deepseek", "ollama")
 
 
-def get_client(provider: str, **kwargs: object) -> Any:  # noqa: ANN401 (duck-typed return)
+def get_client(provider: str, **kwargs: Any) -> Any:  # noqa: ANN401 (duck-typed return)
     """Build an LLM client for the given provider.
 
     Args:
@@ -30,7 +30,7 @@ def get_client(provider: str, **kwargs: object) -> Any:  # noqa: ANN401 (duck-ty
     if provider == "gemini":
         from google import genai
 
-        client = genai.Client(**kwargs)
+        client: Any = genai.Client(**kwargs)
         client.sdk_version = genai.__version__
         return client
     if provider == "anthropic":
@@ -44,7 +44,7 @@ def get_client(provider: str, **kwargs: object) -> Any:  # noqa: ANN401 (duck-ty
     if provider == "ollama":
         from edl_agent.llm.ollama_client import OllamaClient
 
-        client = OllamaClient(**kwargs)
+        client: Any = OllamaClient(**kwargs)
         client.sdk_version = None
         return client
     msg = f"Unknown provider: {provider!r}, expected one of {PROVIDERS}"

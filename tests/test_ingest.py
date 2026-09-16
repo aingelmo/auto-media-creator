@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -266,11 +266,11 @@ def test_run_ingest_reuses_cache_across_sessions(tmp_path, monkeypatch) -> None:
     real_build_proxy = ingest_module.build_proxy
     real_verify_source = ingest_module.verify_source
 
-    def counting_build_proxy(*args: object, **kwargs: object):
+    def counting_build_proxy(*args: Any, **kwargs: Any):
         calls["build_proxy"] += 1
         return real_build_proxy(*args, **kwargs)
 
-    def counting_verify_source(*args: object, **kwargs: object):
+    def counting_verify_source(*args: Any, **kwargs: Any):
         calls["verify_source"] += 1
         return real_verify_source(*args, **kwargs)
 

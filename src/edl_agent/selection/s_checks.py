@@ -94,7 +94,10 @@ def apply_s_checks(
           and re-ranked 1..N within each role (a new `rank` key is
           assigned/overwritten, ignoring any rank the LLM proposed).
         - `warnings`: one entry per dropped/moved candidate:
-          `"s2_dropped:{id}"` (unknown or duplicate candidate_id),
+          `"s2_dropped:{id}"` (unknown or duplicate candidate_id, or a
+          same-role candidate sharing another candidate's src+window --
+          same physical footage under a different id, e.g. one candidate
+          per subject bbox in a multi-subject scene),
           `"s4_moved:{id}->close"` (role reassigned because a non-`peak`
           candidate was picked for hook, which must be `peak`), or
           `"s5_dropped:{id}"` (candidate's window doesn't admit any slot
@@ -106,6 +109,7 @@ def apply_s_checks(
     """
     warnings: list[str] = []
     seen: set[str] = set()
+    seen_footage: set[tuple[str, str, tuple]] = set()
     cleaned: list[dict] = []
 
     for entry in selection.get("selected", []):
@@ -113,7 +117,13 @@ def apply_s_checks(
         if cid not in candidates_by_id or cid in seen:
             warnings.append(f"s2_dropped:{cid}")
             continue
+        cand = candidates_by_id[cid]
+        footage = (entry.get("role"), cand["src"], tuple(cand["window"]))
+        if footage in seen_footage:
+            warnings.append(f"s2_dropped:{cid}")
+            continue
         seen.add(cid)
+        seen_footage.add(footage)
         cleaned.append(dict(entry))
 
     for entry in cleaned:

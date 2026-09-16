@@ -9,7 +9,7 @@ the way the web UI's "Shorten"/"Keep" buttons would.
 Requires a local Ollama with the selector model pulled (see
 DEFAULT_MODEL below) and models/yolov8n-pose.pt present.
 
-Usage: uv run scripts/smoke_low_candidates_pause.py [--keep] [--src-session sessions/deepseek_test_06]
+Usage: uv run scripts/smoke_low_candidates_pause.py [--keep]
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from edl_agent.session._common import MUSIC_EXTS  # noqa: E402
-from edl_agent.web.pipeline import JobState, run_pipeline_job  # noqa: E402
+from edl_agent.session._common import MUSIC_EXTS
+from edl_agent.web.pipeline import JobState, run_pipeline_job
 
 DEFAULT_MODEL = "qwen3-vl:8b-instruct"
 DEFAULT_CLIPS = ["IMG_1056.MOV", "IMG_8105.mov"]  # known to yield real candidates
@@ -34,8 +34,10 @@ DEFAULT_CLIPS = ["IMG_1056.MOV", "IMG_8105.mov"]  # known to yield real candidat
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--src-session", type=Path, default=ROOT / "sessions/deepseek_test_06")
-    parser.add_argument("--out", type=Path, default=ROOT / "sessions/low_candidates_smoke")
+    default_src = ROOT / "sessions/deepseek_test_06"
+    parser.add_argument("--src-session", type=Path, default=default_src)
+    default_out = ROOT / "sessions/low_candidates_smoke"
+    parser.add_argument("--out", type=Path, default=default_out)
     parser.add_argument(
         "--keep",
         action="store_true",
@@ -75,7 +77,11 @@ def main() -> None:
     thread.start()
 
     deadline = time.monotonic() + 600
-    while not job.awaiting_confirmation and not job.done and time.monotonic() < deadline:
+    while (
+        not job.awaiting_confirmation
+        and not job.done
+        and time.monotonic() < deadline
+    ):
         time.sleep(1)
 
     if not job.awaiting_confirmation:

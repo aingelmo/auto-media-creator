@@ -10,8 +10,15 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, cast
 
 import openai
+
+if TYPE_CHECKING:
+    from openai.types.chat import (
+        ChatCompletionMessageParam,
+        ChatCompletionToolParam,
+    )
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_VISION_MODELS = frozenset({"deepseek-flash", "deepseek-v4-flash-vision-exp"})
@@ -114,7 +121,7 @@ class _Interactions:
             }
             for p in input
         ]
-        tool = {
+        tool: ChatCompletionToolParam = {
             "type": "function",
             "function": {
                 "name": _TOOL_NAME,
@@ -123,14 +130,20 @@ class _Interactions:
             },
         }
 
-        response = self._client.chat.completions.create(
-            model=model,
-            max_tokens=generation_config["max_output_tokens"],
-            messages=[
+        messages: list[ChatCompletionMessageParam] = cast(
+            "list[ChatCompletionMessageParam]",
+            [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": content},
             ],
-            tools=[tool],
+        )
+        tools: list[ChatCompletionToolParam] = [tool]
+
+        response = self._client.chat.completions.create(
+            model=model,
+            max_tokens=generation_config["max_output_tokens"],
+            messages=messages,
+            tools=tools,
             tool_choice={"type": "function", "function": {"name": _TOOL_NAME}},
             extra_body={"thinking": {"type": "disabled"}},
         )
@@ -153,9 +166,15 @@ class _Interactions:
         )
         # Re-serialized via json.loads/dumps to normalize formatting and fail
         # fast on malformed JSON, matching the Anthropic adapter's contract.
+        if not hasattr(tool_call, "function") or not hasattr(
+            tool_call.function, "arguments"
+        ):
+            msg = "Tool call has no function.arguments"
+            raise ValueError(msg)
+        func_args = cast("str", tool_call.function.arguments)
         return _Interaction(
             status=status,
-            output_text=json.dumps(json.loads(tool_call.function.arguments)),
+            output_text=json.dumps(json.loads(func_args)),
             usage=usage,
         )
 

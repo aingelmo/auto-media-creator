@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import requests
 
@@ -69,7 +69,7 @@ def select(
         else config["thinking_level"]
     )
 
-    selection = None
+    selection: dict | None = None
     attempts_usage: list[dict | None] = []
     total_cost = 0.0
     base_system_prompt = build_system_prompt(config["theme"])
@@ -123,7 +123,7 @@ def select(
             json.dump(attempt_record, f, indent=2, ensure_ascii=False)
 
         if attempt_record["status"] not in ("incomplete", "error"):
-            selection = attempt_record["output"]
+            selection = cast("dict | None", attempt_record.get("output"))
             break
         system_prompt = base_system_prompt + REINFORCED_SUFFIX  # #5.6: reinforced retry
 

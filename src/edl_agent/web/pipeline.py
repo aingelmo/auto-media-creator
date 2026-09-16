@@ -34,6 +34,7 @@ from edl_agent.session import (
 from edl_agent.slots import slots_from_file
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 POSE_MODEL = "models/yolov8n-pose.pt"
@@ -45,7 +46,7 @@ SHORTEN_ATTEMPTS = 4  # beat detection isn't linear in duration; try progressive
 
 
 def _shorten_durations(start_s: float) -> list[float]:
-    """Decreasing durations to try when shortening, from `start_s` down to `MIN_SHORTEN_DURATION_S`.
+    """Decreasing durations to try when shortening, from `start_s` down to minimum.
 
     Beat detection doesn't scale slot count linearly with duration, so a
     single guessed duration isn't reliable; each step is retried against the
@@ -97,7 +98,7 @@ STAGE_ARTIFACTS = {
 
 
 def clear_stage_artifacts(session_dir: Path, from_stage: str) -> None:
-    """Delete `from_stage`'s and every later stage's output, so `resume=True` redoes them.
+    """Delete `from_stage` and later stages' output so resume=True redoes them.
 
     Backs up an existing `reel.mp4` to `reel.prev.mp4` before deleting it.
 
@@ -210,7 +211,7 @@ class JobState:
     check_results_b: list[str] = field(default_factory=list)
 
     @contextmanager
-    def running(self, stage: str):  # noqa: ANN201 (contextmanager)
+    def running(self, stage: str) -> Iterator[None]:
         """Mark `stage` `"running"`, then `"done"`, or `"failed"` on exception."""
         self.stages[stage] = "running"
         self.detail[stage] = ""
@@ -361,6 +362,10 @@ def run_pipeline_job(
                             best_duration, best_slots = new_duration, candidate_slots
                         if len(candidate_slots["slots"]) <= real_sources:
                             break
+
+                    if best_slots is None or best_duration is None:
+                        msg = "No valid slot duration found"
+                        raise RuntimeError(msg)  # noqa: TRY301
 
                     if new_duration != best_duration:
                         cut_music(

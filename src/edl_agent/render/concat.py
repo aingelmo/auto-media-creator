@@ -24,7 +24,7 @@ def _parse_loudnorm_json(stderr: str) -> dict:
 
 
 def _sfx_chain(entry: dict) -> str:
-    """ffmpeg audio filter chain for one `audio.sfx[]` entry (#10.4, idea #5).
+    """Build ffmpeg audio filter chain for one `audio.sfx[]` entry (#10.4, #5).
 
     `{ramp}` is empty for a plain entry, or a 3-way split/concat that slows
     only the middle piece (the hook's speed ramp, #6.3) so the diegetic
@@ -143,7 +143,14 @@ def concat_and_audio(
     sfx_labels = []
     graph = f"[1:a]{music_chain}[m];"
     for i, entry in enumerate(sfx):
-        sfx_inputs += ["-ss", str(entry["in_s"]), "-t", str(entry["dur_s"]), "-i", str(session_dir / entry["src"])]
+        sfx_inputs += [
+            "-ss",
+            str(entry["in_s"]),
+            "-t",
+            str(entry["dur_s"]),
+            "-i",
+            str(session_dir / entry["src"]),
+        ]
         label = f"s{i}"
         sfx_labels.append(label)
         graph += f"[{i + 2}:a]{_sfx_chain(entry)}[{label}];"

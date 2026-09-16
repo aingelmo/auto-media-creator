@@ -206,10 +206,10 @@ def build_image_candidate(
 def readmit_candidates(
     candidates: list[dict], slots: list[dict], speed: float = 1.0
 ) -> None:
-    """Recompute `admits_slots` for existing candidates against a new `slots` list, in place.
+    """Recompute `admits_slots` for candidates against a new slot list, in place.
 
     Cheap alternative to rebuilding candidates from scratch when only the
-    slot layout changed (e.g. the music was re-cut to a shorter duration):
+    slot layout changed (e.g. music re-cut to a shorter duration):
     peak/calm windows don't depend on `slots`, only `admits_slots` does.
 
     Args:

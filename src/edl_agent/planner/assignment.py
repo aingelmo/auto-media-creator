@@ -141,7 +141,7 @@ def _take_develop_pool(
             ):
                 admissible_slot, timing = sl, candidate_timing
                 break
-        if admissible_slot is None:
+        if admissible_slot is None or timing is None:
             continue
         taken.append(s)
         used.append(

@@ -18,6 +18,14 @@
     </tr>
     {% endfor %}
   </table>
+  {% if manifest.warnings %}
+  <h3>Warnings</h3>
+  <ul>
+    {% for w in manifest.warnings %}
+    <li>{{ w }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
   <h3>Target</h3>
   <pre>{{ manifest.target | tojson(indent=2) }}</pre>
   <h3>Music</h3>

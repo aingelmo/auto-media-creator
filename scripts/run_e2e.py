@@ -66,7 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--resume",
         action="store_true",
-        help="Skip stages whose output already exists on disk (e.g. after a failed run)",
+        help="Skip stages whose output already exists on disk (e.g. after failure)",
     )
     parser.add_argument(
         "--hook-line",
@@ -110,6 +110,8 @@ def main() -> None:
             music_max_duration_s=args.music_max_duration_s,
             cache_root=cache_root,
         )
+        for warning in manifest.get("warnings", []):
+            print(f"WARNING: {warning}")
 
     slots_path = session / "slots.json"
     if resume and slots_path.exists():
