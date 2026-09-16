@@ -14,9 +14,19 @@ code map 1:1 to file prefixes, e.g. `#4.3` → `docs/architecture/04-features.md
 - Run: `uv run python scripts/run_e2e.py ...` or `uv run python -m edl_agent...`.
 - Web UI: `uv run scripts/run_web.py [--host HOST] [--port PORT]` (defaults
   to `127.0.0.1:8000`); open the printed URL in a browser to upload media
-  and run sessions without the CLI. See `src/edl_agent/web/`.
+  and run sessions without the CLI. This needs no node/npm — it serves the
+  React/TS SPA already built into `src/edl_agent/web/static/` (committed to
+  git). `src/edl_agent/web/app.py` is a thin JSON API (`/api/*`) over
+  `src/edl_agent/web/pipeline.py`, which holds all the pipeline-orchestration
+  logic and stays framework-agnostic.
+- Frontend dev: only needed when editing the UI itself. `cd frontend && npm
+  install`, then `npm run dev` (Vite, hot reload, proxies `/api` and
+  `/sessions/*/files` to `:8000` — run the Python server alongside it) or
+  `npm run build` to refresh the committed `web/static/` output before
+  committing a UI change.
 - Checks (all must pass before considering a task done):
-  `uv run ruff check .`, `uv run ty check`, `uv run pytest -q`.
+  `uv run ruff check .`, `uv run ty check`, `uv run pytest -q`, and for
+  frontend changes, `cd frontend && npx tsc -b --noEmit && npm run build`.
 
 ## Structure
 
