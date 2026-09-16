@@ -345,12 +345,14 @@ def session_status(name: str) -> dict:
     if job is None:
         return {
             "stages": _stage_statuses(name),
+            "detail": {},
             "done": True,
             "error": None,
             "awaiting_confirmation": False,
         }
     return {
         "stages": job.stages,
+        "detail": job.detail,
         "done": job.done,
         "error": job.error,
         "awaiting_confirmation": job.awaiting_confirmation,

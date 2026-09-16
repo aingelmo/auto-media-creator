@@ -174,11 +174,15 @@ class JobState:
             final render.
         check_results_b: Stringified `run_render_checks` results for
             variant B, once the `checks` stage completes with a B variant.
+        detail: Human-readable sub-step text for whichever stage is
+            currently `"running"` (e.g. "calling deepseek for hook line"),
+            cleared back to `""` each time a stage starts or finishes.
     """
 
     stages: dict[str, str] = field(
         default_factory=lambda: dict.fromkeys(STAGES, "pending")
     )
+    detail: dict[str, str] = field(default_factory=lambda: dict.fromkeys(STAGES, ""))
     error: str | None = None
     done: bool = False
     check_results: list[str] = field(default_factory=list)
@@ -205,6 +209,7 @@ class JobState:
     def running(self, stage: str):  # noqa: ANN201 (contextmanager)
         """Mark `stage` `"running"`, then `"done"`, or `"failed"` on exception."""
         self.stages[stage] = "running"
+        self.detail[stage] = ""
         try:
             yield
         except Exception:
@@ -212,6 +217,7 @@ class JobState:
             raise
         else:
             self.stages[stage] = "done"
+            self.detail[stage] = ""
 
 
 def run_pipeline_job(
@@ -255,6 +261,7 @@ def run_pipeline_job(
             slots = json.loads(slots_path.read_text())
         else:
             with job.running("ingest"):
+                job.detail["ingest"] = "probing sources, building proxies"
                 manifest = run_ingest(
                     session_dir,
                     threads=THREADS,
@@ -262,6 +269,7 @@ def run_pipeline_job(
                     music_max_duration_s=MUSIC_MAX_DURATION_S,
                     cache_root=DEFAULT_CACHE_DIR,
                 )
+                job.detail["ingest"] = "cutting music, detecting beat slots"
                 slots = slots_from_file(str(session_dir / "music" / "track_cut.wav"))
                 slots_json = json.dumps(slots, indent=2, ensure_ascii=False)
                 slots_path.write_text(slots_json)
@@ -293,7 +301,9 @@ def run_pipeline_job(
             candidates = json.loads(candidates_path.read_text())
         else:
             with job.running("candidates"):
+                job.detail["candidates"] = "loading pose model"
                 detector = yolo_pose_detector(POSE_MODEL)
+                job.detail["candidates"] = "extracting features, detecting candidates"
                 candidates = run_candidates(
                     session_dir,
                     manifest,
@@ -379,6 +389,7 @@ def run_pipeline_job(
             )
         else:
             with job.running("selection"):
+                job.detail["selection"] = f"calling {provider} for clip selection"
                 client = get_client(provider)
                 selection, selection_meta = run_selection(
                     session_dir,
@@ -408,6 +419,7 @@ def run_pipeline_job(
                     hooks = json.loads(hooks_path.read_text())
                 else:
                     with job.running("hooks"):
+                        job.detail["hooks"] = f"calling {provider} for hook line"
                         client = get_client(provider)
                         hooks = run_hooks(
                             session_dir,
@@ -420,6 +432,7 @@ def run_pipeline_job(
                             hook_line_override=job.hook_line_override,
                         )
                 job.hooks = hooks
+                job.detail["hooks"] = "building preview EDL"
                 preview_edl = run_planner(
                     session_dir,
                     manifest,
@@ -433,6 +446,7 @@ def run_pipeline_job(
                 job.hook_slot = next(
                     c["slot"] for c in preview_edl["clips"] if c["role"] == "hook"
                 )
+                job.detail["hooks"] = "rendering hook line previews"
                 render_hook_previews(
                     preview_edl,
                     manifest,
@@ -441,6 +455,7 @@ def run_pipeline_job(
                     THREADS,
                     tonemap_chain,
                 )
+                job.detail["hooks"] = ""
 
                 job.pause_kind = "hook_choice"
                 job.awaiting_confirmation = True
@@ -454,6 +469,7 @@ def run_pipeline_job(
                 job.more_hooks = False
 
             with job.running("planner"):
+                job.detail["planner"] = "building final EDL"
                 edl = run_planner(
                     session_dir,
                     manifest,
@@ -473,6 +489,7 @@ def run_pipeline_job(
             job.stages["render"] = "done"
         else:
             with job.running("render"):
+                job.detail["render"] = "rendering preview segments"
                 render_preview_segments(
                     edl,
                     manifest,
@@ -480,6 +497,7 @@ def run_pipeline_job(
                     threads=THREADS,
                     tonemap_chain=tonemap_chain,
                 )
+                job.detail["render"] = "rendering final segments"
                 render_segments(
                     edl,
                     manifest,
@@ -487,9 +505,11 @@ def run_pipeline_job(
                     threads=THREADS,
                     tonemap_chain=tonemap_chain,
                 )
+                job.detail["render"] = "concatenating segments, mixing audio"
                 concat_and_audio(edl, session_dir, threads=THREADS)
 
         with job.running("checks"):
+            job.detail["checks"] = "verifying rendered reel"
             job.check_results = [str(r) for r in run_render_checks(edl, session_dir)]
 
         # Variant B (idea #7): same hook clip, different line + peak beat.
@@ -498,6 +518,7 @@ def run_pipeline_job(
         hook_line_b = clean_hook_line(job.hook_choice_b)
         if hook_line_b:
             with job.running("render"):
+                job.detail["render"] = "building variant B EDL"
                 edl_b = run_planner(
                     session_dir,
                     manifest,
@@ -526,6 +547,7 @@ def run_pipeline_job(
                     for c in edl["clips"]
                     if c == clips_b_by_slot.get(c["slot"])
                 }
+                job.detail["render"] = "rendering variant B preview segments"
                 render_preview_segments(
                     edl_b,
                     manifest,
@@ -535,6 +557,7 @@ def run_pipeline_job(
                     suffix="_b",
                     reuse=reuse_preview,
                 )
+                job.detail["render"] = "rendering variant B final segments"
                 render_segments(
                     edl_b,
                     manifest,
@@ -544,9 +567,11 @@ def run_pipeline_job(
                     suffix="_b",
                     reuse=reuse_final,
                 )
+                job.detail["render"] = "concatenating variant B, mixing audio"
                 concat_and_audio(edl_b, session_dir, threads=THREADS, suffix="_b")
 
             with job.running("checks"):
+                job.detail["checks"] = "verifying variant B reel"
                 job.check_results_b = [
                     str(r) for r in run_render_checks(edl_b, session_dir, suffix="_b")
                 ]

@@ -16,6 +16,9 @@
       <td>{{ s }}</td>
       <td class="status-{{ stage_statuses[s] }}" data-stage="{{ s }}">
         {{ stage_statuses[s] }}
+        {% if job and job.detail.get(s) %}
+          &mdash; {{ job.detail[s] }}
+        {% endif %}
         {% if stage_statuses[s] in ("done", "failed") and s in stage_links %}
           &mdash; <a href="{{ stage_links[s] }}">view</a>
         {% endif %}
@@ -213,6 +216,9 @@
           if (!cell) continue;
           cell.className = `status-${status}`;
           let html = status;
+          if (data.detail && data.detail[stage]) {
+            html += ` &mdash; ${data.detail[stage]}`;
+          }
           if ((status === "done" || status === "failed") && links[stage]) {
             html += ` &mdash; <a href="${links[stage]}">view</a>`;
           }
