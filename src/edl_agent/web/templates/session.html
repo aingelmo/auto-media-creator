@@ -157,9 +157,15 @@
         <button type="submit">Cancel run</button>
       </form>
     </div>
-  {% elif reel_exists and (job is none or job.done and not job.error) %}
+  {% elif job is none and stage_statuses.values() | select("equalto", "pending") | list | length == stages | length %}
+    <p>No run found for this session.</p>
+  {% elif job is none or job.done and not job.error %}
+    {% if reel_exists %}
     <video controls width="640" src="/sessions/{{ name }}/reel.mp4"></video>
     <p><a href="/sessions/{{ name }}/reel.mp4" download>Download reel.mp4</a></p>
+    {% else %}
+    <p>Server restarted mid-run. Pick the next stage below to resume.</p>
+    {% endif %}
     {% if job and job.check_results %}
       <h3>Render checks</h3>
       <pre>{{ job.check_results | join("\n") }}</pre>
@@ -179,11 +185,9 @@
     <form method="post" action="/sessions/{{ name }}/regenerate" enctype="multipart/form-data">
       <label>From stage
         <select name="from_stage" id="from_stage">
-          <option value="candidates">candidates</option>
-          <option value="selection" selected>selection</option>
-          <option value="hooks">hooks</option>
-          <option value="planner">planner</option>
-          <option value="render">render</option>
+          {% for s in ["candidates", "selection", "hooks", "planner", "render"] %}
+          <option value="{{ s }}" {% if s == default_from_stage %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
         </select>
       </label>
       <label>LLM provider

@@ -322,6 +322,11 @@ def session_page(request: Request, name: str) -> HTMLResponse:
     job = _jobs.get(name)
     reel_exists = (SESSIONS_DIR / name / "reel.mp4").exists()
     reel_b_exists = (SESSIONS_DIR / name / "reel_b.mp4").exists()
+    stage_statuses = _stage_statuses(name)
+    regen_stages = ("candidates", "selection", "hooks", "planner", "render")
+    default_from_stage = next(
+        (s for s in regen_stages if stage_statuses.get(s) == "pending"), "selection"
+    )
     return templates.TemplateResponse(
         request,
         "session.html",
@@ -331,9 +336,10 @@ def session_page(request: Request, name: str) -> HTMLResponse:
             "reel_exists": reel_exists,
             "reel_b_exists": reel_b_exists,
             "stages": STAGES,
-            "stage_statuses": _stage_statuses(name),
+            "stage_statuses": stage_statuses,
             "providers": UI_PROVIDERS,
             "default_models": DEFAULT_MODELS,
+            "default_from_stage": default_from_stage,
         },
     )
 
