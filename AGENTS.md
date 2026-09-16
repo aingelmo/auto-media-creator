@@ -56,6 +56,24 @@ fields) stays in Spanish — it's sent to the model, not documentation.
 
 Keep lines ≤88 chars (ruff `E501`).
 
+## Commits
+
+- One logical change per commit. If a session touches unrelated concerns
+  (e.g. a new feature + an unrelated bug fix + a lint cleanup), split them
+  into separate commits — even if all the edits happened together. Check
+  `git status`/`git diff` before staging and stage per-concern, not
+  everything at once.
+- Subject line: imperative present tense ("Add", "Fix", "Split"), describes
+  the outcome, ≤72 chars, no trailing period.
+- Body: explain *why*, not what (the diff already shows what) — root cause
+  for bug fixes, motivation/constraint for features or refactors. Skip the
+  body only for purely mechanical changes (lint/format-only, typo fixes).
+- No Conventional Commits prefixes (`feat:`, `fix:`, `chore:`) — nothing in
+  this repo (no CI, no changelog/release automation) consumes them, so
+  they're pure overhead.
+- AI-authored commits end with the `Co-Authored-By:` trailer per the
+  session's attribution instructions.
+
 ## File size
 
 - Aim for ~150–200 lines of code (excluding docstrings/blanks) per file, one
