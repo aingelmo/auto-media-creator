@@ -56,13 +56,7 @@ export default function New() {
       <form ref={formRef} onSubmit={handleSubmit}>
         <label htmlFor="new-name">
           Session name
-          <input
-            id="new-name"
-            type="text"
-            name="name"
-            required
-            pattern="[A-Za-z0-9_-]+"
-          />
+          <input id="new-name" type="text" name="name" required pattern="[A-Za-z0-9_-]+" />
         </label>
         <label htmlFor="new-clips">
           Clips / photos
@@ -84,7 +78,10 @@ export default function New() {
           idPrefix="new"
         />
         <ThemeAudienceFields idPrefix="new" />
-        <BrandFieldset idPrefix="new" legend="Brand (optional; no logo = no watermark / end card)" />
+        <BrandFieldset
+          idPrefix="new"
+          legend="Brand (optional; no logo = no watermark / end card)"
+        />
         <p>
           <button type="submit" disabled={uploading}>
             Start run

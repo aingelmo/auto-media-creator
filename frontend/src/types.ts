@@ -13,12 +13,7 @@ export type StageName =
 
 export type StageStatus = "pending" | "running" | "done" | "failed";
 
-export type PauseKind =
-  | ""
-  | "music_choice"
-  | "verification"
-  | "low_candidates"
-  | "hook_choice";
+export type PauseKind = "" | "music_choice" | "verification" | "low_candidates" | "hook_choice";
 
 export type Provider = "deepseek" | "ollama";
 

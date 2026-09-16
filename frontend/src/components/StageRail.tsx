@@ -12,19 +12,9 @@ const STAGE_ROUTES: Partial<Record<StageName, string>> = {
 /** `(n/m)` in a stage's detail text drives its progress bar, e.g. "encoding (12/19)". */
 const PROGRESS_RE = /\((\d+)\/(\d+)\)/;
 
-function StageLink({
-  name,
-  stage,
-}: {
-  name: string;
-  stage: StageName;
-}) {
+function StageLink({ name, stage }: { name: string; stage: StageName }) {
   if (stage === "hooks") {
-    return (
-      <a href={fileUrl(name, "hooks.json")}>
-        view
-      </a>
-    );
+    return <a href={fileUrl(name, "hooks.json")}>view</a>;
   }
   const route = STAGE_ROUTES[stage];
   if (!route) return null;

@@ -1,11 +1,5 @@
 /** Optional brand fieldset (logo/handle/second line) shared by new/regenerate forms. */
-export default function BrandFieldset({
-  idPrefix,
-  legend,
-}: {
-  idPrefix: string;
-  legend: string;
-}) {
+export default function BrandFieldset({ idPrefix, legend }: { idPrefix: string; legend: string }) {
   return (
     <fieldset>
       <legend>{legend}</legend>

@@ -124,11 +124,7 @@ export default function Session() {
           {session.reel_b_exists && (
             <>
               <h3>Variant B</h3>
-              <video
-                className="reel-player"
-                controls
-                src={fileUrl(name, "reel_b.mp4")}
-              />
+              <video className="reel-player" controls src={fileUrl(name, "reel_b.mp4")} />
               <p>
                 <a href={fileUrl(name, "reel_b.mp4")} download>
                   Download reel_b.mp4

@@ -25,14 +25,13 @@ export default function LowCandidatesPause({
   return (
     <div className="warning">
       <p>
-        <strong>Warning:</strong> only {lowCandidates.real_sources} usable source clip(s)
-        for {lowCandidates.slot_count} slots to fill. Some clips will repeat across
-        slots, which can make the reel feel slow/static.
+        <strong>Warning:</strong> only {lowCandidates.real_sources} usable source clip(s) for{" "}
+        {lowCandidates.slot_count} slots to fill. Some clips will repeat across slots, which can
+        make the reel feel slow/static.
       </p>
       <p>
         Keep the current duration and accept the repeats, or shorten the reel to about{" "}
-        {lowCandidates.suggested_duration_s}s so there are enough distinct clips to keep
-        it dynamic.
+        {lowCandidates.suggested_duration_s}s so there are enough distinct clips to keep it dynamic.
       </p>
       <button type="button" disabled={busy} onClick={() => submit(true, false)}>
         Keep current duration

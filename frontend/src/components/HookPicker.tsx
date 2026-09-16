@@ -20,7 +20,9 @@ export default function HookPicker({
   onDone: () => void;
 }) {
   const [flash, setFlash] = useState(true);
-  const [selected, setSelected] = useState(hooks.hooks.length === 0 ? "" : hooks.hooks[0]!.hook_line);
+  const [selected, setSelected] = useState(
+    hooks.hooks.length === 0 ? "" : hooks.hooks[0]!.hook_line,
+  );
   const [custom, setCustom] = useState("");
   const [variantB, setVariantB] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,18 +46,12 @@ export default function HookPicker({
         <strong>Pick the hook line</strong> (or none, or write your own).
       </p>
       <label>
-        <input type="checkbox" checked={flash} onChange={(e) => setFlash(e.target.checked)} />{" "}
-        white flash on the hook beat
+        <input type="checkbox" checked={flash} onChange={(e) => setFlash(e.target.checked)} /> white
+        flash on the hook beat
       </label>
       <div className="contact-sheet">
         <figure>
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            src={previewUrl(name, "none", flash, hookSlot)}
-          />
+          <video autoPlay loop muted playsInline src={previewUrl(name, "none", flash, hookSlot)} />
           <figcaption>
             <label>
               <input

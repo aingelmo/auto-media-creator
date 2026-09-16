@@ -26,15 +26,13 @@ export default function VerificationPause({
   return (
     <div className="warning is-error">
       <p>
-        <strong>Warning:</strong> {unverifiedSources.length} video(s) failed proxy
-        verification: their re-encoded working proxy's timeline doesn't line up with
-        the original file's, so timestamps chosen later (candidate peaks, cut points)
-        may land on the wrong frame when the final render pulls from the original for
-        these clips.
+        <strong>Warning:</strong> {unverifiedSources.length} video(s) failed proxy verification:
+        their re-encoded working proxy's timeline doesn't line up with the original file's, so
+        timestamps chosen later (candidate peaks, cut points) may land on the wrong frame when the
+        final render pulls from the original for these clips.
       </p>
       <p>
-        See <Link to={`/sessions/${name}/ingest`}>ingest details</Link> for the mismatch
-        data.
+        See <Link to={`/sessions/${name}/ingest`}>ingest details</Link> for the mismatch data.
       </p>
       {unverifiedSources.map((src) => (
         <label key={src}>

@@ -33,8 +33,8 @@ export default function MusicPicker({
   return (
     <div className="warning">
       <p>
-        <strong>Pick the music cut</strong> &mdash; preview each candidate and choose the
-        best moment, or generate more.
+        <strong>Pick the music cut</strong> &mdash; preview each candidate and choose the best
+        moment, or generate more.
       </p>
       <div className="contact-sheet">
         {candidates.map((c, i) => (

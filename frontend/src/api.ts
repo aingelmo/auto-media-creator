@@ -39,14 +39,10 @@ export const api = {
     fetch(`/api/sessions/${encodeURIComponent(name)}`).then((r) => asJson<SessionDetail>(r)),
 
   getStatus: (name: string) =>
-    fetch(`/api/sessions/${encodeURIComponent(name)}/status`).then((r) =>
-      asJson<StatusPayload>(r),
-    ),
+    fetch(`/api/sessions/${encodeURIComponent(name)}/status`).then((r) => asJson<StatusPayload>(r)),
 
   getIngest: (name: string) =>
-    fetch(`/api/sessions/${encodeURIComponent(name)}/ingest`).then((r) =>
-      asJson<Manifest>(r),
-    ),
+    fetch(`/api/sessions/${encodeURIComponent(name)}/ingest`).then((r) => asJson<Manifest>(r)),
 
   getCandidates: (name: string) =>
     fetch(`/api/sessions/${encodeURIComponent(name)}/candidates`).then((r) =>
