@@ -225,6 +225,432 @@ class JobState:
             self.detail[stage] = ""
 
 
+class _JobCancelledError(Exception):
+    """Internal signal: the operator declined to proceed past a confirmation pause."""
+
+
+def _run_ingest_stage(
+    session_dir: Path, job: JobState, resume: bool
+) -> tuple[dict, dict]:
+    """Run (or resume) the ingest stage, pausing if any proxy is unverified.
+
+    Returns:
+        `(manifest, slots)`.
+
+    Raises:
+        _JobCancelledError: If the operator declines the verification pause.
+    """
+    manifest_path = session_dir / "manifest.json"
+    slots_path = session_dir / "slots.json"
+    if resume and manifest_path.exists() and slots_path.exists():
+        job.stages["ingest"] = "done"
+        return json.loads(manifest_path.read_text()), json.loads(
+            slots_path.read_text()
+        )
+
+    with job.running("ingest"):
+        job.detail["ingest"] = "probing sources, building proxies"
+        manifest = run_ingest(
+            session_dir,
+            threads=THREADS,
+            music_offset_s=MUSIC_OFFSET_S,
+            music_max_duration_s=MUSIC_MAX_DURATION_S,
+            cache_root=DEFAULT_CACHE_DIR,
+        )
+        job.detail["ingest"] = "cutting music, detecting beat slots"
+        slots = slots_from_file(str(session_dir / "music" / "track_cut.wav"))
+        slots_path.write_text(json.dumps(slots, indent=2, ensure_ascii=False))
+
+    job.unverified_sources = [
+        s["src"]
+        for s in manifest["sources"]
+        if s.get("type") == "video" and not s.get("proxy_verified", True)
+    ]
+    if job.unverified_sources:
+        job.pause_kind = "verification"
+        job.awaiting_confirmation = True
+        job.confirm_event.wait()
+        job.confirm_event.clear()
+        job.awaiting_confirmation = False
+        if job.cancelled:
+            raise _JobCancelledError
+        if job.excluded_sources:
+            manifest["sources"] = [
+                s for s in manifest["sources"] if s["src"] not in job.excluded_sources
+            ]
+            write_manifest(manifest, session_dir / "manifest.json")
+    return manifest, slots
+
+
+def _run_candidates_stage(
+    session_dir: Path, job: JobState, resume: bool, manifest: dict, slots: dict
+) -> tuple[dict, dict]:
+    """Run (or resume) the candidates stage, pausing if usable sources are scarce.
+
+    Re-cuts the music to a shorter duration and rebuilds `slots` if the
+    operator chooses to shorten past a `"low_candidates"` pause.
+
+    Returns:
+        `(candidates, slots)` -- `slots` may differ from the input if shortened.
+
+    Raises:
+        _JobCancelledError: If the operator declines the low-candidates pause.
+    """
+    candidates_path = session_dir / "candidates.json"
+    if resume and candidates_path.exists():
+        job.stages["candidates"] = "done"
+        return json.loads(candidates_path.read_text()), slots
+
+    with job.running("candidates"):
+        job.detail["candidates"] = "loading pose model"
+        detector = yolo_pose_detector(POSE_MODEL)
+        job.detail["candidates"] = "extracting features, detecting candidates"
+        candidates = run_candidates(
+            session_dir,
+            manifest,
+            slots,
+            detector,
+            pose_model_path=POSE_MODEL,
+            cache_root=DEFAULT_CACHE_DIR,
+        )
+
+    real_sources = len(
+        {
+            c["src"]
+            for c in candidates["candidates"]
+            if c["kind"] != "image" and c["admits_slots"]
+        }
+    )
+    slot_count = len(slots["slots"])
+    has_video_sources = any(s.get("type") == "video" for s in manifest["sources"])
+    if not (has_video_sources and real_sources < slot_count):
+        return candidates, slots
+
+    job.low_candidates = {
+        "real_sources": real_sources,
+        "slot_count": slot_count,
+        "suggested_duration_s": max(
+            MIN_SHORTEN_DURATION_S,
+            round(MUSIC_MAX_DURATION_S * real_sources / slot_count, 1),
+        ),
+    }
+    job.pause_kind = "low_candidates"
+    job.awaiting_confirmation = True
+    job.confirm_event.wait()
+    job.confirm_event.clear()
+    job.awaiting_confirmation = False
+    if job.cancelled:
+        raise _JobCancelledError
+    if not job.shorten:
+        return candidates, slots
+
+    music = manifest["music"]
+    cut_path = session_dir / "music" / "track_cut.wav"
+    orig_track = session_dir / music["src"]
+
+    best_duration, best_slots = None, None
+    for new_duration in _shorten_durations(job.low_candidates["suggested_duration_s"]):
+        cut_music(orig_track, cut_path, music["offset_s"], new_duration)
+        candidate_slots = slots_from_file(str(cut_path))
+        if best_slots is None or len(candidate_slots["slots"]) < len(
+            best_slots["slots"]
+        ):
+            best_duration, best_slots = new_duration, candidate_slots
+        if len(candidate_slots["slots"]) <= real_sources:
+            break
+
+    if best_slots is None or best_duration is None:
+        msg = "No valid slot duration found"
+        raise RuntimeError(msg)
+
+    if new_duration != best_duration:
+        cut_music(orig_track, cut_path, music["offset_s"], best_duration)
+    slots = best_slots
+
+    music["max_duration_s"] = best_duration
+    music["cut_sha256"] = sha256_file(cut_path)
+    write_manifest(manifest, session_dir / "manifest.json")
+
+    (session_dir / "slots.json").write_text(
+        json.dumps(slots, indent=2, ensure_ascii=False)
+    )
+    readmit_candidates(candidates["candidates"], slots["slots"])
+    candidates_path.write_text(json.dumps(candidates, indent=2, ensure_ascii=False))
+
+    return candidates, slots
+
+
+def _run_selection_stage(
+    session_dir: Path,
+    job: JobState,
+    resume: bool,
+    candidates: dict,
+    slots: dict,
+    provider: str,
+    model: str,
+    theme: str,
+) -> tuple[dict | None, dict]:
+    """Run (or resume) the selection stage.
+
+    Returns:
+        `(selection, selection_meta)`.
+    """
+    selection_path = session_dir / "selection.json"
+    selection_meta_path = session_dir / "selection_meta.json"
+    if resume and selection_path.exists():
+        job.stages["selection"] = "done"
+        selection = json.loads(selection_path.read_text()) or None
+        selection_meta = (
+            json.loads(selection_meta_path.read_text())
+            if selection_meta_path.exists()
+            else {}
+        )
+        return selection, selection_meta
+
+    with job.running("selection"):
+        job.detail["selection"] = f"calling {provider} for clip selection"
+        client = get_client(provider)
+        selection, selection_meta = run_selection(
+            session_dir,
+            candidates,
+            slots,
+            config={"model": model, "theme": theme},
+            client=client,
+        )
+        selection_path.write_text(
+            json.dumps(selection or {}, indent=2, ensure_ascii=False)
+        )
+        selection_meta_path.write_text(
+            json.dumps(selection_meta or {}, indent=2, ensure_ascii=False)
+        )
+    return selection, selection_meta
+
+
+def _run_hooks_and_planner_stage(
+    session_dir: Path,
+    job: JobState,
+    resume: bool,
+    provider: str,
+    model: str,
+    theme: str,
+    manifest: dict,
+    candidates: dict,
+    slots: dict,
+    selection: dict | None,
+    selection_meta: dict,
+    tonemap_chain: str,
+) -> dict:
+    """Run (or resume) the hooks stage (looping on retries), then the planner stage.
+
+    Returns:
+        Final `edl` dict.
+
+    Raises:
+        _JobCancelledError: If the operator declines the hook-choice pause.
+    """
+    edl_path = session_dir / "edl.json"
+    if resume and edl_path.exists():
+        job.stages["hooks"] = "done"
+        job.stages["planner"] = "done"
+        return json.loads(edl_path.read_text())
+
+    hooks_path = session_dir / "hooks.json"
+    while True:
+        if resume and hooks_path.exists() and not job.more_hooks:
+            job.stages["hooks"] = "done"
+            hooks = json.loads(hooks_path.read_text())
+        else:
+            with job.running("hooks"):
+                job.detail["hooks"] = f"calling {provider} for hook line"
+                client = get_client(provider)
+                hooks = run_hooks(
+                    session_dir,
+                    candidates,
+                    slots,
+                    selection,
+                    theme,
+                    client,
+                    model,
+                    hook_line_override=job.hook_line_override,
+                )
+        job.hooks = hooks
+        job.detail["hooks"] = "building preview EDL"
+        preview_edl = run_planner(
+            session_dir,
+            manifest,
+            candidates,
+            slots,
+            selection,
+            selection_meta,
+            threads=THREADS,
+            config={"hook_line_override": hooks["hook_line"]},
+        )
+        job.hook_slot = next(
+            c["slot"] for c in preview_edl["clips"] if c["role"] == "hook"
+        )
+        job.detail["hooks"] = "rendering hook line previews"
+        render_hook_previews(
+            preview_edl,
+            manifest,
+            session_dir,
+            [hooks["hook_line"]] if hooks["hook_line"] else [],
+            THREADS,
+            tonemap_chain,
+        )
+        job.detail["hooks"] = ""
+
+        job.pause_kind = "hook_choice"
+        job.awaiting_confirmation = True
+        job.confirm_event.wait()
+        job.confirm_event.clear()
+        job.awaiting_confirmation = False
+        if job.cancelled:
+            raise _JobCancelledError
+        if not job.more_hooks:
+            break
+        job.more_hooks = False
+
+    with job.running("planner"):
+        job.detail["planner"] = "building final EDL"
+        return run_planner(
+            session_dir,
+            manifest,
+            candidates,
+            slots,
+            selection,
+            selection_meta,
+            threads=THREADS,
+            config={
+                "hook_line_override": clean_hook_line(job.hook_choice),
+                "hook_text": bool(clean_hook_line(job.hook_choice)),
+                "hook_flash": job.hook_flash,
+            },
+        )
+
+
+def _run_render_stage(
+    session_dir: Path,
+    job: JobState,
+    resume: bool,
+    edl: dict,
+    manifest: dict,
+    tonemap_chain: str,
+) -> None:
+    """Run (or resume) the render stage, then always run the render checks."""
+    reel_path = session_dir / "reel.mp4"
+    if resume and reel_path.exists():
+        job.stages["render"] = "done"
+    else:
+        with job.running("render"):
+            job.detail["render"] = "rendering preview segments (0/0)"
+            render_preview_segments(
+                edl,
+                manifest,
+                session_dir,
+                threads=THREADS,
+                tonemap_chain=tonemap_chain,
+                on_progress=lambda done, total: job.detail.__setitem__(
+                    "render", f"rendering preview segments ({done}/{total})"
+                ),
+            )
+            job.detail["render"] = "rendering final segments (0/0)"
+            render_segments(
+                edl,
+                manifest,
+                session_dir,
+                threads=THREADS,
+                tonemap_chain=tonemap_chain,
+                on_progress=lambda done, total: job.detail.__setitem__(
+                    "render", f"rendering final segments ({done}/{total})"
+                ),
+            )
+            job.detail["render"] = "concatenating segments, mixing audio"
+            concat_and_audio(edl, session_dir, threads=THREADS)
+
+    with job.running("checks"):
+        job.detail["checks"] = "verifying rendered reel"
+        job.check_results = [str(r) for r in run_render_checks(edl, session_dir)]
+
+
+def _run_variant_b_stage(
+    session_dir: Path,
+    job: JobState,
+    manifest: dict,
+    candidates: dict,
+    slots: dict,
+    selection: dict | None,
+    selection_meta: dict,
+    edl: dict,
+    tonemap_chain: str,
+) -> None:
+    """Render, mix, and check hook variant B (idea #7), if the operator chose one.
+
+    Reuses A's segment files for every clip whose dict is identical in B
+    (only the hook slot differs), so B costs one segment render.
+    """
+    hook_line_b = clean_hook_line(job.hook_choice_b)
+    if not hook_line_b:
+        return
+
+    with job.running("render"):
+        job.detail["render"] = "building variant B EDL"
+        edl_b = run_planner(
+            session_dir,
+            manifest,
+            candidates,
+            slots,
+            selection,
+            selection_meta,
+            threads=THREADS,
+            config={
+                "hook_line_override": hook_line_b,
+                "hook_text": True,
+                "peak_beat_index": 2,
+                "hook_flash": job.hook_flash,
+            },
+            out_name="edl_b.json",
+        )
+        clips_b_by_slot = {c["slot"]: c for c in edl_b["clips"]}
+        reuse_final = {
+            c["slot"]: session_dir / "segments" / f"seg_{c['slot']:02d}.mp4"
+            for c in edl["clips"]
+            if c == clips_b_by_slot.get(c["slot"])
+        }
+        reuse_preview = {
+            c["slot"]: session_dir / "preview_segments" / f"seg_{c['slot']:02d}.mp4"
+            for c in edl["clips"]
+            if c == clips_b_by_slot.get(c["slot"])
+        }
+        job.detail["render"] = "rendering variant B preview segments"
+        render_preview_segments(
+            edl_b,
+            manifest,
+            session_dir,
+            threads=THREADS,
+            tonemap_chain=tonemap_chain,
+            suffix="_b",
+            reuse=reuse_preview,
+        )
+        job.detail["render"] = "rendering variant B final segments"
+        render_segments(
+            edl_b,
+            manifest,
+            session_dir,
+            threads=THREADS,
+            tonemap_chain=tonemap_chain,
+            suffix="_b",
+            reuse=reuse_final,
+        )
+        job.detail["render"] = "concatenating variant B, mixing audio"
+        concat_and_audio(edl_b, session_dir, threads=THREADS, suffix="_b")
+
+    with job.running("checks"):
+        job.detail["checks"] = "verifying variant B reel"
+        job.check_results_b = [
+            str(r) for r in run_render_checks(edl_b, session_dir, suffix="_b")
+        ]
+
+
 def run_pipeline_job(
     session_dir: Path,
     provider: str,
@@ -258,340 +684,42 @@ def run_pipeline_job(
     job.theme = theme
     job.hook_line_override = hook_line_override
     try:
-        manifest_path = session_dir / "manifest.json"
-        slots_path = session_dir / "slots.json"
-        if resume and manifest_path.exists() and slots_path.exists():
-            job.stages["ingest"] = "done"
-            manifest = json.loads(manifest_path.read_text())
-            slots = json.loads(slots_path.read_text())
-        else:
-            with job.running("ingest"):
-                job.detail["ingest"] = "probing sources, building proxies"
-                manifest = run_ingest(
-                    session_dir,
-                    threads=THREADS,
-                    music_offset_s=MUSIC_OFFSET_S,
-                    music_max_duration_s=MUSIC_MAX_DURATION_S,
-                    cache_root=DEFAULT_CACHE_DIR,
-                )
-                job.detail["ingest"] = "cutting music, detecting beat slots"
-                slots = slots_from_file(str(session_dir / "music" / "track_cut.wav"))
-                slots_json = json.dumps(slots, indent=2, ensure_ascii=False)
-                slots_path.write_text(slots_json)
-
-            job.unverified_sources = [
-                s["src"]
-                for s in manifest["sources"]
-                if s.get("type") == "video" and not s.get("proxy_verified", True)
-            ]
-            if job.unverified_sources:
-                job.pause_kind = "verification"
-                job.awaiting_confirmation = True
-                job.confirm_event.wait()
-                job.confirm_event.clear()
-                job.awaiting_confirmation = False
-                if job.cancelled:
-                    return
-                if job.excluded_sources:
-                    manifest["sources"] = [
-                        s
-                        for s in manifest["sources"]
-                        if s["src"] not in job.excluded_sources
-                    ]
-                    write_manifest(manifest, session_dir / "manifest.json")
-
-        candidates_path = session_dir / "candidates.json"
-        if resume and candidates_path.exists():
-            job.stages["candidates"] = "done"
-            candidates = json.loads(candidates_path.read_text())
-        else:
-            with job.running("candidates"):
-                job.detail["candidates"] = "loading pose model"
-                detector = yolo_pose_detector(POSE_MODEL)
-                job.detail["candidates"] = "extracting features, detecting candidates"
-                candidates = run_candidates(
-                    session_dir,
-                    manifest,
-                    slots,
-                    detector,
-                    pose_model_path=POSE_MODEL,
-                    cache_root=DEFAULT_CACHE_DIR,
-                )
-
-            real_sources = len(
-                {
-                    c["src"]
-                    for c in candidates["candidates"]
-                    if c["kind"] != "image" and c["admits_slots"]
-                }
-            )
-            slot_count = len(slots["slots"])
-            has_video_sources = any(
-                s.get("type") == "video" for s in manifest["sources"]
-            )
-            if has_video_sources and real_sources < slot_count:
-                job.low_candidates = {
-                    "real_sources": real_sources,
-                    "slot_count": slot_count,
-                    "suggested_duration_s": max(
-                        MIN_SHORTEN_DURATION_S,
-                        round(MUSIC_MAX_DURATION_S * real_sources / slot_count, 1),
-                    ),
-                }
-                job.pause_kind = "low_candidates"
-                job.awaiting_confirmation = True
-                job.confirm_event.wait()
-                job.confirm_event.clear()
-                job.awaiting_confirmation = False
-                if job.cancelled:
-                    return
-                if job.shorten:
-                    music = manifest["music"]
-                    cut_path = session_dir / "music" / "track_cut.wav"
-                    orig_track = session_dir / music["src"]
-
-                    best_duration, best_slots = None, None
-                    for new_duration in _shorten_durations(
-                        job.low_candidates["suggested_duration_s"]
-                    ):
-                        cut_music(orig_track, cut_path, music["offset_s"], new_duration)
-                        candidate_slots = slots_from_file(str(cut_path))
-                        if best_slots is None or len(candidate_slots["slots"]) < len(
-                            best_slots["slots"]
-                        ):
-                            best_duration, best_slots = new_duration, candidate_slots
-                        if len(candidate_slots["slots"]) <= real_sources:
-                            break
-
-                    if best_slots is None or best_duration is None:
-                        msg = "No valid slot duration found"
-                        raise RuntimeError(msg)  # noqa: TRY301
-
-                    if new_duration != best_duration:
-                        cut_music(
-                            orig_track, cut_path, music["offset_s"], best_duration
-                        )
-                    slots = best_slots
-
-                    music["max_duration_s"] = best_duration
-                    music["cut_sha256"] = sha256_file(cut_path)
-                    write_manifest(manifest, session_dir / "manifest.json")
-
-                    slots_path.write_text(
-                        json.dumps(slots, indent=2, ensure_ascii=False)
-                    )
-
-                    readmit_candidates(candidates["candidates"], slots["slots"])
-                    candidates_path.write_text(
-                        json.dumps(candidates, indent=2, ensure_ascii=False)
-                    )
-
-        selection_path = session_dir / "selection.json"
-        selection_meta_path = session_dir / "selection_meta.json"
-        if resume and selection_path.exists():
-            job.stages["selection"] = "done"
-            selection = json.loads(selection_path.read_text()) or None
-            selection_meta = (
-                json.loads(selection_meta_path.read_text())
-                if selection_meta_path.exists()
-                else {}
-            )
-        else:
-            with job.running("selection"):
-                job.detail["selection"] = f"calling {provider} for clip selection"
-                client = get_client(provider)
-                selection, selection_meta = run_selection(
-                    session_dir,
-                    candidates,
-                    slots,
-                    config={"model": model, "theme": theme},
-                    client=client,
-                )
-                selection_path.write_text(
-                    json.dumps(selection or {}, indent=2, ensure_ascii=False)
-                )
-                selection_meta_path.write_text(
-                    json.dumps(selection_meta or {}, indent=2, ensure_ascii=False)
-                )
-
-        edl_path = session_dir / "edl.json"
+        manifest, slots = _run_ingest_stage(session_dir, job, resume)
+        candidates, slots = _run_candidates_stage(
+            session_dir, job, resume, manifest, slots
+        )
+        selection, selection_meta = _run_selection_stage(
+            session_dir, job, resume, candidates, slots, provider, model, theme
+        )
         tonemap_chain = tonemap_chain_for_manifest(manifest)
-        if resume and edl_path.exists():
-            job.stages["hooks"] = "done"
-            job.stages["planner"] = "done"
-            edl = json.loads(edl_path.read_text())
-        else:
-            hooks_path = session_dir / "hooks.json"
-            while True:
-                if resume and hooks_path.exists() and not job.more_hooks:
-                    job.stages["hooks"] = "done"
-                    hooks = json.loads(hooks_path.read_text())
-                else:
-                    with job.running("hooks"):
-                        job.detail["hooks"] = f"calling {provider} for hook line"
-                        client = get_client(provider)
-                        hooks = run_hooks(
-                            session_dir,
-                            candidates,
-                            slots,
-                            selection,
-                            theme,
-                            client,
-                            model,
-                            hook_line_override=job.hook_line_override,
-                        )
-                job.hooks = hooks
-                job.detail["hooks"] = "building preview EDL"
-                preview_edl = run_planner(
-                    session_dir,
-                    manifest,
-                    candidates,
-                    slots,
-                    selection,
-                    selection_meta,
-                    threads=THREADS,
-                    config={"hook_line_override": hooks["hook_line"]},
-                )
-                job.hook_slot = next(
-                    c["slot"] for c in preview_edl["clips"] if c["role"] == "hook"
-                )
-                job.detail["hooks"] = "rendering hook line previews"
-                render_hook_previews(
-                    preview_edl,
-                    manifest,
-                    session_dir,
-                    [hooks["hook_line"]] if hooks["hook_line"] else [],
-                    THREADS,
-                    tonemap_chain,
-                )
-                job.detail["hooks"] = ""
-
-                job.pause_kind = "hook_choice"
-                job.awaiting_confirmation = True
-                job.confirm_event.wait()
-                job.confirm_event.clear()
-                job.awaiting_confirmation = False
-                if job.cancelled:
-                    return
-                if not job.more_hooks:
-                    break
-                job.more_hooks = False
-
-            with job.running("planner"):
-                job.detail["planner"] = "building final EDL"
-                edl = run_planner(
-                    session_dir,
-                    manifest,
-                    candidates,
-                    slots,
-                    selection,
-                    selection_meta,
-                    threads=THREADS,
-                    config={
-                        "hook_line_override": clean_hook_line(job.hook_choice),
-                        "hook_text": bool(clean_hook_line(job.hook_choice)),
-                        "hook_flash": job.hook_flash,
-                    },
-                )
-
-        reel_path = session_dir / "reel.mp4"
-        if resume and reel_path.exists():
-            job.stages["render"] = "done"
-        else:
-            with job.running("render"):
-                job.detail["render"] = "rendering preview segments (0/0)"
-                render_preview_segments(
-                    edl,
-                    manifest,
-                    session_dir,
-                    threads=THREADS,
-                    tonemap_chain=tonemap_chain,
-                    on_progress=lambda done, total: job.detail.__setitem__(
-                        "render", f"rendering preview segments ({done}/{total})"
-                    ),
-                )
-                job.detail["render"] = "rendering final segments (0/0)"
-                render_segments(
-                    edl,
-                    manifest,
-                    session_dir,
-                    threads=THREADS,
-                    tonemap_chain=tonemap_chain,
-                    on_progress=lambda done, total: job.detail.__setitem__(
-                        "render", f"rendering final segments ({done}/{total})"
-                    ),
-                )
-                job.detail["render"] = "concatenating segments, mixing audio"
-                concat_and_audio(edl, session_dir, threads=THREADS)
-
-        with job.running("checks"):
-            job.detail["checks"] = "verifying rendered reel"
-            job.check_results = [str(r) for r in run_render_checks(edl, session_dir)]
-
-        # Variant B (idea #7): same hook clip, different line + peak beat.
-        # Reuses A's segment files for every clip whose dict is identical in
-        # B (only the hook slot differs), so B costs one segment render.
-        hook_line_b = clean_hook_line(job.hook_choice_b)
-        if hook_line_b:
-            with job.running("render"):
-                job.detail["render"] = "building variant B EDL"
-                edl_b = run_planner(
-                    session_dir,
-                    manifest,
-                    candidates,
-                    slots,
-                    selection,
-                    selection_meta,
-                    threads=THREADS,
-                    config={
-                        "hook_line_override": hook_line_b,
-                        "hook_text": True,
-                        "peak_beat_index": 2,
-                        "hook_flash": job.hook_flash,
-                    },
-                    out_name="edl_b.json",
-                )
-                clips_b_by_slot = {c["slot"]: c for c in edl_b["clips"]}
-                reuse_final = {
-                    c["slot"]: session_dir / "segments" / f"seg_{c['slot']:02d}.mp4"
-                    for c in edl["clips"]
-                    if c == clips_b_by_slot.get(c["slot"])
-                }
-                reuse_preview = {
-                    c["slot"]: session_dir
-                    / "preview_segments"
-                    / f"seg_{c['slot']:02d}.mp4"
-                    for c in edl["clips"]
-                    if c == clips_b_by_slot.get(c["slot"])
-                }
-                job.detail["render"] = "rendering variant B preview segments"
-                render_preview_segments(
-                    edl_b,
-                    manifest,
-                    session_dir,
-                    threads=THREADS,
-                    tonemap_chain=tonemap_chain,
-                    suffix="_b",
-                    reuse=reuse_preview,
-                )
-                job.detail["render"] = "rendering variant B final segments"
-                render_segments(
-                    edl_b,
-                    manifest,
-                    session_dir,
-                    threads=THREADS,
-                    tonemap_chain=tonemap_chain,
-                    suffix="_b",
-                    reuse=reuse_final,
-                )
-                job.detail["render"] = "concatenating variant B, mixing audio"
-                concat_and_audio(edl_b, session_dir, threads=THREADS, suffix="_b")
-
-            with job.running("checks"):
-                job.detail["checks"] = "verifying variant B reel"
-                job.check_results_b = [
-                    str(r) for r in run_render_checks(edl_b, session_dir, suffix="_b")
-                ]
+        edl = _run_hooks_and_planner_stage(
+            session_dir,
+            job,
+            resume,
+            provider,
+            model,
+            theme,
+            manifest,
+            candidates,
+            slots,
+            selection,
+            selection_meta,
+            tonemap_chain,
+        )
+        _run_render_stage(session_dir, job, resume, edl, manifest, tonemap_chain)
+        _run_variant_b_stage(
+            session_dir,
+            job,
+            manifest,
+            candidates,
+            slots,
+            selection,
+            selection_meta,
+            edl,
+            tonemap_chain,
+        )
+    except _JobCancelledError:
+        pass
     except Exception:  # noqa: BLE001 - surfaced to the status page, not swallowed
         job.error = traceback.format_exc()
     finally:
