@@ -17,7 +17,6 @@ from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from edl_agent.llm import PROVIDERS
 from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
 from edl_agent.web.pipeline import (
@@ -30,6 +29,10 @@ from edl_agent.web.pipeline import (
 
 SESSIONS_DIR = Path("sessions")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# Providers offered in the UI dropdown, deepseek first so it's the default
+# selection; anthropic/gemini stay usable via PROVIDERS for non-UI callers.
+UI_PROVIDERS = ("deepseek", "ollama")
 
 # Provider -> env var read by edl_agent.llm.get_client; gemini/ollama use
 # SDK-default/no-auth flows not worth preflighting here.
@@ -136,7 +139,7 @@ def new_session_form(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "new.html",
-        {"providers": PROVIDERS, "default_models": DEFAULT_MODELS, "error": None},
+        {"providers": UI_PROVIDERS, "default_models": DEFAULT_MODELS, "error": None},
     )
 
 
@@ -184,7 +187,7 @@ async def create_session(
             request,
             "new.html",
             {
-                "providers": PROVIDERS,
+                "providers": UI_PROVIDERS,
                 "default_models": DEFAULT_MODELS,
                 "error": f"{key_env} is not set in the server's environment. "
                 f"Export it and restart the web server before running {provider}.",
@@ -212,7 +215,7 @@ async def create_session(
             request,
             "new.html",
             {
-                "providers": PROVIDERS,
+                "providers": UI_PROVIDERS,
                 "default_models": DEFAULT_MODELS,
                 "error": (
                     f"Music file must be one of {sorted(MUSIC_EXTS)}, "
@@ -329,7 +332,7 @@ def session_page(request: Request, name: str) -> HTMLResponse:
             "reel_b_exists": reel_b_exists,
             "stages": STAGES,
             "stage_statuses": _stage_statuses(name),
-            "providers": PROVIDERS,
+            "providers": UI_PROVIDERS,
             "default_models": DEFAULT_MODELS,
         },
     )
