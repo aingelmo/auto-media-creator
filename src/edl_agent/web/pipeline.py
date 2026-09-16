@@ -82,8 +82,15 @@ STAGE_ARTIFACTS = {
     "candidates": ["candidates.json"],
     "selection": ["selection.json", "selection_meta.json"],
     "hooks": ["hooks.json", "hook_previews"],
-    "planner": ["edl.json"],
-    "render": ["reel.mp4", "segments", "preview_segments"],
+    "planner": ["edl.json", "edl_b.json"],
+    "render": [
+        "reel.mp4",
+        "segments",
+        "preview_segments",
+        "reel_b.mp4",
+        "segments_b",
+        "preview_segments_b",
+    ],
     "checks": [],
 }
 
@@ -100,6 +107,9 @@ def clear_stage_artifacts(session_dir: Path, from_stage: str) -> None:
     reel_path = session_dir / "reel.mp4"
     if reel_path.exists():
         shutil.copy(reel_path, session_dir / "reel.prev.mp4")
+    reel_b_path = session_dir / "reel_b.mp4"
+    if reel_b_path.exists():
+        shutil.copy(reel_b_path, session_dir / "reel_b.prev.mp4")
 
     for stage in STAGES[STAGES.index(from_stage) :]:
         for rel_path in STAGE_ARTIFACTS.get(stage, []):
@@ -153,9 +163,14 @@ class JobState:
             preview URLs (`hook_previews/{key}/seg_{hook_slot:02d}.mp4`).
         hook_choice: Chosen/custom hook text (`""` = no text), set via
             `/sessions/{name}/confirm` during a `"hook_choice"` pause.
+        hook_choice_b: Chosen hook text for variant B (`""` = no variant
+            B), set via `/sessions/{name}/confirm` during a `"hook_choice"`
+            pause (idea #7).
         more_hooks: `True` (set via `/sessions/{name}/confirm`) to
             generate a fresh batch of 6 lines instead of proceeding to the
             final render.
+        check_results_b: Stringified `run_render_checks` results for
+            variant B, once the `checks` stage completes with a B variant.
     """
 
     stages: dict[str, str] = field(
@@ -178,7 +193,9 @@ class JobState:
     hooks: list[dict] = field(default_factory=list)
     hook_slot: int = 0
     hook_choice: str = ""
+    hook_choice_b: str = ""
     more_hooks: bool = False
+    check_results_b: list[str] = field(default_factory=list)
 
     @contextmanager
     def running(self, stage: str):  # noqa: ANN201 (contextmanager)
@@ -460,6 +477,65 @@ def run_pipeline_job(
 
         with job.running("checks"):
             job.check_results = [str(r) for r in run_render_checks(edl, session_dir)]
+
+        # Variant B (idea #7): same hook clip, different line + peak beat.
+        # Reuses A's segment files for every clip whose dict is identical in
+        # B (only the hook slot differs), so B costs one segment render.
+        hook_line_b = clean_hook_line(job.hook_choice_b)
+        if hook_line_b:
+            with job.running("render"):
+                edl_b = run_planner(
+                    session_dir,
+                    manifest,
+                    candidates,
+                    slots,
+                    selection,
+                    selection_meta,
+                    threads=THREADS,
+                    config={
+                        "hook_line_override": hook_line_b,
+                        "hook_text": True,
+                        "peak_beat_index": 2,
+                    },
+                    out_name="edl_b.json",
+                )
+                clips_b_by_slot = {c["slot"]: c for c in edl_b["clips"]}
+                reuse_final = {
+                    c["slot"]: session_dir / "segments" / f"seg_{c['slot']:02d}.mp4"
+                    for c in edl["clips"]
+                    if c == clips_b_by_slot.get(c["slot"])
+                }
+                reuse_preview = {
+                    c["slot"]: session_dir
+                    / "preview_segments"
+                    / f"seg_{c['slot']:02d}.mp4"
+                    for c in edl["clips"]
+                    if c == clips_b_by_slot.get(c["slot"])
+                }
+                render_preview_segments(
+                    edl_b,
+                    manifest,
+                    session_dir,
+                    threads=THREADS,
+                    tonemap_chain=tonemap_chain,
+                    suffix="_b",
+                    reuse=reuse_preview,
+                )
+                render_segments(
+                    edl_b,
+                    manifest,
+                    session_dir,
+                    threads=THREADS,
+                    tonemap_chain=tonemap_chain,
+                    suffix="_b",
+                    reuse=reuse_final,
+                )
+                concat_and_audio(edl_b, session_dir, threads=THREADS, suffix="_b")
+
+            with job.running("checks"):
+                job.check_results_b = [
+                    str(r) for r in run_render_checks(edl_b, session_dir, suffix="_b")
+                ]
     except Exception:  # noqa: BLE001 - surfaced to the status page, not swallowed
         job.error = traceback.format_exc()
     finally:

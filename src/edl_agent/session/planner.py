@@ -48,14 +48,15 @@ def run_planner(
     selection_meta: dict | None = None,
     threads: int = 4,
     config: dict | None = None,
+    out_name: str = "edl.json",
 ) -> dict:
     """Run selection (LLM, optional) -> S-checks/fallback -> planner -> edl.json.
 
-    Per #8.5. Writes `edl.json` to `session_dir`. Picks up the session
+    Per #8.5. Writes `out_name` to `session_dir`. Picks up the session
     brand from `session_dir/brand/` if present (see `load_brand`).
 
     Args:
-        session_dir: Session directory to write `edl.json` to.
+        session_dir: Session directory to write `out_name` to.
         manifest: Parsed `manifest.json` (see `ingest.build_manifest`).
         candidates_json: Parsed `candidates.json`, with a `candidates` key.
         slots_json: Parsed `slots.json`, with a `slots` key.
@@ -65,6 +66,8 @@ def run_planner(
             `llm_attempts`, `llm_cost_usd`, etc.), or `None`.
         threads: ffmpeg thread count, forwarded to the planner/render steps.
         config: Overrides merged over `planner.DEFAULT_CONFIG`.
+        out_name: Filename to write the EDL to, under `session_dir`, for an
+            A/B variant (e.g. `"edl_b.json"`) alongside the default output.
 
     Returns:
         The `edl.json` dict (see `edl.build_edl`).
@@ -89,6 +92,6 @@ def run_planner(
         brand=load_brand(session_dir),
     )
     apply_color_match(edl, manifest, session_dir, {**DEFAULT_CONFIG, **(config or {})})
-    with (session_dir / "edl.json").open("w") as f:
+    with (session_dir / out_name).open("w") as f:
         json.dump(edl, f, indent=2, ensure_ascii=False)
     return edl

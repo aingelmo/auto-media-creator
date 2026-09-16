@@ -47,7 +47,9 @@ def _sfx_chain(entry: dict) -> str:
     )
 
 
-def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
+def concat_and_audio(
+    edl: dict, session_dir: Path, threads: int, suffix: str = ""
+) -> Path:
     """Concatenate rendered segments and apply loudnorm in two passes, per #10.4.
 
     If no music track is set, segments are concatenated stream-copied with
@@ -61,11 +63,13 @@ def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
             are filled in) and `target.duration_f`, `clips` (for segment
             filenames).
         session_dir: Session root directory; segments are expected under
-            `session_dir / "segments"`.
+            `session_dir / f"segments{suffix}"`.
         threads: ffmpeg thread count.
+        suffix: Appended to the segment list, segments dir, and output reel
+            name, for rendering an A/B variant alongside the default output.
 
     Returns:
-        Path to the rendered reel, `session_dir / "reel.mp4"`.
+        Path to the rendered reel, `session_dir / f"reel{suffix}.mp4"`.
 
     Raises:
         RenderError: If the render or measurement ffmpeg invocation fails,
@@ -74,11 +78,13 @@ def concat_and_audio(edl: dict, session_dir: Path, threads: int) -> Path:
     """
     audio = edl["audio"]
     duration_s = edl["target"]["duration_f"] / 30
-    segments_txt = session_dir / "segments.txt"
+    segments_txt = session_dir / f"segments{suffix}.txt"
     segments_txt.write_text(
-        "".join(f"file 'segments/seg_{c['slot']:02d}.mp4'\n" for c in edl["clips"]),
+        "".join(
+            f"file 'segments{suffix}/seg_{c['slot']:02d}.mp4'\n" for c in edl["clips"]
+        ),
     )
-    reel_path = session_dir / "reel.mp4"
+    reel_path = session_dir / f"reel{suffix}.mp4"
 
     if audio["music_cut_path"] is None:
         cmd = [

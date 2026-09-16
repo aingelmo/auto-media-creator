@@ -300,6 +300,7 @@ def run_render_checks(
     session_dir: Path,
     allow_dynamic_loudnorm: bool = False,
     run_r2: bool = True,
+    suffix: str = "",
 ) -> list[CheckResult]:
     """Run checks R1-R6 over already-rendered segments, per #9.
 
@@ -307,12 +308,14 @@ def run_render_checks(
         edl: EDL dict, as returned by `edl.build_edl`. Reads `clips` and
             `target.duration_f`, and `audio` (for R5).
         session_dir: Session root directory; final segments are expected
-            under `session_dir / "segments"`, preview segments under
-            `session_dir / "preview_segments"`, and the reel at
-            `session_dir / "reel.mp4"`.
+            under `session_dir / f"segments{suffix}"`, preview segments
+            under `session_dir / f"preview_segments{suffix}"`, and the reel
+            at `session_dir / f"reel{suffix}.mp4"`.
         allow_dynamic_loudnorm: Passed through to `check_r5_loudnorm_linear`.
         run_r2: If `False`, skips the R2 pHash comparison (e.g. when no
             preview segments were rendered). Defaults to `True`.
+        suffix: Appended to the segments/preview_segments/reel names, for
+            checking an A/B variant alongside the default output.
 
     Returns:
         Flat list of `CheckResult`s: R1 (and R2, R4) per clip, then R3, R4,
@@ -320,16 +323,18 @@ def run_render_checks(
     """
     results: list[CheckResult] = []
     for clip in edl["clips"]:
-        final_seg = session_dir / "segments" / f"seg_{clip['slot']:02d}.mp4"
+        final_seg = session_dir / f"segments{suffix}" / f"seg_{clip['slot']:02d}.mp4"
         results.append(check_r1_frame_count(final_seg, clip["n_frames"]))
         if run_r2:
             preview_seg = (
-                session_dir / "preview_segments" / f"seg_{clip['slot']:02d}.mp4"
+                session_dir
+                / f"preview_segments{suffix}"
+                / f"seg_{clip['slot']:02d}.mp4"
             )
             results.append(check_r2_phash(final_seg, preview_seg, clip["n_frames"]))
         results.append(check_r4_color(final_seg))
 
-    reel_path = session_dir / "reel.mp4"
+    reel_path = session_dir / f"reel{suffix}.mp4"
     results.append(check_r3_reel_duration(reel_path, edl["target"]["duration_f"]))
     results.append(check_r4_color(reel_path))
     results.append(

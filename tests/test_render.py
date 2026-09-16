@@ -13,7 +13,7 @@ import pytest
 from PIL import Image
 
 from edl_agent.ingest import build_proxy, probe_video_source, sha256_file
-from edl_agent.render import crop_to_px, is_916, run_render
+from edl_agent.render import crop_to_px, is_916, render_segments, run_render
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -300,6 +300,58 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
     assert min(r, g, b) > 230
     r10, g10, b10 = _pixel("seg_00", 180, 320, frame=10)
     assert sum((r10, g10, b10)) < sum((r, g, b))
+
+
+def test_render_segments_suffix_and_reuse(session_dir) -> None:
+    """Variant-B segment reuse (idea #7): identical clips hardlink, changed
+    ones re-render."""
+    clip_a = session_dir / "inputs" / "a.mp4"
+    _make_clip(clip_a, w=360, h=640, fps=30, duration=3)
+    clip_b = session_dir / "inputs" / "b.mp4"
+    _make_clip(clip_b, w=360, h=640, fps=30, duration=3)
+    info_a = probe_video_source(clip_a)
+    info_b = probe_video_source(clip_b)
+
+    manifest = {
+        "session_id": "sess",
+        "target": {"w": 1080, "h": 1920, "fps": 30},
+        "sources": [
+            {"src": "inputs/a.mp4", "sha256": info_a.sha256, "type": "video"},
+            {"src": "inputs/b.mp4", "sha256": info_b.sha256, "type": "video"},
+        ],
+    }
+    clips_a = [
+        _clip(0, "hook", "inputs/a.mp4", 360, 640, 0.0, 0.5, 15, 1.0, 0, 15),
+        _clip(1, "close", "inputs/b.mp4", 360, 640, 0.5, 1.0, 15, 1.0, 15, 30),
+    ]
+    edl_a = {"clips": clips_a}
+    render_segments(edl_a, manifest, session_dir, threads=2)
+
+    # Variant B: slot 0 unchanged, slot 1's in/out shifted.
+    clips_b = [
+        clips_a[0],
+        _clip(1, "close", "inputs/b.mp4", 360, 640, 1.0, 1.5, 15, 1.0, 15, 30),
+    ]
+    edl_b = {"clips": clips_b}
+    clips_b_by_slot = {c["slot"]: c for c in clips_b}
+    reuse = {
+        c["slot"]: session_dir / "segments" / f"seg_{c['slot']:02d}.mp4"
+        for c in clips_a
+        if c == clips_b_by_slot.get(c["slot"])
+    }
+    assert set(reuse) == {0}
+
+    render_segments(edl_b, manifest, session_dir, threads=2, suffix="_b", reuse=reuse)
+
+    seg_dir_b = session_dir / "segments_b"
+    assert seg_dir_b.is_dir()
+    reused = seg_dir_b / "seg_00.mp4"
+    rerendered = seg_dir_b / "seg_01.mp4"
+    seg_00_a = session_dir / "segments" / "seg_00.mp4"
+    seg_01_a = session_dir / "segments" / "seg_01.mp4"
+    assert reused.stat().st_ino == seg_00_a.stat().st_ino
+    assert reused.stat().st_nlink == 2
+    assert rerendered.stat().st_ino != seg_01_a.stat().st_ino
 
 
 def test_sfx_chain_ramp_vs_plain() -> None:

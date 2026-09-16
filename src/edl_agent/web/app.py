@@ -306,6 +306,7 @@ def session_page(request: Request, name: str) -> HTMLResponse:
     """Show a session's live per-stage status, or its final results once done."""
     job = _jobs.get(name)
     reel_exists = (SESSIONS_DIR / name / "reel.mp4").exists()
+    reel_b_exists = (SESSIONS_DIR / name / "reel_b.mp4").exists()
     return templates.TemplateResponse(
         request,
         "session.html",
@@ -313,6 +314,7 @@ def session_page(request: Request, name: str) -> HTMLResponse:
             "name": name,
             "job": job,
             "reel_exists": reel_exists,
+            "reel_b_exists": reel_b_exists,
             "stages": STAGES,
             "stage_statuses": _stage_statuses(name),
             "providers": PROVIDERS,
@@ -348,6 +350,7 @@ def session_confirm(
     shorten: bool = Form(default=False),
     hook_line: str = Form(""),
     hook_custom: str = Form(""),
+    hook_line_b: str = Form(""),
     more: bool = Form(default=False),
 ) -> RedirectResponse:
     """Unblock a job paused on `awaiting_confirmation` (see `JobState`).
@@ -358,8 +361,10 @@ def session_confirm(
     `"low_candidates"` pause, `shorten=True` re-cuts the music to the
     suggested shorter duration instead of keeping the original one. For a
     `"hook_choice"` pause, `hook_custom` (if non-empty) wins over the
-    selected `hook_line` radio value, and `more=True` regenerates a fresh
-    batch of 6 lines instead of proceeding to the final render.
+    selected `hook_line` radio value, `hook_line_b` (idea #7) picks the
+    hook line for a second variant reel (`""` = no variant B), and
+    `more=True` regenerates a fresh batch of 6 lines instead of proceeding
+    to the final render.
     """
     job = _jobs.get(name)
     if job is None or not job.awaiting_confirmation:
@@ -368,6 +373,7 @@ def session_confirm(
     job.excluded_sources = exclude
     job.shorten = shorten
     job.hook_choice = hook_custom.strip() or hook_line
+    job.hook_choice_b = hook_line_b
     job.more_hooks = more
     job.confirm_event.set()
     return RedirectResponse(f"/sessions/{name}", status_code=303)

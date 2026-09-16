@@ -102,6 +102,14 @@
         <label>Custom text (wins over the radio above if non-empty)
           <input type="text" name="hook_custom" maxlength="40" placeholder="Último rep, sin excusas">
         </label>
+        <label>Variant B hook line (optional; renders a second reel, same clip)
+          <select name="hook_line_b">
+            <option value="" selected>no variant B</option>
+            {% for line in job.hooks %}
+            <option value="{{ line.text }}">{{ line.text }} ({{ line.angle }})</option>
+            {% endfor %}
+          </select>
+        </label>
         <button type="submit">Render with this hook</button>
         <button type="submit" name="more" value="true">Generate 6 more</button>
       </form>
@@ -116,6 +124,16 @@
     {% if job and job.check_results %}
       <h3>Render checks</h3>
       <pre>{{ job.check_results | join("\n") }}</pre>
+    {% endif %}
+
+    {% if reel_b_exists %}
+      <h3>Variant B</h3>
+      <video controls width="640" src="/sessions/{{ name }}/files/reel_b.mp4"></video>
+      <p><a href="/sessions/{{ name }}/files/reel_b.mp4" download>Download reel_b.mp4</a></p>
+      {% if job and job.check_results_b %}
+        <h3>Render checks (B)</h3>
+        <pre>{{ job.check_results_b | join("\n") }}</pre>
+      {% endif %}
     {% endif %}
 
     <h3>Regenerate</h3>

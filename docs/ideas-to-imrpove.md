@@ -19,7 +19,7 @@ Ranked by (impact on "stands out") / (effort given the current code). Everything
 4. **Beat-synced punch-ins / flash.** On each develop cut: a 4–6 frame 1.0→1.06 zoom (`zoompan`, same 3x pre-scale trick as Ken Burns) or a 2-frame white flash on the hook beat. Stays inside segments, so concat-copy keeps working. Skip `xfade`: it needs re-encoding at joins and breaks the per-segment design.
 5. **Diegetic sound under the music.** Plates clanking, breath, a shout at the peak. Extract the original clip audio at ingest (proxies drop it today), keep only the hook and peak segments' audio, duck it to −18 dB under the music with `sidechaincompress` or a fixed `volume`. Needs: ingest audio extraction, EDL `audio.sfx[]`, second `amix` in the final pass. Medium effort, high "feel" payoff.
 6. **Exercise / stat captions.** Selector already labels `exercise`. Show "Sentadilla · 120 kg" lower-third for 1 s on each develop cut. Same `drawtext` path as #1; weight comes from the trainer via the web UI upload form (optional per clip).
-7. **Two variants per session.** Render A/B with different hook clip + hook line (planner is deterministic, so just re-run with `peak_beat_index` / seed varied). Post both, keep the winner. Almost free since segments are cached per clip.
+7. **Two variants per session. (done)** B = same hook clip, different hook line + `peak_beat_index` shifted to 2; operator picks it in the hook-choice form (`""` = no variant B). Non-hook segments are hardlinked from A instead of re-encoded, so B costs one segment render + one concat.
 
 ## Tier 3 — strategic, not code-first
 

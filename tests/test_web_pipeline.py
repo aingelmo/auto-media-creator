@@ -239,6 +239,90 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
     assert on_disk_candidates["candidates"][0]["admits_slots"] == [0]
 
 
+def _run_job_to_hook_choice(tmp_path, hook_choice_b: str) -> tuple[JobState, Mock]:
+    """Drive a job to the hook-choice pause (image-only sources skip both
+    pauses), answer it with `hook_choice_b`, then run it to completion with
+    every render/planner call mocked. Returns the job and the `render_segments`
+    mock so callers can inspect suffix/reuse kwargs used for variant B.
+    """
+    session_dir = tmp_path
+    manifest = {
+        "session_id": "s1",
+        "sources": [{"src": "inputs/a.png", "type": "image"}],
+        "target": {},
+        "music": None,
+    }
+    slots = {"slots": [{"slot": 0, "start_f": 0, "end_f": 30, "role": "hook"}]}
+    candidates = {"candidates": []}
+    edl = {"clips": [{"slot": 0, "role": "hook", "effect_params": {}}]}
+
+    def fake_run_planner(
+        session_dir, manifest, candidates, slots, selection, meta, **kw
+    ):
+        return edl
+
+    def fake_run_hooks(session_dir, candidates, slots, selection, theme, client, model):
+        return {"lines": [{"angle": "reto", "text": "vamos"}]}
+
+    render_segments_mock = Mock()
+    job = JobState()
+    with (
+        patch("edl_agent.web.pipeline.run_ingest", return_value=manifest),
+        patch("edl_agent.web.pipeline.slots_from_file", return_value=slots),
+        patch("edl_agent.web.pipeline.yolo_pose_detector", return_value=Mock()),
+        patch("edl_agent.web.pipeline.run_candidates", return_value=candidates),
+        patch(
+            "edl_agent.web.pipeline.run_selection",
+            return_value=({"selected": [], "rejected": [], "notes": ""}, {}),
+        ),
+        patch("edl_agent.web.pipeline.run_hooks", side_effect=fake_run_hooks),
+        patch("edl_agent.web.pipeline.run_planner", side_effect=fake_run_planner),
+        patch("edl_agent.web.pipeline.render_hook_previews"),
+        patch("edl_agent.web.pipeline.render_preview_segments"),
+        patch("edl_agent.web.pipeline.render_segments", render_segments_mock),
+        patch("edl_agent.web.pipeline.concat_and_audio"),
+        patch("edl_agent.web.pipeline.run_render_checks", return_value=[]),
+    ):
+        thread = threading.Thread(
+            target=run_pipeline_job,
+            args=(session_dir, "ollama", "qwen3-vl:8b-instruct", job),
+        )
+        thread.start()
+
+        deadline = time.monotonic() + 5
+        while job.pause_kind != "hook_choice" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert job.pause_kind == "hook_choice"
+        job.hook_choice = ""
+        job.hook_choice_b = hook_choice_b
+        job.more_hooks = False
+        job.cancelled = False
+        job.confirm_event.set()
+        thread.join(timeout=10)
+
+    assert not thread.is_alive()
+    assert job.error is None
+    assert job.done
+    return job, render_segments_mock
+
+
+def test_hook_choice_b_renders_variant_b_reel(tmp_path) -> None:
+    job, render_segments_mock = _run_job_to_hook_choice(tmp_path, "line b")
+
+    calls = render_segments_mock.call_args_list
+    assert len(calls) == 2  # variant A, then variant B
+    assert calls[1].kwargs["suffix"] == "_b"
+    assert job.check_results_b == []
+
+
+def test_no_hook_choice_b_skips_variant_b_render(tmp_path) -> None:
+    job, render_segments_mock = _run_job_to_hook_choice(tmp_path, "")
+
+    calls = render_segments_mock.call_args_list
+    assert len(calls) == 1  # variant A only
+    assert job.check_results_b == []
+
+
 def test_clear_stage_artifacts_from_selection_keeps_earlier_stages_and_backs_up_reel(
     tmp_path,
 ) -> None:

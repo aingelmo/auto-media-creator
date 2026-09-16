@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -304,8 +306,46 @@ def render_segment(
     return out_path
 
 
+def _render_or_reuse(
+    clip: dict,
+    sources_by_src: dict,
+    session_dir: Path,
+    out_dir: Path,
+    threads: int,
+    tonemap_chain: str,
+    preview: bool,
+    brand: dict | None,
+    reuse: dict[int, Path] | None,
+) -> Path:
+    reused = (reuse or {}).get(clip["slot"])
+    if reused is not None:
+        out_path = out_dir / f"seg_{clip['slot']:02d}.mp4"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(reused, out_path)
+        except OSError:
+            shutil.copy(reused, out_path)
+        return out_path
+    return render_segment(
+        clip,
+        sources_by_src,
+        session_dir,
+        out_dir,
+        threads,
+        tonemap_chain,
+        preview=preview,
+        brand=brand,
+    )
+
+
 def render_segments(
-    edl: dict, manifest: dict, session_dir: Path, threads: int, tonemap_chain: str = ""
+    edl: dict,
+    manifest: dict,
+    session_dir: Path,
+    threads: int,
+    tonemap_chain: str = "",
+    suffix: str = "",
+    reuse: dict[int, Path] | None = None,
 ) -> list[Path]:
     """Render every clip of the EDL at final resolution, per #10.1.
 
@@ -315,23 +355,30 @@ def render_segments(
         session_dir: Session root directory.
         threads: ffmpeg thread count.
         tonemap_chain: HDR (HLG/DV84) tonemap filter chain.
+        suffix: Appended to the output dir name (`f"segments{suffix}"`), for
+            rendering an A/B variant alongside the default output.
+        reuse: `{slot: Path}` of already-rendered segments (e.g. variant
+            A's) to hardlink instead of re-encoding, for clips whose slot
+            is present. `# ponytail:` caller decides reuse eligibility by
+            comparing whole clip dicts, not a content hash.
 
     Returns:
         Paths to the rendered final-resolution segments, one per clip, in
-        clip order, under `session_dir / "segments"`.
+        clip order, under `session_dir / f"segments{suffix}"`.
     """
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
-    out_dir = session_dir / "segments"
+    out_dir = session_dir / f"segments{suffix}"
     return [
-        render_segment(
+        _render_or_reuse(
             clip,
             sources_by_src,
             session_dir,
             out_dir,
             threads,
             tonemap_chain,
-            preview=False,
-            brand=edl.get("brand"),
+            False,
+            edl.get("brand"),
+            reuse,
         )
         for clip in edl["clips"]
     ]
@@ -343,6 +390,8 @@ def render_preview_segments(
     session_dir: Path,
     threads: int,
     tonemap_chain: str = "",
+    suffix: str = "",
+    reuse: dict[int, Path] | None = None,
 ) -> list[Path]:
     """Render every clip of the EDL at preview resolution, per #10.2.
 
@@ -352,23 +401,26 @@ def render_preview_segments(
         session_dir: Session root directory.
         threads: ffmpeg thread count.
         tonemap_chain: HDR (HLG/DV84) tonemap filter chain.
+        suffix: Appended to the output dir name (`f"preview_segments{suffix}"`).
+        reuse: See `render_segments`.
 
     Returns:
         Paths to the rendered preview-resolution segments, one per clip, in
-        clip order, under `session_dir / "preview_segments"`.
+        clip order, under `session_dir / f"preview_segments{suffix}"`.
     """
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
-    out_dir = session_dir / "preview_segments"
+    out_dir = session_dir / f"preview_segments{suffix}"
     return [
-        render_segment(
+        _render_or_reuse(
             clip,
             sources_by_src,
             session_dir,
             out_dir,
             threads,
             tonemap_chain,
-            preview=True,
-            brand=edl.get("brand"),
+            True,
+            edl.get("brand"),
+            reuse,
         )
         for clip in edl["clips"]
     ]
