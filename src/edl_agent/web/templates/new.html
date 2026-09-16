@@ -51,6 +51,7 @@
       </label>
     </fieldset>
     <p><button type="submit">Start run</button></p>
+    <p id="upload-status"></p>
   </form>
   <script>
     const defaultModels = {{ default_models | tojson }};
@@ -59,5 +60,38 @@
     function syncModel() { modelInput.value = defaultModels[providerSelect.value] || ""; }
     providerSelect.addEventListener("change", syncModel);
     syncModel();
+
+    const form = document.querySelector("form");
+    const submitButton = form.querySelector("button[type=submit]");
+    const status = document.getElementById("upload-status");
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitButton.disabled = true;
+      status.textContent = "Uploading...";
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", form.action);
+      xhr.upload.addEventListener("progress", (e) => {
+        if (!e.lengthComputable) return;
+        const mb = (n) => (n / 1e6).toFixed(1);
+        const pct = Math.round((e.loaded / e.total) * 100);
+        status.textContent = `Uploading: ${mb(e.loaded)} / ${mb(e.total)} MB (${pct}%)`;
+      });
+      xhr.upload.addEventListener("load", () => {
+        status.textContent = "Upload complete, saving session and launching pipeline...";
+      });
+      xhr.addEventListener("load", () => {
+        if (xhr.responseURL) {
+          window.location = xhr.responseURL;
+        } else {
+          status.textContent = `Failed: HTTP ${xhr.status}`;
+          submitButton.disabled = false;
+        }
+      });
+      xhr.addEventListener("error", () => {
+        status.textContent = "Upload failed (network error).";
+        submitButton.disabled = false;
+      });
+      xhr.send(new FormData(form));
+    });
   </script>
 {% endblock %}
