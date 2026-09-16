@@ -4,15 +4,66 @@ from __future__ import annotations
 
 from edl_agent.selection._common import ROLES, _admits, _slot_indices
 
-HOOK_LINE_MAX_WORDS = 8
+HOOK_LINE_MAX_WORDS = 8  # operator-typed text (strict=False)
+HOOK_LINE_MIN_WORDS = 3
+HOOK_LINE_STRICT_MAX_WORDS = 6
+HOOK_LINE_MAX_CHARS = 40
+
+# Substrings (casefold) that mark a line as an invented slogan rather than a
+# description of what's on screen.
+GENERIC_PHRASES: tuple[str, ...] = (
+    "sin excusas",
+    "dalo todo",
+    "a otro nivel",
+    "modo bestia",
+    "el límite",
+    "sin límites",
+    "no pain",
+    "no hay excusas",
+    "puedes con todo",
+    "nunca te rindas",
+    "así empieza",
+    "hoy toca",
+    "una más",
+    "vamos",
+    "reto",
+    "récord",
+)
 
 
-def clean_hook_line(raw: object) -> str:
-    """Trim/unquote the LLM's `hook_line`; `""` if missing or over 8 words."""
-    line = str(raw or "").strip().strip("\"'“”«»").strip()
-    if not 0 < len(line.split()) <= HOOK_LINE_MAX_WORDS:
-        return ""
-    return line[:40]
+def clean_hook_line(raw: object, strict: bool = False) -> str:
+    """Trim/unquote/validate a hook line; `""` if it fails any check.
+
+    Always applied: strip whitespace/quotes, drop a trailing `.`/`!`/`?`,
+    reject if empty, contains `#`/`@`, or any character outside the es-ES
+    text/punctuation range (`ord > 0x2000`, which catches emoji); truncate
+    to `HOOK_LINE_MAX_CHARS`.
+
+    `strict=True` (LLM output, #5.7) additionally rejects: fewer than
+    `HOOK_LINE_MIN_WORDS` or more than `HOOK_LINE_STRICT_MAX_WORDS` words,
+    any digit (invented reps/kg/times), or a substring from
+    `GENERIC_PHRASES` (invented slogan).
+
+    `strict=False` (operator-typed text, `hook_custom` in the web form)
+    keeps the looser 1-`HOOK_LINE_MAX_WORDS`-word check only.
+    """
+    line = str(raw or "").strip().strip("\"'“”«»").strip().rstrip(".!?").strip()
+    words = line.split()
+
+    rejected = (
+        not line
+        or "#" in line
+        or "@" in line
+        or any(ord(ch) > 0x2000 for ch in line)
+        or (
+            not HOOK_LINE_MIN_WORDS <= len(words) <= HOOK_LINE_STRICT_MAX_WORDS
+            or any(ch.isdigit() for ch in line)
+            or any(phrase in line.casefold() for phrase in GENERIC_PHRASES)
+            if strict
+            else not 0 < len(words) <= HOOK_LINE_MAX_WORDS
+        )
+    )
+    return "" if rejected else line[:HOOK_LINE_MAX_CHARS]
 
 
 def apply_s_checks(

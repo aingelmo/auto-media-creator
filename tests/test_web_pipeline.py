@@ -45,8 +45,16 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
     ):
         return {"clips": [{"slot": 0, "role": "hook", "effect_params": {}}]}
 
-    def fake_run_hooks(session_dir, candidates, slots, selection, theme, client, model):
-        return {"lines": [{"angle": "reto", "text": "vamos"}]}
+    def fake_run_hooks(
+        session_dir, candidates, slots, selection, theme, client, model, **kwargs
+    ):
+        return {
+            "candidate_id": "hook1",
+            "hook_line": "la barra despega del suelo",
+            "evidence": ["barra en el suelo"],
+            "rejected": None,
+            "source": "llm",
+        }
 
     ollama_reply = _fake_ollama_response(
         {
@@ -170,8 +178,16 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
     ):
         return {"clips": [{"slot": 0, "role": "hook", "effect_params": {}}]}
 
-    def fake_run_hooks(session_dir, candidates, slots, selection, theme, client, model):
-        return {"lines": [{"angle": "reto", "text": "vamos"}]}
+    def fake_run_hooks(
+        session_dir, candidates, slots, selection, theme, client, model, **kwargs
+    ):
+        return {
+            "candidate_id": "c01",
+            "hook_line": "la barra despega del suelo",
+            "evidence": ["barra en el suelo"],
+            "rejected": None,
+            "source": "llm",
+        }
 
     job = JobState()
     with (
@@ -239,7 +255,9 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
     assert on_disk_candidates["candidates"][0]["admits_slots"] == [0]
 
 
-def _run_job_to_hook_choice(tmp_path, hook_choice_b: str) -> tuple[JobState, Mock]:
+def _run_job_to_hook_choice(
+    tmp_path, hook_choice_b: str, hook_line_override: str = ""
+) -> tuple[JobState, Mock, list[dict]]:
     """Drive a job to the hook-choice pause (image-only sources skip both
     pauses), answer it with `hook_choice_b`, then run it to completion with
     every render/planner call mocked. Returns the job and the `render_segments`
@@ -261,8 +279,19 @@ def _run_job_to_hook_choice(tmp_path, hook_choice_b: str) -> tuple[JobState, Moc
     ):
         return edl
 
-    def fake_run_hooks(session_dir, candidates, slots, selection, theme, client, model):
-        return {"lines": [{"angle": "reto", "text": "vamos"}]}
+    hooks_calls = []
+
+    def fake_run_hooks(
+        session_dir, candidates, slots, selection, theme, client, model, **kwargs
+    ):
+        hooks_calls.append(kwargs)
+        return {
+            "candidate_id": "c01",
+            "hook_line": "la barra despega del suelo",
+            "evidence": ["barra en el suelo"],
+            "rejected": None,
+            "source": "llm",
+        }
 
     render_segments_mock = Mock()
     job = JobState()
@@ -285,7 +314,15 @@ def _run_job_to_hook_choice(tmp_path, hook_choice_b: str) -> tuple[JobState, Moc
     ):
         thread = threading.Thread(
             target=run_pipeline_job,
-            args=(session_dir, "ollama", "qwen3-vl:8b-instruct", job),
+            args=(
+                session_dir,
+                "ollama",
+                "qwen3-vl:8b-instruct",
+                job,
+                False,
+                "training",
+                hook_line_override,
+            ),
         )
         thread.start()
 
@@ -303,11 +340,13 @@ def _run_job_to_hook_choice(tmp_path, hook_choice_b: str) -> tuple[JobState, Moc
     assert not thread.is_alive()
     assert job.error is None
     assert job.done
-    return job, render_segments_mock
+    return job, render_segments_mock, hooks_calls
 
 
 def test_hook_choice_b_renders_variant_b_reel(tmp_path) -> None:
-    job, render_segments_mock = _run_job_to_hook_choice(tmp_path, "line b")
+    job, render_segments_mock, _hooks_calls = _run_job_to_hook_choice(
+        tmp_path, "line b"
+    )
 
     calls = render_segments_mock.call_args_list
     assert len(calls) == 2  # variant A, then variant B
@@ -316,11 +355,19 @@ def test_hook_choice_b_renders_variant_b_reel(tmp_path) -> None:
 
 
 def test_no_hook_choice_b_skips_variant_b_render(tmp_path) -> None:
-    job, render_segments_mock = _run_job_to_hook_choice(tmp_path, "")
+    job, render_segments_mock, _hooks_calls = _run_job_to_hook_choice(tmp_path, "")
 
     calls = render_segments_mock.call_args_list
     assert len(calls) == 1  # variant A only
     assert job.check_results_b == []
+
+
+def test_job_hook_line_override_is_passed_to_run_hooks(tmp_path) -> None:
+    _job, _render_segments_mock, hooks_calls = _run_job_to_hook_choice(
+        tmp_path, "", hook_line_override="Del operador"
+    )
+
+    assert hooks_calls == [{"hook_line_override": "Del operador"}]
 
 
 def test_clear_stage_artifacts_from_selection_keeps_earlier_stages_and_backs_up_reel(

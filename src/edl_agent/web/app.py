@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from edl_agent.llm import PROVIDERS
+from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
 from edl_agent.web.pipeline import (
     DEFAULT_MODELS,
@@ -174,6 +175,7 @@ async def create_session(
     logo: UploadFile | None = None,
     handle: str = Form(""),
     line: str = Form(""),
+    hook_line: str = Form(""),
 ) -> HTMLResponse | RedirectResponse:
     """Save uploaded media (+ optional brand logo) into a new session dir and launch."""
     key_env = PROVIDER_API_KEY_ENV.get(provider)
@@ -234,6 +236,7 @@ async def create_session(
         model,
         job,
         theme=theme,
+        hook_line_override=clean_hook_line(hook_line),
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -257,6 +260,7 @@ def retry_session(name: str, background_tasks: BackgroundTasks) -> RedirectRespo
         job,
         True,
         old_job.theme,
+        old_job.hook_line_override,
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -273,6 +277,7 @@ def regenerate_session(
     logo: UploadFile | None = None,
     handle: str = Form(""),
     line: str = Form(""),
+    hook_line: str = Form(""),
 ) -> RedirectResponse:
     """Force `from_stage` onward to redo, reusing already-completed earlier stages.
 
@@ -295,7 +300,14 @@ def regenerate_session(
     with _lock:
         _jobs[name] = job
     background_tasks.add_task(
-        run_pipeline_job, session_dir, provider, model, job, True, theme
+        run_pipeline_job,
+        session_dir,
+        provider,
+        model,
+        job,
+        True,
+        theme,
+        clean_hook_line(hook_line),
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)

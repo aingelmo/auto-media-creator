@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from edl_agent.selection import build_selected
-from edl_agent.selector import generate_hooks
+from edl_agent.selector import generate_hook_copy
 
 
 def run_hooks(
@@ -17,8 +17,9 @@ def run_hooks(
     theme: str,
     client: Any,  # noqa: ANN401 (duck-typed: google-genai Client or OllamaClient)
     model: str,
+    hook_line_override: str = "",
 ) -> dict:
-    """Find the hook candidate the same way the planner will, then generate hook lines.
+    """Find the hook candidate the same way the planner will, then generate its copy.
 
     Args:
         session_dir: Session directory to write `hooks.json` to.
@@ -30,9 +31,11 @@ def run_hooks(
         theme: Selector prompt theme, a key of `selector.prompts.THEMES`.
         client: LLM client, as built by `edl_agent.llm.get_client`.
         model: Model name to call.
+        hook_line_override: Operator-typed text; if non-empty, skips the LLM
+            call entirely (see `selector.generate_hook_copy`).
 
     Returns:
-        `hooks.json` dict, as returned by `selector.generate_hooks`.
+        `hooks.json` dict, as returned by `selector.generate_hook_copy`.
     """
     selected, _warnings, _fallback_roles = build_selected(
         candidates_json, slots_json, selection
@@ -41,4 +44,12 @@ def run_hooks(
     hook_entry = next(e for e in selected if e["role"] == "hook")
     candidate = candidates_by_id[hook_entry["candidate_id"]]
     exercise = hook_entry.get("exercise", "other")
-    return generate_hooks(candidate, exercise, theme, client, model, Path(session_dir))
+    return generate_hook_copy(
+        candidate,
+        exercise,
+        theme,
+        client,
+        model,
+        Path(session_dir),
+        hook_line_override=hook_line_override,
+    )

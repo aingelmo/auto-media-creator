@@ -9,13 +9,13 @@ retries on `status: "incomplete"` (#5.6). Saves each attempt as
 
 from __future__ import annotations
 
-from edl_agent.selector.hooks import generate_hooks
+from edl_agent.selector.hooks import generate_hook_copy
 from edl_agent.selector.pipeline import select
 from edl_agent.selector.prompts import admissible_candidates, build_parts
 
 __all__ = [
     "admissible_candidates",
     "build_parts",
-    "generate_hooks",
+    "generate_hook_copy",
     "select",
 ]

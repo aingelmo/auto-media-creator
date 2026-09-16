@@ -128,13 +128,19 @@ Se adjunta a cada candidato solo `id`, `kind`, `src`, `multi_subject`; no se pas
 
 ### 5.7 Hook lines — `hooks.json`
 
-Ya no hay un único `hook_line` dentro de `selection.json`. Tras la selección hay una llamada LLM separada (mismo proveedor/modelo) que genera 6 líneas por lote, una por ángulo forzado (`reto`, `pregunta`, `momento`, `comunidad`, `contraste`, `confesion` — ver `HOOK_ANGLES` en `selector/hooks.py`).
+Ya no hay un único `hook_line` dentro de `selection.json`. Tras la selección hay una llamada LLM separada (mismo proveedor/modelo), estrechada a una sola línea anclada a evidencia, con contrato verificable: `{candidate_id, evidence, hook_line}` (`hook_copy_schema` en `selector/hooks.py`).
 
 Input: los 3 fotogramas de pico del candidato hook elegido, el ejercicio y el tema (`training`/`yoga`), igual que el resto del selector. No se le pasan tiempos ni coordenadas.
 
-Tono: español de España, tuteo, casual/minúsculas, sin nombre de marca ni gimnasio, concreto sobre lo que se ve en pantalla; máximo 6 palabras por línea.
+Prompt: primero pide `evidence` (0-3 hechos visibles: objeto, fase del movimiento, posición del cuerpo; nada inferido), luego `hook_line` de 3-6 palabras que describa solo esa evidencia. Prohíbe explícitamente reps/kilos/tiempos/récords, emociones, segunda persona, exclamaciones, emojis, hashtags, comillas, punto final y lenguaje motivacional/eslogan. Cadena vacía en `hook_line` si no hay evidencia clara que sostenga una frase concreta (abstención legítima). Temperatura 0.2.
 
-Cada línea se limpia con `clean_hook_line` (mismo saneo que antes se aplicaba al `hook_line` único) y se deduplican. Si sobreviven menos de 3 tras el saneo, se reintenta una vez con el prompt reforzado (`REINFORCED_SUFFIX`). El resultado se escribe en `hooks.json` (`generate_hooks` en `session/hooks.py`) junto con `usage`/`cost_usd` como el resto de llamadas LLM.
+Validación en código (`generate_hook_copy`, `session/hooks.py`):
+- `candidate_id` de la respuesta distinto del candidato hook real → `hook_line = ""`, `rejected: "candidate_id_mismatch"`.
+- `clean_hook_line(hook_line, strict=True)` (`selection/s_checks.py`) vacía la línea si no tiene 3-6 palabras, contiene dígitos, o coincide con una frase de `GENERIC_PHRASES` (slogans conocidos) → `rejected: "invalid_copy"`. Si el modelo ya devolvió `""`, es abstención legítima: `rejected: None`.
+- `hook_line` no vacía pero `evidence` vacía → se descarta igual, `rejected: "no_evidence"`.
+- Un solo reintento, solo por `status: "incomplete"` o error de red/JSON; nunca por abstención.
 
-El operador ve las 6 líneas renderizadas sobre el hook (más una variante sin texto) en la pausa `hook_choice` de la web UI, y elige una, escribe texto propio, o "sin texto"; el CLI usa la línea #1 sin pausa.
+Si el operador ya escribió texto (`hook_line_override`, desde el formulario de alta o de regenerar), se salta la llamada LLM por completo: `hooks.json` se escribe con `source: "override"`, `evidence: []`, `cost_usd: 0.0`.
+
+El operador ve la línea (o el aviso de abstención) renderizada sobre el hook, más una variante sin texto, en la pausa `hook_choice` de la web UI, y puede aceptarla, escribir texto propio, o elegir "sin texto"; el CLI usa `hooks.json["hook_line"]` sin pausa.
 

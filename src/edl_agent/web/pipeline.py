@@ -157,8 +157,10 @@ class JobState:
             with; kept so `/sessions/{name}/retry` can relaunch it.
         model: LLM model this job was (or should be, on retry) run with.
         theme: Selector prompt theme (`"training"` | `"yoga"`).
-        hooks: Latest `hooks.json["lines"]` (`[{"angle", "text"}, ...]`),
-            for the hook-choice template.
+        hook_line_override: Operator-typed text from the new-session form;
+            if non-empty, `run_hooks` skips its LLM call entirely.
+        hooks: Latest `hooks.json` dict (`hook_line`, `evidence`,
+            `rejected`, `source`), for the hook-choice template.
         hook_slot: Slot number of the hook clip, so the template can build
             preview URLs (`hook_previews/{key}/seg_{hook_slot:02d}.mp4`).
         hook_choice: Chosen/custom hook text (`""` = no text), set via
@@ -190,7 +192,8 @@ class JobState:
     provider: str = ""
     model: str = ""
     theme: str = "training"
-    hooks: list[dict] = field(default_factory=list)
+    hook_line_override: str = ""
+    hooks: dict = field(default_factory=dict)
     hook_slot: int = 0
     hook_choice: str = ""
     hook_choice_b: str = ""
@@ -217,6 +220,7 @@ def run_pipeline_job(
     job: JobState,
     resume: bool = False,
     theme: str = "training",
+    hook_line_override: str = "",
 ) -> None:
     """Run the full ingest->render pipeline for a session, updating `job` along the way.
 
@@ -234,10 +238,13 @@ def run_pipeline_job(
         resume: If `True`, skip any stage whose output file already exists
             on disk (loading it instead), per `/sessions/{name}/retry`.
         theme: Selector prompt theme, a key of `edl_agent.selector.prompts.THEMES`.
+        hook_line_override: Operator-typed hook text from the new-session
+            form; if non-empty, the `hooks` stage skips its LLM call.
     """
     job.provider = provider
     job.model = model
     job.theme = theme
+    job.hook_line_override = hook_line_override
     try:
         manifest_path = session_dir / "manifest.json"
         slots_path = session_dir / "slots.json"
@@ -403,9 +410,9 @@ def run_pipeline_job(
                             theme,
                             client,
                             model,
+                            hook_line_override=job.hook_line_override,
                         )
-                job.hooks = hooks["lines"]
-                first_line = hooks["lines"][0]["text"] if hooks["lines"] else ""
+                job.hooks = hooks
                 preview_edl = run_planner(
                     session_dir,
                     manifest,
@@ -414,7 +421,7 @@ def run_pipeline_job(
                     selection,
                     selection_meta,
                     threads=THREADS,
-                    config={"hook_line_override": first_line},
+                    config={"hook_line_override": hooks["hook_line"]},
                 )
                 job.hook_slot = next(
                     c["slot"] for c in preview_edl["clips"] if c["role"] == "hook"
@@ -423,7 +430,7 @@ def run_pipeline_job(
                     preview_edl,
                     manifest,
                     session_dir,
-                    [line["text"] for line in hooks["lines"]],
+                    [hooks["hook_line"]] if hooks["hook_line"] else [],
                     THREADS,
                     tonemap_chain,
                 )

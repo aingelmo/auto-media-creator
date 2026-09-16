@@ -68,6 +68,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip stages whose output already exists on disk (e.g. after a failed run)",
     )
+    parser.add_argument(
+        "--hook-line",
+        default="",
+        help="Operator-typed hook text; skips the hook-copy LLM call",
+    )
     args = parser.parse_args()
     if args.model is None:
         args.model = DEFAULT_MODELS[args.provider]
@@ -139,7 +144,14 @@ def main() -> None:
     else:
         client = get_client(args.provider)
         hooks = run_hooks(
-            session, candidates, slots, selection, args.theme, client, args.model
+            session,
+            candidates,
+            slots,
+            selection,
+            args.theme,
+            client,
+            args.model,
+            hook_line_override=args.hook_line,
         )
 
     edl_path = session / "edl.json"
@@ -154,11 +166,7 @@ def main() -> None:
             selection,
             selection_meta,
             threads=args.threads,
-            config={
-                "hook_line_override": hooks["lines"][0]["text"]
-                if hooks["lines"]
-                else ""
-            },
+            config={"hook_line_override": hooks["hook_line"]},
         )
 
     reel_path = session / "reel.mp4"

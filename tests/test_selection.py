@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from edl_agent.selection import apply_s_checks, build_selected
+from edl_agent.selection.s_checks import clean_hook_line
 
 
 def _cand(
@@ -409,5 +410,34 @@ def test_fallback_hook_no_warning_when_pool_is_single_source() -> None:
         candidates_json, slots_json, selection=None
     )
     assert "sharpness_cross_clip" not in warnings
+
+
+def test_clean_hook_line_strict_rejects_out_of_range_word_count() -> None:
+    assert clean_hook_line(" ".join(["palabra"] * 7), strict=True) == ""
+    assert clean_hook_line("una palabra", strict=True) == ""
+
+
+def test_clean_hook_line_strict_rejects_generic_phrases() -> None:
+    assert clean_hook_line("hoy toca sin excusas ya", strict=True) == ""
+    assert clean_hook_line("modo bestia total hoy", strict=True) == ""
+
+
+def test_clean_hook_line_strict_rejects_digits_hash_and_emoji() -> None:
+    assert clean_hook_line("140 kg y sube", strict=True) == ""
+    assert clean_hook_line("la barra despega #gym", strict=True) == ""
+    assert clean_hook_line("la barra despega \U0001f4aa", strict=True) == ""
+
+
+def test_clean_hook_line_strict_accepts_evidence_line_strips_punctuation() -> None:
+    assert (
+        clean_hook_line('"La barra despega del suelo."', strict=True)
+        == "La barra despega del suelo"
+    )
+
+
+def test_clean_hook_line_non_strict_still_accepts_operator_length() -> None:
+    line = " ".join(["ya"] * 8)
+    assert clean_hook_line(line, strict=False) == line
+    assert clean_hook_line(" ".join(["ya"] * 9), strict=False) == ""
 
 
