@@ -155,7 +155,14 @@ def verify_source(
             )
             orig_hash = _phash(orig_png)
 
-            proxy_frame = round(t * proxy_fps)
+            # Derive the expected proxy frame from the *snapped* original
+            # frame's time, not from `t` directly: independently rounding
+            # `t` on the 25fps and 30fps grids can land on frames that
+            # aren't actually nearest-neighbors of each other near a tie,
+            # producing an off-by-one that grows more likely the further
+            # `t` sits from a shared grid point (#4.4 non-30fps regression).
+            orig_frame_t = round(t * orig_fps) / orig_fps
+            proxy_frame = round(orig_frame_t * proxy_fps)
             distances: dict[int, int] = {}
             for k in FRAME_OFFSETS:
                 proxy_png = tmp_path / f"proxy_{t:.3f}_{k}.png"
