@@ -15,6 +15,7 @@ from edl_agent.ingest.cache import (
     store_info,
     tmp_path,
 )
+from edl_agent.ingest.highlight import rank_highlights
 from edl_agent.ingest.manifest import build_manifest, write_manifest
 from edl_agent.ingest.media import cut_music, normalize_image
 from edl_agent.ingest.probe import (
@@ -48,6 +49,7 @@ __all__ = [
     "normalize_image",
     "post_rotation_dims",
     "probe_video_source",
+    "rank_highlights",
     "sha256_file",
     "source_cache_dir",
     "store_info",

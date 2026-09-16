@@ -47,7 +47,34 @@
     });
   </script>
 
-  {% if job and job.awaiting_confirmation and job.pause_kind == "verification" %}
+  {% if job and job.awaiting_confirmation and job.pause_kind == "music_choice" %}
+    <div class="warning">
+      <p><strong>Pick the music cut</strong> &mdash; preview each candidate and choose the best moment, or generate more.</p>
+      <form method="post" action="/sessions/{{ name }}/confirm">
+        <input type="hidden" name="proceed" value="true">
+        <div class="hooks">
+          {% for c in job.music_candidates %}
+          <figure>
+            <audio controls preload="none" src="/sessions/{{ name }}/files/{{ c.path }}"></audio>
+            <figcaption>
+              <label>
+                <input type="radio" name="music_offset" value="{{ c.offset_s }}" {% if loop.first %}checked{% endif %}>
+                #{{ loop.index }} &middot; {{ (c.offset_s // 60) | int }}:{{ "%02d" | format(c.offset_s % 60) }}
+                {% if c.score is not none %}&middot; {{ "%.2f" | format(c.score) }}{% endif %}
+              </label>
+            </figcaption>
+          </figure>
+          {% endfor %}
+        </div>
+        <button type="submit">Use this cut</button>
+        <button type="submit" name="more_music" value="true">Generate 3 more</button>
+      </form>
+      <form method="post" action="/sessions/{{ name }}/confirm">
+        <input type="hidden" name="proceed" value="false">
+        <button type="submit">Cancel run</button>
+      </form>
+    </div>
+  {% elif job and job.awaiting_confirmation and job.pause_kind == "verification" %}
     <div class="warning">
       <p>
         <strong>Warning:</strong> {{ job.unverified_sources | length }} video(s)

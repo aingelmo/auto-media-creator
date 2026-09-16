@@ -386,12 +386,16 @@ def session_confirm(
     hook_line_b: str = Form(""),
     hook_flash: bool = Form(default=False),
     more: bool = Form(default=False),
+    music_offset: float = Form(0.0),
+    more_music: bool = Form(default=False),
 ) -> RedirectResponse:
     """Unblock a job paused on `awaiting_confirmation` (see `JobState`).
 
     `proceed=False` cancels the run instead of continuing. For a
-    `"verification"` pause, any `exclude` source paths (checked on the
-    confirmation form) are dropped from the manifest. For a
+    `"music_choice"` pause, `music_offset` picks the candidate cut to use,
+    and `more_music=True` generates another batch of candidates instead of
+    proceeding. For a `"verification"` pause, any `exclude` source paths
+    (checked on the confirmation form) are dropped from the manifest. For a
     `"low_candidates"` pause, `shorten=True` re-cuts the music to the
     suggested shorter duration instead of keeping the original one. For a
     `"hook_choice"` pause, `hook_custom` (if non-empty) wins over the
@@ -411,6 +415,8 @@ def session_confirm(
     job.hook_choice_b = hook_line_b
     job.hook_flash = hook_flash
     job.more_hooks = more
+    job.music_choice_offset = music_offset
+    job.more_music = more_music
     job.confirm_event.set()
     return RedirectResponse(f"/sessions/{name}", status_code=303)
 
