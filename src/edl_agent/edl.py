@@ -33,24 +33,26 @@ def _hash(obj: dict) -> str:
 
 def _sfx_entries(
     clips: list[dict],
-    candidates_by_id: dict,
     sources_by_src: dict,
     config: dict,
 ) -> list[dict]:
-    """Diegetic sfx entries for the hook and peak clips (idea #5).
+    """Diegetic sfx entry for the hook clip (idea #5).
+
+    Ducking under every peak-kind clip pumped the music near-continuously
+    for fast-cut action reels, where most clips score as "peak" — restricted
+    to the hook, the one moment it's meant to punctuate.
 
     Args:
         clips: Clips as built by `planner.build_clips`.
-        candidates_by_id: Mapping `candidate_id -> candidate dict`.
         sources_by_src: Mapping `src -> source dict` (from
             `manifest.json["sources"]`).
         config: Merged config; reads `sfx` (bool) and `sfx_gain_db`.
 
     Returns:
         List of self-contained entries (`slot`, `src`, `in_s`, `dur_s`,
-        `delay_ms`, `gain_db`, `ramp`), one per eligible clip: `type ==
-        "video"`, its source has audio, and it's the hook or a peak-kind
-        candidate. Empty if `config["sfx"]` is off.
+        `delay_ms`, `gain_db`, `ramp`), one for the hook clip if it's a
+        `type == "video"` clip whose source has audio. Empty if
+        `config["sfx"]` is off or the hook clip is silent/not video.
     """
     if not config["sfx"]:
         return []
@@ -60,9 +62,7 @@ def _sfx_entries(
             continue
         if not sources_by_src[clip["src"]].get("has_audio"):
             continue
-        cand = candidates_by_id.get(clip["candidate_id"])
-        is_peak = cand is not None and cand["kind"] == "peak"
-        if clip["role"] != "hook" and not is_peak:
+        if clip["role"] != "hook":
             continue
         ramp = None
         if clip["effect"] == "ramp":
@@ -298,7 +298,7 @@ def build_edl(
     warnings = warnings + clip_warnings
     warnings = warnings + _aggregate_warnings(clips, warnings)
 
-    sfx = _sfx_entries(clips, candidates_by_id, sources_by_src, config)
+    sfx = _sfx_entries(clips, sources_by_src, config)
 
     render_profile = get_render_profile(
         threads,

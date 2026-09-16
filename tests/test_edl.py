@@ -381,18 +381,13 @@ def _sfx_clip(slot, role, src, candidate_id, effect="none", effect_params=None):
     }
 
 
-def test_sfx_entries_picks_hook_and_peak_video_clips_only() -> None:
+def test_sfx_entries_picks_hook_clip_only() -> None:
     from edl_agent.edl import DEFAULT_AUDIO_TARGETS, _sfx_entries
 
-    candidates_by_id = {
-        "c1": {"kind": "peak"},
-        "c2": {"kind": "calm"},
-        "c3": {"kind": "peak"},
-    }
     sources_by_src = {
         "a.mov": {"has_audio": True},
         "b.mov": {"has_audio": True},
-        "c.mov": {"has_audio": False},
+        "c.mov": {"has_audio": True},
     }
     clips = [
         _sfx_clip(
@@ -403,29 +398,26 @@ def test_sfx_entries_picks_hook_and_peak_video_clips_only() -> None:
             effect="ramp",
             effect_params={"ramp_start_f": 9, "ramp_frames": 12, "ramp_speed": 0.4},
         ),
-        _sfx_clip(1, "develop", "b.mov", "c2"),  # not hook/peak -> skipped
-        _sfx_clip(2, "close", "c.mov", "c3"),  # peak, but source has no audio
+        _sfx_clip(1, "develop", "b.mov", "c2"),  # develop -> skipped
+        _sfx_clip(2, "close", "c.mov", "c3"),  # peak-kind, but not hook -> skipped
     ]
 
-    entries = _sfx_entries(
-        clips, candidates_by_id, sources_by_src, DEFAULT_AUDIO_TARGETS
-    )
+    entries = _sfx_entries(clips, sources_by_src, DEFAULT_AUDIO_TARGETS)
 
     assert len(entries) == 1
     entry = entries[0]
     assert entry["slot"] == 0
     assert entry["src"] == "a.mov"
     assert entry["dur_s"] == 1.5
-    assert entry["gain_db"] == -9.0
+    assert entry["gain_db"] == -14.0
     assert entry["ramp"] == {"start_f": 9, "frames": 12, "speed": 0.4}
 
 
 def test_sfx_entries_empty_when_disabled() -> None:
     from edl_agent.edl import DEFAULT_AUDIO_TARGETS, _sfx_entries
 
-    candidates_by_id = {"c1": {"kind": "peak"}}
     sources_by_src = {"a.mov": {"has_audio": True}}
     clips = [_sfx_clip(0, "hook", "a.mov", "c1")]
     config = {**DEFAULT_AUDIO_TARGETS, "sfx": False}
 
-    assert _sfx_entries(clips, candidates_by_id, sources_by_src, config) == []
+    assert _sfx_entries(clips, sources_by_src, config) == []
