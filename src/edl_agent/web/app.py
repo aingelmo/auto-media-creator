@@ -1,8 +1,11 @@
-"""FastAPI app: local, no-auth UI for running edl-agent sessions.
+"""FastAPI app: local, no-auth JSON API + SPA static host for edl-agent.
 
 Run with `uv run scripts/run_web.py`. Job progress is tracked in an
 in-memory dict, so it does not survive a server restart -- fine for a
-local, single-process, single-user tool (see `web/pipeline.py`).
+local, single-process, single-user tool (see `web/pipeline.py`). The
+browser UI is a React SPA built into `web/static/` (see `frontend/`); this
+module serves its JSON API under `/api/*` plus the built assets and raw
+session files.
 """
 
 from __future__ import annotations
@@ -12,10 +15,11 @@ import os
 import shutil
 import threading
 from pathlib import Path
+from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
@@ -28,7 +32,7 @@ from edl_agent.web.pipeline import (
 )
 
 SESSIONS_DIR = Path("sessions")
-TEMPLATES_DIR = Path(__file__).parent / "templates"
+STATIC_DIR = Path(__file__).parent / "static"
 
 # Providers offered in the UI dropdown, deepseek first so it's the default
 # selection; anthropic/gemini stay usable via PROVIDERS for non-UI callers.
@@ -42,7 +46,6 @@ PROVIDER_API_KEY_ENV = {
 }
 
 app = FastAPI(title="edl-agent")
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # session name -> JobState, for runs started by this process.
 _jobs: dict[str, JobState] = {}
@@ -124,23 +127,51 @@ def _load_json(name: str, filename: str) -> dict:
     return json.loads(path.read_text())
 
 
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request) -> HTMLResponse:
+def _job_payload(job: JobState | None) -> dict[str, Any] | None:
+    """Serialise a `JobState` to JSON, or `None` if there is no live job.
+
+    `JobState` itself is not JSON-serialisable (it holds a
+    `threading.Event`), so every field the frontend needs is picked out
+    explicitly here.
+
+    Args:
+        job: Live job tracked in `_jobs`, or `None`.
+
+    Returns:
+        `None` if `job` is `None`, else a dict with the subset of
+        `JobState` fields the session page reads.
+    """
+    if job is None:
+        return None
+    return {
+        "stages": job.stages,
+        "detail": job.detail,
+        "done": job.done,
+        "error": job.error,
+        "awaiting_confirmation": job.awaiting_confirmation,
+        "pause_kind": job.pause_kind,
+        "check_results": job.check_results,
+        "check_results_b": job.check_results_b,
+        "unverified_sources": job.unverified_sources,
+        "low_candidates": job.low_candidates,
+        "hooks": job.hooks,
+        "hook_slot": job.hook_slot,
+        "music_candidates": job.music_candidates,
+    }
+
+
+@app.get("/api/sessions")
+def list_sessions() -> list[dict]:
     """List existing sessions with their derived status."""
     dirs = SESSIONS_DIR.iterdir() if SESSIONS_DIR.exists() else []
     names = sorted(p.name for p in dirs if p.is_dir())
-    sessions = [{"name": n, "status": _session_status(n)} for n in names]
-    return templates.TemplateResponse(request, "index.html", {"sessions": sessions})
+    return [{"name": n, "status": _session_status(n)} for n in names]
 
 
-@app.get("/new", response_class=HTMLResponse)
-def new_session_form(request: Request) -> HTMLResponse:
-    """Render the upload form for creating a new session."""
-    return templates.TemplateResponse(
-        request,
-        "new.html",
-        {"providers": UI_PROVIDERS, "default_models": DEFAULT_MODELS, "error": None},
-    )
+@app.get("/api/config")
+def get_config() -> dict:
+    """Providers/default-models for the new-session and regenerate forms."""
+    return {"providers": UI_PROVIDERS, "default_models": DEFAULT_MODELS}
 
 
 def _save_brand(
@@ -165,10 +196,9 @@ def _save_brand(
     )
 
 
-@app.post("/sessions", response_model=None)
+@app.post("/api/sessions")
 async def create_session(
     background_tasks: BackgroundTasks,
-    request: Request,
     name: str = Form(...),
     provider: str = Form(...),
     model: str = Form(...),
@@ -181,20 +211,14 @@ async def create_session(
     hook_line: str = Form(""),
     brief: str = Form(""),
     audience: str = Form("prospects"),
-) -> HTMLResponse | RedirectResponse:
+) -> JSONResponse:
     """Save uploaded media (+ optional brand logo) into a new session dir and launch."""
     key_env = PROVIDER_API_KEY_ENV.get(provider)
     if key_env and not os.environ.get(key_env):
-        return templates.TemplateResponse(
-            request,
-            "new.html",
-            {
-                "providers": UI_PROVIDERS,
-                "default_models": DEFAULT_MODELS,
-                "error": f"{key_env} is not set in the server's environment. "
-                f"Export it and restart the web server before running {provider}.",
-            },
+        raise HTTPException(
             status_code=400,
+            detail=f"{key_env} is not set in the server's environment. "
+            f"Export it and restart the web server before running {provider}.",
         )
 
     session_dir = SESSIONS_DIR / name
@@ -213,18 +237,11 @@ async def create_session(
 
     music_ext = Path(music.filename or "").suffix.lower()
     if music_ext not in MUSIC_EXTS:
-        return templates.TemplateResponse(
-            request,
-            "new.html",
-            {
-                "providers": UI_PROVIDERS,
-                "default_models": DEFAULT_MODELS,
-                "error": (
-                    f"Music file must be one of {sorted(MUSIC_EXTS)}, "
-                    f"got {music_ext!r}."
-                ),
-            },
+        raise HTTPException(
             status_code=400,
+            detail=(
+                f"Music file must be one of {sorted(MUSIC_EXTS)}, got {music_ext!r}."
+            ),
         )
     with (music_dir / f"track{music_ext}").open("wb") as f:
         shutil.copyfileobj(music.file, f)
@@ -246,10 +263,10 @@ async def create_session(
         audience=audience,
     )
 
-    return RedirectResponse(f"/sessions/{name}", status_code=303)
+    return JSONResponse({"name": name})
 
 
-@app.post("/sessions/{name}/start", response_model=None)
+@app.post("/api/sessions/{name}/start")
 def start_session(
     name: str,
     background_tasks: BackgroundTasks,
@@ -259,7 +276,7 @@ def start_session(
     hook_line: str = Form(""),
     brief: str = Form(""),
     audience: str = Form("prospects"),
-) -> RedirectResponse:
+) -> JSONResponse:
     """Launch the pipeline for a session whose inputs exist but never got a job.
 
     Covers a session directory left behind by a server restart (or a
@@ -286,11 +303,11 @@ def start_session(
         audience,
     )
 
-    return RedirectResponse(f"/sessions/{name}", status_code=303)
+    return JSONResponse({"name": name})
 
 
-@app.post("/sessions/{name}/retry", response_model=None)
-def retry_session(name: str, background_tasks: BackgroundTasks) -> RedirectResponse:
+@app.post("/api/sessions/{name}/retry")
+def retry_session(name: str, background_tasks: BackgroundTasks) -> JSONResponse:
     """Relaunch a failed session's pipeline, resuming past stages already on disk."""
     old_job = _jobs.get(name)
     if old_job is None or not old_job.error:
@@ -312,10 +329,10 @@ def retry_session(name: str, background_tasks: BackgroundTasks) -> RedirectRespo
         old_job.audience,
     )
 
-    return RedirectResponse(f"/sessions/{name}", status_code=303)
+    return JSONResponse({"name": name})
 
 
-@app.post("/sessions/{name}/regenerate", response_model=None)
+@app.post("/api/sessions/{name}/regenerate")
 def regenerate_session(
     name: str,
     background_tasks: BackgroundTasks,
@@ -329,7 +346,7 @@ def regenerate_session(
     hook_line: str = Form(""),
     brief: str = Form(""),
     audience: str = Form("prospects"),
-) -> RedirectResponse:
+) -> JSONResponse:
     """Force `from_stage` onward to redo, reusing already-completed earlier stages.
 
     A new logo replaces the session brand; it only takes effect from `planner`
@@ -363,12 +380,12 @@ def regenerate_session(
         audience,
     )
 
-    return RedirectResponse(f"/sessions/{name}", status_code=303)
+    return JSONResponse({"name": name})
 
 
-@app.get("/sessions/{name}", response_class=HTMLResponse)
-def session_page(request: Request, name: str) -> HTMLResponse:
-    """Show a session's live per-stage status, or its final results once done."""
+@app.get("/api/sessions/{name}")
+def session_page(name: str) -> dict:
+    """A session's live per-stage status, or its final results once done."""
     job = _jobs.get(name)
     reel_exists = (SESSIONS_DIR / name / "reel.mp4").exists()
     reel_b_exists = (SESSIONS_DIR / name / "reel_b.mp4").exists()
@@ -377,24 +394,20 @@ def session_page(request: Request, name: str) -> HTMLResponse:
     default_from_stage = next(
         (s for s in regen_stages if stage_statuses.get(s) == "pending"), "selection"
     )
-    return templates.TemplateResponse(
-        request,
-        "session.html",
-        {
-            "name": name,
-            "job": job,
-            "reel_exists": reel_exists,
-            "reel_b_exists": reel_b_exists,
-            "stages": STAGES,
-            "stage_statuses": stage_statuses,
-            "providers": UI_PROVIDERS,
-            "default_models": DEFAULT_MODELS,
-            "default_from_stage": default_from_stage,
-        },
-    )
+    return {
+        "name": name,
+        "job": _job_payload(job),
+        "reel_exists": reel_exists,
+        "reel_b_exists": reel_b_exists,
+        "stages": STAGES,
+        "stage_statuses": stage_statuses,
+        "providers": UI_PROVIDERS,
+        "default_models": DEFAULT_MODELS,
+        "default_from_stage": default_from_stage,
+    }
 
 
-@app.get("/sessions/{name}/status")
+@app.get("/api/sessions/{name}/status")
 def session_status(name: str) -> dict:
     """JSON status for the polling script on the session page."""
     job = _jobs.get(name)
@@ -405,6 +418,7 @@ def session_status(name: str) -> dict:
             "done": True,
             "error": None,
             "awaiting_confirmation": False,
+            "pause_kind": "",
         }
     return {
         "stages": job.stages,
@@ -412,10 +426,11 @@ def session_status(name: str) -> dict:
         "done": job.done,
         "error": job.error,
         "awaiting_confirmation": job.awaiting_confirmation,
+        "pause_kind": job.pause_kind,
     }
 
 
-@app.post("/sessions/{name}/confirm", response_model=None)
+@app.post("/api/sessions/{name}/confirm")
 def session_confirm(
     name: str,
     proceed: bool = Form(...),
@@ -428,7 +443,7 @@ def session_confirm(
     more: bool = Form(default=False),
     music_offset: float = Form(0.0),
     more_music: bool = Form(default=False),
-) -> RedirectResponse:
+) -> JSONResponse:
     """Unblock a job paused on `awaiting_confirmation` (see `JobState`).
 
     `proceed=False` cancels the run instead of continuing. For a
@@ -441,7 +456,7 @@ def session_confirm(
     `"hook_choice"` pause, `hook_custom` (if non-empty) wins over the
     selected `hook_line` radio value, `hook_line_b` (idea #7) picks the
     hook line for a second variant reel (`""` = no variant B), `hook_flash`
-    (checked by default in the template) toggles the hook's white flash,
+    (checked by default in the frontend) toggles the hook's white flash,
     and `more=True` regenerates a fresh batch of 3 lines instead of
     proceeding to the final render.
     """
@@ -458,7 +473,7 @@ def session_confirm(
     job.music_choice_offset = music_offset
     job.more_music = more_music
     job.confirm_event.set()
-    return RedirectResponse(f"/sessions/{name}", status_code=303)
+    return JSONResponse({"name": name})
 
 
 @app.get("/sessions/{name}/reel.mp4")
@@ -480,18 +495,15 @@ def session_file(name: str, path: str) -> FileResponse:
     return FileResponse(file_path)
 
 
-@app.get("/sessions/{name}/ingest", response_class=HTMLResponse)
-def ingest_page(request: Request, name: str) -> HTMLResponse:
-    """Show `manifest.json`'s sources for debugging the ingest stage."""
-    manifest = _load_json(name, "manifest.json")
-    return templates.TemplateResponse(
-        request, "ingest.html", {"name": name, "manifest": manifest}
-    )
+@app.get("/api/sessions/{name}/ingest")
+def ingest_page(name: str) -> dict:
+    """`manifest.json`'s sources for debugging the ingest stage."""
+    return _load_json(name, "manifest.json")
 
 
-@app.get("/sessions/{name}/candidates", response_class=HTMLResponse)
-def candidates_page(request: Request, name: str) -> HTMLResponse:
-    """Show `candidates.json` with thumbnails for debugging selection input."""
+@app.get("/api/sessions/{name}/candidates")
+def candidates_page(name: str) -> dict:
+    """`candidates.json` with thumbnail URLs for debugging selection input."""
     session_dir = SESSIONS_DIR / name
     payload = _load_json(name, "candidates.json")
     candidates = payload["candidates"]
@@ -500,28 +512,35 @@ def candidates_page(request: Request, name: str) -> HTMLResponse:
             f"/sessions/{name}/files/{Path(jpg).resolve().relative_to(session_dir.resolve())}"
             for jpg in c["peak_frames"]
         ]
-    return templates.TemplateResponse(
-        request, "candidates.html", {"name": name, "candidates": candidates}
-    )
+    return {"candidates": candidates}
 
 
-@app.get("/sessions/{name}/selection", response_class=HTMLResponse)
-def selection_page(request: Request, name: str) -> HTMLResponse:
-    """Show every `selection_attempt_N.json` -- prompt, raw LLM reply, usage, cost."""
+@app.get("/api/sessions/{name}/selection")
+def selection_page(name: str) -> dict:
+    """Every `selection_attempt_N.json` -- prompt, raw LLM reply, usage, cost."""
     session_dir = SESSIONS_DIR / name
     attempts = sorted(session_dir.glob("selection_attempt_*.json"))
     if not attempts:
         raise HTTPException(status_code=404, detail="no selection attempts yet")
-    records = [json.loads(p.read_text()) for p in attempts]
-    return templates.TemplateResponse(
-        request, "selection.html", {"name": name, "attempts": records}
-    )
+    return {"attempts": [json.loads(p.read_text()) for p in attempts]}
 
 
-@app.get("/sessions/{name}/planner", response_class=HTMLResponse)
-def planner_page(request: Request, name: str) -> HTMLResponse:
-    """Show `edl.json`'s clip list for debugging the planner stage."""
-    edl = _load_json(name, "edl.json")
-    return templates.TemplateResponse(
-        request, "planner.html", {"name": name, "edl": edl}
-    )
+@app.get("/api/sessions/{name}/planner")
+def planner_page(name: str) -> dict:
+    """`edl.json`'s clip list for debugging the planner stage."""
+    return _load_json(name, "edl.json")
+
+
+# Mounted at /assets (not "/") so it can't shadow the /api and /sessions
+# routes above; the catch-all route below serves index.html for every other
+# GET so the SPA's client-side router (react-router) handles deep links.
+if STATIC_DIR.is_dir():
+    _assets_dir = str(STATIC_DIR / "assets")
+    app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+
+    _index_html = STATIC_DIR / "index.html"
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str) -> FileResponse:  # noqa: ARG001
+        """Serve the built SPA shell for any GET not matched above."""
+        return FileResponse(_index_html)
