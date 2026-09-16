@@ -22,6 +22,7 @@ from edl_agent.render._common import (
 from edl_agent.render.crop import crop_to_px
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 
@@ -346,6 +347,7 @@ def render_segments(
     tonemap_chain: str = "",
     suffix: str = "",
     reuse: dict[int, Path] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> list[Path]:
     """Render every clip of the EDL at final resolution, per #10.1.
 
@@ -361,6 +363,8 @@ def render_segments(
             A's) to hardlink instead of re-encoding, for clips whose slot
             is present. `# ponytail:` caller decides reuse eligibility by
             comparing whole clip dicts, not a content hash.
+        on_progress: If given, called `(done, total)` after each clip
+            renders, for progress reporting.
 
     Returns:
         Paths to the rendered final-resolution segments, one per clip, in
@@ -368,20 +372,25 @@ def render_segments(
     """
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
     out_dir = session_dir / f"segments{suffix}"
-    return [
-        _render_or_reuse(
-            clip,
-            sources_by_src,
-            session_dir,
-            out_dir,
-            threads,
-            tonemap_chain,
-            False,
-            edl.get("brand"),
-            reuse,
+    clips = edl["clips"]
+    paths = []
+    for i, clip in enumerate(clips):
+        paths.append(
+            _render_or_reuse(
+                clip,
+                sources_by_src,
+                session_dir,
+                out_dir,
+                threads,
+                tonemap_chain,
+                False,
+                edl.get("brand"),
+                reuse,
+            )
         )
-        for clip in edl["clips"]
-    ]
+        if on_progress:
+            on_progress(i + 1, len(clips))
+    return paths
 
 
 def render_preview_segments(
@@ -392,6 +401,7 @@ def render_preview_segments(
     tonemap_chain: str = "",
     suffix: str = "",
     reuse: dict[int, Path] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> list[Path]:
     """Render every clip of the EDL at preview resolution, per #10.2.
 
@@ -403,6 +413,7 @@ def render_preview_segments(
         tonemap_chain: HDR (HLG/DV84) tonemap filter chain.
         suffix: Appended to the output dir name (`f"preview_segments{suffix}"`).
         reuse: See `render_segments`.
+        on_progress: See `render_segments`.
 
     Returns:
         Paths to the rendered preview-resolution segments, one per clip, in
@@ -410,17 +421,22 @@ def render_preview_segments(
     """
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
     out_dir = session_dir / f"preview_segments{suffix}"
-    return [
-        _render_or_reuse(
-            clip,
-            sources_by_src,
-            session_dir,
-            out_dir,
-            threads,
-            tonemap_chain,
-            True,
-            edl.get("brand"),
-            reuse,
+    clips = edl["clips"]
+    paths = []
+    for i, clip in enumerate(clips):
+        paths.append(
+            _render_or_reuse(
+                clip,
+                sources_by_src,
+                session_dir,
+                out_dir,
+                threads,
+                tonemap_chain,
+                True,
+                edl.get("brand"),
+                reuse,
+            )
         )
-        for clip in edl["clips"]
-    ]
+        if on_progress:
+            on_progress(i + 1, len(clips))
+    return paths

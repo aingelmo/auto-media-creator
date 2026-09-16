@@ -15,17 +15,37 @@
     <tr>
       <td>{{ s }}</td>
       <td class="status-{{ stage_statuses[s] }}" data-stage="{{ s }}">
-        {{ stage_statuses[s] }}
-        {% if job and job.detail.get(s) %}
-          &mdash; {{ job.detail[s] }}
-        {% endif %}
-        {% if stage_statuses[s] in ("done", "failed") and s in stage_links %}
-          &mdash; <a href="{{ stage_links[s] }}">view</a>
-        {% endif %}
+        <span class="status-text">
+          {{ stage_statuses[s] }}
+          {% if job and job.detail.get(s) %}
+            &mdash; {{ job.detail[s] }}
+          {% endif %}
+          {% if stage_statuses[s] in ("done", "failed") and s in stage_links %}
+            &mdash; <a href="{{ stage_links[s] }}">view</a>
+          {% endif %}
+        </span>
+        <progress class="stage-progress" max="1" value="0" hidden></progress>
       </td>
     </tr>
     {% endfor %}
   </table>
+  <script>
+    function updateStageProgress(cell, detailText) {
+      const bar = cell.querySelector(".stage-progress");
+      if (!bar) return;
+      const m = detailText && detailText.match(/\((\d+)\/(\d+)\)/);
+      if (m && Number(m[2]) > 0) {
+        bar.max = Number(m[2]);
+        bar.value = Number(m[1]);
+        bar.hidden = false;
+      } else {
+        bar.hidden = true;
+      }
+    }
+    document.querySelectorAll("td[data-stage]").forEach(function (cell) {
+      updateStageProgress(cell, cell.querySelector(".status-text").textContent);
+    });
+  </script>
 
   {% if job and job.awaiting_confirmation and job.pause_kind == "verification" %}
     <div class="warning">
@@ -84,9 +104,10 @@
       <p><strong>Pick the hook line</strong> (or none, or write your own).</p>
       <form method="post" action="/sessions/{{ name }}/confirm">
         <input type="hidden" name="proceed" value="true">
+        <label><input type="checkbox" name="hook_flash" value="true" checked onchange="toggleHookFlash(this.checked)"> flash blanco en el beat del hook</label>
         <div class="hooks">
           <figure>
-            <video autoplay loop muted playsinline width="180"
+            <video autoplay loop muted playsinline width="180" data-key="none"
                    src="/sessions/{{ name }}/files/hook_previews/none/seg_{{ "%02d"|format(job.hook_slot) }}.mp4"></video>
             <figcaption>
               <label><input type="radio" name="hook_line" value="" {% if not job.hooks.hook_line %}checked{% endif %}> sin texto</label>
@@ -94,7 +115,7 @@
           </figure>
           {% if job.hooks.hook_line %}
           <figure>
-            <video autoplay loop muted playsinline width="180"
+            <video autoplay loop muted playsinline width="180" data-key="0"
                    src="/sessions/{{ name }}/files/hook_previews/0/seg_{{ "%02d"|format(job.hook_slot) }}.mp4"></video>
             <figcaption>
               <label><input type="radio" name="hook_line" value="{{ job.hooks.hook_line }}" checked> {{ job.hooks.hook_line }}</label>
@@ -107,6 +128,16 @@
           <p>El modelo no encontró evidencia suficiente (motivo: {{ job.hooks.rejected or "sin evidencia" }}).</p>
           {% endif %}
         </div>
+        <script>
+          function toggleHookFlash(flash) {
+            document.querySelectorAll("video[data-key]").forEach(function (v) {
+              v.src = v.src.replace(
+                /hook_previews\/([^/]+?)(_noflash)?\//,
+                "hook_previews/" + v.dataset.key + (flash ? "" : "_noflash") + "/"
+              );
+            });
+          }
+        </script>
         <label>Custom text (wins over the radio above if non-empty)
           <input type="text" name="hook_custom" maxlength="40" placeholder="La barra despega del suelo">
         </label>
@@ -215,14 +246,16 @@
           const cell = document.querySelector(`td[data-stage="${stage}"]`);
           if (!cell) continue;
           cell.className = `status-${status}`;
-          let html = status;
+          let detailText = status;
           if (data.detail && data.detail[stage]) {
-            html += ` &mdash; ${data.detail[stage]}`;
+            detailText += ` &mdash; ${data.detail[stage]}`;
           }
           if ((status === "done" || status === "failed") && links[stage]) {
-            html += ` &mdash; <a href="${links[stage]}">view</a>`;
+            detailText += ` &mdash; <a href="${links[stage]}">view</a>`;
           }
-          cell.innerHTML = html;
+          cell.innerHTML = `<span class="status-text">${detailText}</span>` +
+            `<progress class="stage-progress" max="1" value="0" hidden></progress>`;
+          updateStageProgress(cell, (data.detail && data.detail[stage]) || "");
         }
         if (data.done || data.awaiting_confirmation) {
           location.reload();

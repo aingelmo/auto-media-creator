@@ -256,8 +256,8 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
 
 
 def _run_job_to_hook_choice(
-    tmp_path, hook_choice_b: str, hook_line_override: str = ""
-) -> tuple[JobState, Mock, list[dict]]:
+    tmp_path, hook_choice_b: str, hook_line_override: str = "", hook_flash: bool = True
+) -> tuple[JobState, Mock, list[dict], list[dict]]:
     """Drive a job to the hook-choice pause (image-only sources skip both
     pauses), answer it with `hook_choice_b`, then run it to completion with
     every render/planner call mocked. Returns the job and the `render_segments`
@@ -274,9 +274,12 @@ def _run_job_to_hook_choice(
     candidates = {"candidates": []}
     edl = {"clips": [{"slot": 0, "role": "hook", "effect_params": {}}]}
 
+    planner_calls: list[dict] = []
+
     def fake_run_planner(
         session_dir, manifest, candidates, slots, selection, meta, **kw
     ):
+        planner_calls.append(kw)
         return edl
 
     hooks_calls = []
@@ -332,6 +335,7 @@ def _run_job_to_hook_choice(
         assert job.pause_kind == "hook_choice"
         job.hook_choice = ""
         job.hook_choice_b = hook_choice_b
+        job.hook_flash = hook_flash
         job.more_hooks = False
         job.cancelled = False
         job.confirm_event.set()
@@ -340,11 +344,11 @@ def _run_job_to_hook_choice(
     assert not thread.is_alive()
     assert job.error is None
     assert job.done
-    return job, render_segments_mock, hooks_calls
+    return job, render_segments_mock, hooks_calls, planner_calls
 
 
 def test_hook_choice_b_renders_variant_b_reel(tmp_path) -> None:
-    job, render_segments_mock, _hooks_calls = _run_job_to_hook_choice(
+    job, render_segments_mock, _hooks_calls, _planner_calls = _run_job_to_hook_choice(
         tmp_path, "line b"
     )
 
@@ -355,7 +359,9 @@ def test_hook_choice_b_renders_variant_b_reel(tmp_path) -> None:
 
 
 def test_no_hook_choice_b_skips_variant_b_render(tmp_path) -> None:
-    job, render_segments_mock, _hooks_calls = _run_job_to_hook_choice(tmp_path, "")
+    job, render_segments_mock, _hooks_calls, _planner_calls = _run_job_to_hook_choice(
+        tmp_path, ""
+    )
 
     calls = render_segments_mock.call_args_list
     assert len(calls) == 1  # variant A only
@@ -363,11 +369,19 @@ def test_no_hook_choice_b_skips_variant_b_render(tmp_path) -> None:
 
 
 def test_job_hook_line_override_is_passed_to_run_hooks(tmp_path) -> None:
-    _job, _render_segments_mock, hooks_calls = _run_job_to_hook_choice(
+    _job, _render_segments_mock, hooks_calls, _planner_calls = _run_job_to_hook_choice(
         tmp_path, "", hook_line_override="Del operador"
     )
 
     assert hooks_calls == [{"hook_line_override": "Del operador"}]
+
+
+def test_job_hook_flash_is_passed_to_run_planner(tmp_path) -> None:
+    _job, _render_segments_mock, _hooks_calls, planner_calls = _run_job_to_hook_choice(
+        tmp_path, "", hook_flash=False
+    )
+
+    assert planner_calls[-1]["config"]["hook_flash"] is False
 
 
 def test_clear_stage_artifacts_from_selection_keeps_earlier_stages_and_backs_up_reel(

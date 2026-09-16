@@ -391,6 +391,8 @@ def test_render_hook_previews_builds_one_variant_per_line_plus_none(
     hook_clip["effect_params"] = {
         "text": "Sube el peso",
         "font": DEFAULT_CONFIG["hook_text_font"],
+        "flash_frame": 15,
+        "flash_frames": 6,
     }
     other_clip = _clip(1, "close", "inputs/a.mp4", 360, 640, 1.0, 2.0, 30, 1.0, 30, 60)
     edl = {"clips": [hook_clip, other_clip], "brand": None}
@@ -410,11 +412,18 @@ def test_render_hook_previews_builds_one_variant_per_line_plus_none(
         edl, manifest, session_dir, ["primera linea", "segunda linea"], 4, ""
     )
 
-    assert set(paths) == {"none", "0", "1"}
+    assert set(paths) == {
+        "none", "0", "1", "none_noflash", "0_noflash", "1_noflash"
+    }
     by_key = {out_dir.name: clip for clip, out_dir in (
         (c["clip"], c["out_dir"]) for c in calls
     )}
     assert "text" not in by_key["none"]["effect_params"]
     assert by_key["0"]["effect_params"]["text"] == "primera linea"
     assert by_key["1"]["effect_params"]["text"] == "segunda linea"
+    for key in ("none", "0", "1"):
+        assert "flash_frame" in by_key[key]["effect_params"]
+        noflash = by_key[f"{key}_noflash"]["effect_params"]
+        assert "flash_frame" not in noflash
+        assert "flash_frames" not in noflash
     assert all(c["clip"]["slot"] == 0 for c in calls)  # only the hook clip is rendered

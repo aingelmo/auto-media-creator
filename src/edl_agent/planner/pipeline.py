@@ -63,20 +63,21 @@ def build_clips(
     assignment = assign_slots(slots, selected, candidates_by_id, config)
     warnings = list(assignment.warnings)
 
-    per_slot: dict[int, tuple[dict, str, dict | None]] = {}
+    per_slot: dict[int, tuple[dict, str, dict | None, int | None]] = {}
     hook_slot = next(s for s in slots if s["role"] == "hook")
     close_slot = next(s for s in slots if s["role"] == "close")
     develop_slots = [s for s in slots if s["role"] == "develop"]
 
     # ponytail: ramp only on the hook; per-develop ramps make the reel feel slow.
-    per_slot[hook_slot["slot"]] = (assignment.hook, "hook", hook_ramp(config))
-    per_slot[close_slot["slot"]] = (assignment.close, "close", None)
-    for slot, sel in zip(develop_slots, assignment.develop, strict=False):
-        per_slot[slot["slot"]] = (sel, "develop", None)
+    per_slot[hook_slot["slot"]] = (assignment.hook, "hook", hook_ramp(config), None)
+    per_slot[close_slot["slot"]] = (assignment.close, "close", None, None)
+    develop_pairs = zip(develop_slots, assignment.develop, strict=False)
+    for i, (slot, sel) in enumerate(develop_pairs):
+        per_slot[slot["slot"]] = (sel, "develop", None, i)
 
     clips: list[dict[str, Any]] = []
     for slot in slots:
-        sel, role, ramp = per_slot[slot["slot"]]
+        sel, role, ramp, develop_i = per_slot[slot["slot"]]
         cand = candidates_by_id[sel["candidate_id"]]
         src_info = sources_by_src[cand["src"]]
 
@@ -94,10 +95,16 @@ def build_clips(
         hook_text = None
         if role == "hook":
             hook_text = (config["hook_line_override"], timing["n_frames"])
+        clip_config = config
+        if role == "develop":
+            assert develop_i is not None
+            punch_every = int(config["punch_every"])
+            punch_in = config["punch_in"] and develop_i % punch_every == 0
+            clip_config = config | {"punch_in": punch_in}
         effect, effect_params = effect_for(
             cand,
             crop_info["layout"],
-            config,
+            clip_config,
             timing["ramp"],
             hook_text,
             role=role,

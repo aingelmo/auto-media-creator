@@ -169,6 +169,9 @@ class JobState:
         hook_choice_b: Chosen hook text for variant B (`""` = no variant
             B), set via `/sessions/{name}/confirm` during a `"hook_choice"`
             pause (idea #7).
+        hook_flash: Whether the hook clip gets its white flash on the peak
+            beat, set via `/sessions/{name}/confirm` during a
+            `"hook_choice"` pause; defaults to `True`.
         more_hooks: `True` (set via `/sessions/{name}/confirm`) to
             generate a fresh batch of 6 lines instead of proceeding to the
             final render.
@@ -202,6 +205,7 @@ class JobState:
     hook_slot: int = 0
     hook_choice: str = ""
     hook_choice_b: str = ""
+    hook_flash: bool = True
     more_hooks: bool = False
     check_results_b: list[str] = field(default_factory=list)
 
@@ -481,6 +485,7 @@ def run_pipeline_job(
                     config={
                         "hook_line_override": clean_hook_line(job.hook_choice),
                         "hook_text": bool(clean_hook_line(job.hook_choice)),
+                        "hook_flash": job.hook_flash,
                     },
                 )
 
@@ -489,21 +494,27 @@ def run_pipeline_job(
             job.stages["render"] = "done"
         else:
             with job.running("render"):
-                job.detail["render"] = "rendering preview segments"
+                job.detail["render"] = "rendering preview segments (0/0)"
                 render_preview_segments(
                     edl,
                     manifest,
                     session_dir,
                     threads=THREADS,
                     tonemap_chain=tonemap_chain,
+                    on_progress=lambda done, total: job.detail.__setitem__(
+                        "render", f"rendering preview segments ({done}/{total})"
+                    ),
                 )
-                job.detail["render"] = "rendering final segments"
+                job.detail["render"] = "rendering final segments (0/0)"
                 render_segments(
                     edl,
                     manifest,
                     session_dir,
                     threads=THREADS,
                     tonemap_chain=tonemap_chain,
+                    on_progress=lambda done, total: job.detail.__setitem__(
+                        "render", f"rendering final segments ({done}/{total})"
+                    ),
                 )
                 job.detail["render"] = "concatenating segments, mixing audio"
                 concat_and_audio(edl, session_dir, threads=THREADS)
@@ -531,6 +542,7 @@ def run_pipeline_job(
                         "hook_line_override": hook_line_b,
                         "hook_text": True,
                         "peak_beat_index": 2,
+                        "hook_flash": job.hook_flash,
                     },
                     out_name="edl_b.json",
                 )

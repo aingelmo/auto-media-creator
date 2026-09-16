@@ -35,7 +35,8 @@ def render_hook_previews(
     Returns:
         Mapping `key -> rendered segment path` under
         `session_dir/"hook_previews"/key/`, with `key == "none"` for the
-        text-less variant and `key == str(i)` (0-based) for `lines[i]`.
+        text-less variant, `key == str(i)` (0-based) for `lines[i]`, and a
+        flash-less twin of each under `f"{key}_noflash"`.
     """
     session_dir = Path(session_dir)
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
@@ -62,6 +63,22 @@ def render_hook_previews(
             sources_by_src,
             session_dir,
             out_dir_base / key,
+            threads,
+            tonemap_chain,
+            preview=True,
+            brand=edl.get("brand"),
+        )
+
+        noflash_params = dict(params)
+        noflash_params.pop("flash_frame", None)
+        noflash_params.pop("flash_frames", None)
+        noflash_clip = {**hook_clip, "effect_params": noflash_params}
+        noflash_key = f"{key}_noflash"
+        paths[noflash_key] = render_segment(
+            noflash_clip,
+            sources_by_src,
+            session_dir,
+            out_dir_base / noflash_key,
             threads,
             tonemap_chain,
             preview=True,

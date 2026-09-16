@@ -368,6 +368,7 @@ def session_confirm(
     hook_line: str = Form(""),
     hook_custom: str = Form(""),
     hook_line_b: str = Form(""),
+    hook_flash: bool = Form(default=False),
     more: bool = Form(default=False),
 ) -> RedirectResponse:
     """Unblock a job paused on `awaiting_confirmation` (see `JobState`).
@@ -379,9 +380,10 @@ def session_confirm(
     suggested shorter duration instead of keeping the original one. For a
     `"hook_choice"` pause, `hook_custom` (if non-empty) wins over the
     selected `hook_line` radio value, `hook_line_b` (idea #7) picks the
-    hook line for a second variant reel (`""` = no variant B), and
-    `more=True` regenerates a fresh batch of 6 lines instead of proceeding
-    to the final render.
+    hook line for a second variant reel (`""` = no variant B), `hook_flash`
+    (checked by default in the template) toggles the hook's white flash,
+    and `more=True` regenerates a fresh batch of 6 lines instead of
+    proceeding to the final render.
     """
     job = _jobs.get(name)
     if job is None or not job.awaiting_confirmation:
@@ -391,6 +393,7 @@ def session_confirm(
     job.shorten = shorten
     job.hook_choice = hook_custom.strip() or hook_line
     job.hook_choice_b = hook_line_b
+    job.hook_flash = hook_flash
     job.more_hooks = more
     job.confirm_event.set()
     return RedirectResponse(f"/sessions/{name}", status_code=303)

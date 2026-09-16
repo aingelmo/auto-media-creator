@@ -208,6 +208,21 @@ def test_hook_copy_abstention_leaves_no_text_overlay() -> None:
     assert "text" not in clips[0]["effect_params"]
 
 
+def test_punch_every_skips_develop_cuts() -> None:
+    slots, selected, candidates_by_id, sources_by_src = _build_scenario(
+        4, (1920, 1080), seed=2
+    )
+    clips, _ = build_clips(
+        slots, selected, candidates_by_id, sources_by_src, {"punch_every": 2}
+    )
+    develop_clips = [c for c in clips if c["role"] == "develop"]
+    for i, c in enumerate(develop_clips):
+        if i % 2 == 0:
+            assert "punch_frames" in c["effect_params"]
+        else:
+            assert "punch_frames" not in c["effect_params"]
+
+
 _BRAND = {
     "logo": "brand/logo.png",
     "logo_sha256": "x",
