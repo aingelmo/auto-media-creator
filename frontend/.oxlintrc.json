@@ -1,8 +1,24 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  // Explicit plugin/category list, mirroring the Python side's ruff config:
+  // no "all"/pedantic/restriction/perf, since those pull in rules that ban
+  // idiomatic code (async/await, optional chaining, inline JSX callbacks)
+  // or nag on style (magic numbers, identifier length, max lines/function).
+  "plugins": ["react", "jsx-a11y", "typescript", "oxc", "unicorn"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    // React 19's automatic JSX transform doesn't need `React` in scope.
+    "react/react-in-jsx-scope": "off",
+    // False positive on `useCallback`-wrapped async refresh functions called
+    // from an effect (can't statically see the setState is post-await).
+    "react/set-state-in-effect": "off",
+    // Internal tool previewing a user's own uploaded raw footage; no
+    // captions/transcripts exist to attach, so this can't be satisfied.
+    "jsx-a11y/media-has-caption": "off"
   }
 }

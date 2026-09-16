@@ -26,7 +26,11 @@ code map 1:1 to file prefixes, e.g. `#4.3` → `docs/architecture/04-features.md
   committing a UI change.
 - Checks (all must pass before considering a task done):
   `uv run ruff check .`, `uv run ty check`, `uv run pytest -q`, and for
-  frontend changes, `cd frontend && npx tsc -b --noEmit && npm run build`.
+  frontend changes, `cd frontend && npm run lint && npm run format:check &&
+  npx tsc -b --noEmit && npm run build`. If your shell auto-rewrites
+  `npm run lint` via an `rtk` hook, see the note in `frontend/README.md` —
+  it assumes ESLint and breaks on this project's oxlint setup; use
+  `npx oxlint`/`npx oxfmt --check src` directly instead.
 
 ## Structure
 
