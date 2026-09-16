@@ -138,7 +138,7 @@ def concat_and_audio(
     for entry in sfx:
         start_s = entry["delay_ms"] / 1000
         end_s = start_s + entry["dur_s"]
-        music_chain += f",volume=0.3:enable='between(t,{start_s:.3f},{end_s:.3f})'"
+        music_chain += f",volume=0.2:enable='between(t,{start_s:.3f},{end_s:.3f})'"
     sfx_inputs = []
     sfx_labels = []
     graph = f"[1:a]{music_chain}[m];"

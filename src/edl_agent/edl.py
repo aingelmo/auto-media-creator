@@ -21,7 +21,7 @@ DEFAULT_AUDIO_TARGETS = {
     "target_lra": 11.0,
     "fade_out_s": 0.5,
     "sfx": True,
-    "sfx_gain_db": -9.0,
+    "sfx_gain_db": -14.0,
 }
 
 
