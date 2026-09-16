@@ -106,15 +106,12 @@ def _take_develop_pool(
         if len(taken) >= k:
             break
         cand = candidates_by_id[s["candidate_id"]]
-        admissible_slot = next(
-            (
-                sl
-                for sl in free_slots
-                if admits(tuple(cand["window"]), sl["end_f"] - sl["start_f"], 1.0)
-            ),
-            None,
-        )
-        if admissible_slot is None:
+        admissible_slots = [
+            sl
+            for sl in free_slots
+            if admits(tuple(cand["window"]), sl["end_f"] - sl["start_f"], 1.0)
+        ]
+        if not admissible_slots:
             continue
         exercise = _norm_exercise(s["exercise"])
         # "unknown" (rules-fallback, #8.6) and "other" (selector's own
@@ -130,10 +127,21 @@ def _take_develop_pool(
             continue
         if not allow_src_repeat and prev_src is not None and cand["src"] == prev_src:
             continue
-        timing = compute_in_out(
-            cand, admissible_slot, role="develop", ramp=None, config=config
-        )
-        if _overlaps_used(cand, timing["in_s"], timing["out_s"], used, gap_s):
+        # Different admissible slots have different beat-aligned timing
+        # (P7), so a candidate that overlaps `used` against one slot may
+        # not against another -- try them all before giving up on it.
+        admissible_slot = None
+        timing = None
+        for sl in admissible_slots:
+            candidate_timing = compute_in_out(
+                cand, sl, role="develop", ramp=None, config=config
+            )
+            if not _overlaps_used(
+                cand, candidate_timing["in_s"], candidate_timing["out_s"], used, gap_s
+            ):
+                admissible_slot, timing = sl, candidate_timing
+                break
+        if admissible_slot is None:
             continue
         taken.append(s)
         used.append(

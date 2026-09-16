@@ -486,6 +486,27 @@ def test_select_develop_stage2_relaxation_allows_repeated_src() -> None:
     assert [s["candidate_id"] for s in taken] == ["c1", "c2", "c3"]
 
 
+def test_select_develop_tries_other_admissible_slots_before_rejecting() -> None:
+    # Two develop slots of equal duration but different beat offsets (P7:
+    # timing is now beat-aligned per real slot). c1's window only leaves
+    # room to avoid `used` when paired with the *second* slot -- the fix
+    # must not give up on it just because the first admissible slot's
+    # beat-aligned timing collides.
+    slots = [
+        {"start_f": 40, "end_f": 80, "role": "develop", "beats_rel_f": [0, 35]},
+        {"start_f": 0, "end_f": 40, "role": "develop", "beats_rel_f": [0, 5]},
+    ]
+    candidates_by_id = {
+        "c1": _candidate("c1", "a.mov", "peak", 0.7, (0.0, 2.0)),
+    }
+    selected = [_selected("c1", "develop", 1, exercise="squat")]
+    used = [{"src": "a.mov", "in_s": 0.0, "out_s": 0.2}]
+
+    taken = select_develop(selected, candidates_by_id, slots, used, DEFAULT_CONFIG)
+
+    assert [s["candidate_id"] for s in taken] == ["c1"]
+
+
 def test_select_develop_relaxation_cant_manufacture_missing_candidates() -> None:
     # Only 2 develop candidates exist at all for 3 slots -- no relaxation
     # stage can conjure a 3rd, so assign_slots must still raise.
