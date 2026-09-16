@@ -73,14 +73,16 @@ Keep lines ≤88 chars (ruff `E501`).
   into separate commits — even if all the edits happened together. Check
   `git status`/`git diff` before staging and stage per-concern, not
   everything at once.
-- Subject line: imperative present tense ("Add", "Fix", "Split"), describes
-  the outcome, ≤72 chars, no trailing period.
+- Subject line: Conventional Commits format, `type(scope): description` —
+  e.g. `feat(web): add SPA frontend`, `fix(planner): reject overlapping
+  slots`, `refactor(render): extract punch-in helper`. `type` is one of
+  `feat`, `fix`, `refactor`, `build`, `docs`, `test`, `chore`. `scope` is the
+  touched subpackage/area (e.g. `web`, `planner`, `render`, `ingest`) or
+  omitted if repo-wide. Description: imperative present tense, ≤72 chars
+  total, no trailing period.
 - Body: explain *why*, not what (the diff already shows what) — root cause
   for bug fixes, motivation/constraint for features or refactors. Skip the
   body only for purely mechanical changes (lint/format-only, typo fixes).
-- No Conventional Commits prefixes (`feat:`, `fix:`, `chore:`) — nothing in
-  this repo (no CI, no changelog/release automation) consumes them, so
-  they're pure overhead.
 - AI-authored commits end with the `Co-Authored-By:` trailer per the
   session's attribution instructions.
 
