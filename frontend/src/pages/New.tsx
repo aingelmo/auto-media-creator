@@ -7,6 +7,10 @@ import ProviderModelFields from "../components/ProviderModelFields";
 import ThemeAudienceFields from "../components/ThemeAudienceFields";
 import type { Config } from "../types";
 
+function formatMb(bytes: number) {
+  return (bytes / 1e6).toFixed(1);
+}
+
 export default function New() {
   const [config, setConfig] = useState<Config | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,9 +32,8 @@ export default function New() {
     const formData = new FormData(formRef.current);
     try {
       const { name } = await createSessionWithProgress(formData, (loaded, total) => {
-        const mb = (n: number) => (n / 1e6).toFixed(1);
         const pct = Math.round((loaded / total) * 100);
-        setStatus(`Uploading: ${mb(loaded)} / ${mb(total)} MB (${pct}%)`);
+        setStatus(`Uploading: ${formatMb(loaded)} / ${formatMb(total)} MB (${pct}%)`);
         if (loaded === total) {
           setStatus("Upload complete, saving session and launching pipeline...");
         }

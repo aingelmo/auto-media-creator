@@ -33,6 +33,10 @@ export default function Session() {
   // Poll /status every 3s while a job is running with no live data needed
   // beyond stage progress; on completion or a new pause, refetch the full
   // session (status alone doesn't carry hooks/music_candidates/reel flags).
+  // oxlint-disable react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies --
+  // deps are intentionally narrowed to primitive fields so the poll timer
+  // isn't torn down and restarted on every tick (job's object identity
+  // changes each time status is fetched).
   useEffect(() => {
     if (!session?.job || session.job.done || session.job.awaiting_confirmation) return;
 
@@ -61,6 +65,7 @@ export default function Session() {
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
   }, [session?.job?.done, session?.job?.awaiting_confirmation, name, refresh]);
+  // oxlint-enable react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies
 
   if (!session || !config) return <p>Loading&hellip;</p>;
 
