@@ -7,7 +7,11 @@ import json
 import requests
 
 from edl_agent.selector import admissible_candidates, build_parts, select
-from edl_agent.selector.hooks import generate_hook_copy, hook_copy_schema
+from edl_agent.selector.hooks import (
+    build_hook_user_prompt,
+    generate_hook_copy,
+    hook_copy_schema,
+)
 from edl_agent.selector.prompts import build_system_prompt, build_user_prompt
 
 
@@ -230,8 +234,6 @@ def test_theme_switches_prompt_wording() -> None:
     assert "Hyrox" in build_user_prompt(6.0, _slots_json(), [])
 
 
-
-
 def test_build_parts_sends_absolute_speed_and_prompt_explains_it(tmp_path) -> None:
     jpg = tmp_path / "p.jpg"
     jpg.write_bytes(b"\xff\xd8\xff")
@@ -253,8 +255,14 @@ def test_build_parts_sends_absolute_speed_and_prompt_explains_it(tmp_path) -> No
 
 def test_hook_copy_schema_requires_contract_fields() -> None:
     schema = hook_copy_schema()
-    assert schema["required"] == ["candidate_id", "evidence", "hook_line"]
+    assert schema["required"] == ["candidate_id", "evidence", "hooks"]
     assert schema["properties"]["evidence"]["maxItems"] == 3
+    hooks_items = schema["properties"]["hooks"]["items"]
+    assert hooks_items["properties"]["angle"]["enum"] == [
+        "contexto",
+        "afirmacion",
+        "adelanto",
+    ]
 
 
 def _hook_cand():
@@ -268,34 +276,99 @@ def _hook_cand():
     }
 
 
-def test_hook_copy_accepts_matching_candidate_with_evidence(tmp_path) -> None:
+def _three_hooks(**overrides):
+    hooks = [
+        {"angle": "contexto", "hook_line": "el jueves de hyrox"},
+        {"angle": "afirmacion", "hook_line": "la barra despega del suelo"},
+        {"angle": "adelanto", "hook_line": "cinco estaciones seguidas"},
+    ]
     payload = {
         "candidate_id": "hook1",
-        "evidence": ["barra en el suelo", "atleta agachado"],
-        "hook_line": "la barra despega del suelo",
+        "evidence": ["barra en el suelo"],
+        "hooks": hooks,
     }
+    payload.update(overrides)
+    return payload
+
+
+def test_hook_user_prompt_contains_brief_audience_context() -> None:
+    prompt = build_hook_user_prompt(
+        "hook1",
+        "deadlift",
+        1.5,
+        "training",
+        brief="Clase de Hyrox del jueves",
+        audience="members",
+        context="hook: deadlift (peak, velocidad 1.50)",
+    )
+    assert "Clase de Hyrox del jueves" in prompt
+    assert "members" in prompt
+    assert "hook: deadlift" in prompt
+
+
+def test_hook_copy_accepts_three_lines_one_per_angle(tmp_path) -> None:
+    payload = _three_hooks()
+    client = _FakeClient([_FakeInteraction("completed", json.dumps(payload))])
+
+    result = generate_hook_copy(
+        _hook_cand(),
+        "deadlift",
+        "training",
+        client,
+        "test-model",
+        tmp_path,
+        brief="Clase de Hyrox del jueves",
+        audience="members",
+        context="hook: deadlift (peak, velocidad 1.50)",
+    )
+
+    assert len(result["hooks"]) == 3
+    assert result["hook_line"] == result["hooks"][0]["hook_line"]
+    assert result["rejected"] is None
+    assert result["source"] == "llm"
+    assert result["brief"] == "Clase de Hyrox del jueves"
+    assert result["audience"] == "members"
+    assert (tmp_path / "hooks.json").exists()
+    assert len(json.loads((tmp_path / "hooks.json").read_text())["hooks"]) == 3
+
+
+def test_hook_copy_drops_one_invalid_line_keeps_the_rest(tmp_path) -> None:
+    payload = _three_hooks()
+    payload["hooks"][1]["hook_line"] = "140 kg y sube ya"  # digit -> rejected
     client = _FakeClient([_FakeInteraction("completed", json.dumps(payload))])
 
     result = generate_hook_copy(
         _hook_cand(), "deadlift", "training", client, "test-model", tmp_path
     )
 
-    assert result["hook_line"] == "la barra despega del suelo"
-    assert result["evidence"] == payload["evidence"]
+    assert len(result["hooks"]) == 2
     assert result["rejected"] is None
-    assert result["source"] == "llm"
-    assert (tmp_path / "hooks.json").exists()
-    assert json.loads((tmp_path / "hooks.json").read_text())["hook_line"] == (
-        "la barra despega del suelo"
+    assert result["dropped"] == [
+        {
+            "angle": "afirmacion",
+            "hook_line": "140 kg y sube ya",
+            "why": "invalid_copy",
+        }
+    ]
+
+
+def test_hook_copy_rejects_when_all_lines_invalid(tmp_path) -> None:
+    payload = _three_hooks()
+    for h in payload["hooks"]:
+        h["hook_line"] = "1"
+    client = _FakeClient([_FakeInteraction("completed", json.dumps(payload))])
+
+    result = generate_hook_copy(
+        _hook_cand(), "deadlift", "training", client, "test-model", tmp_path
     )
+
+    assert result["hooks"] == []
+    assert result["hook_line"] == ""
+    assert result["rejected"] == "invalid_copy"
 
 
 def test_hook_copy_rejects_candidate_id_mismatch(tmp_path) -> None:
-    payload = {
-        "candidate_id": "other",
-        "evidence": ["barra en el suelo"],
-        "hook_line": "la barra despega del suelo",
-    }
+    payload = _three_hooks(candidate_id="other")
     client = _FakeClient([_FakeInteraction("completed", json.dumps(payload))])
 
     result = generate_hook_copy(
@@ -303,37 +376,9 @@ def test_hook_copy_rejects_candidate_id_mismatch(tmp_path) -> None:
     )
 
     assert result["hook_line"] == ""
+    assert result["hooks"] == []
     assert result["rejected"] == "candidate_id_mismatch"
     assert len(client.interactions.calls) == 1
-
-
-def test_hook_copy_abstains_on_empty_line(tmp_path) -> None:
-    payload = {"candidate_id": "hook1", "evidence": [], "hook_line": ""}
-    client = _FakeClient([_FakeInteraction("completed", json.dumps(payload))])
-
-    result = generate_hook_copy(
-        _hook_cand(), "deadlift", "training", client, "test-model", tmp_path
-    )
-
-    assert result["hook_line"] == ""
-    assert result["rejected"] is None
-    assert len(client.interactions.calls) == 1
-
-
-def test_hook_copy_rejects_line_without_evidence(tmp_path) -> None:
-    payload = {
-        "candidate_id": "hook1",
-        "evidence": [],
-        "hook_line": "la barra despega del suelo",
-    }
-    client = _FakeClient([_FakeInteraction("completed", json.dumps(payload))])
-
-    result = generate_hook_copy(
-        _hook_cand(), "deadlift", "training", client, "test-model", tmp_path
-    )
-
-    assert result["hook_line"] == ""
-    assert result["rejected"] == "no_evidence"
 
 
 def test_hook_copy_override_skips_llm(tmp_path) -> None:

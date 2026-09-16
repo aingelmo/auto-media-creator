@@ -110,22 +110,23 @@
             <video autoplay loop muted playsinline width="180" data-key="none"
                    src="/sessions/{{ name }}/files/hook_previews/none/seg_{{ "%02d"|format(job.hook_slot) }}.mp4"></video>
             <figcaption>
-              <label><input type="radio" name="hook_line" value="" {% if not job.hooks.hook_line %}checked{% endif %}> sin texto</label>
+              <label><input type="radio" name="hook_line" value="" {% if not job.hooks.hooks %}checked{% endif %}> sin texto</label>
             </figcaption>
           </figure>
-          {% if job.hooks.hook_line %}
+          {% for h in job.hooks.hooks %}
           <figure>
-            <video autoplay loop muted playsinline width="180" data-key="0"
-                   src="/sessions/{{ name }}/files/hook_previews/0/seg_{{ "%02d"|format(job.hook_slot) }}.mp4"></video>
+            <video autoplay loop muted playsinline width="180" data-key="{{ loop.index0 }}"
+                   src="/sessions/{{ name }}/files/hook_previews/{{ loop.index0 }}/seg_{{ "%02d"|format(job.hook_slot) }}.mp4"></video>
             <figcaption>
-              <label><input type="radio" name="hook_line" value="{{ job.hooks.hook_line }}" checked> {{ job.hooks.hook_line }}</label>
-              {% if job.hooks.evidence %}
-              <p>evidence: {{ job.hooks.evidence | join(", ") }} (source: {{ job.hooks.source }})</p>
-              {% endif %}
+              <label><input type="radio" name="hook_line" value="{{ h.hook_line }}" {% if loop.first %}checked{% endif %}> [{{ h.angle }}] {{ h.hook_line }}</label>
             </figcaption>
           </figure>
-          {% else %}
-          <p>El modelo no encontró evidencia suficiente (motivo: {{ job.hooks.rejected or "sin evidencia" }}).</p>
+          {% endfor %}
+          {% if job.hooks.evidence %}
+          <p>evidence: {{ job.hooks.evidence | join(", ") }} (source: {{ job.hooks.source }})</p>
+          {% endif %}
+          {% if not job.hooks.hooks %}
+          <p>El modelo no encontró líneas válidas (motivo: {{ job.hooks.rejected or "sin evidencia" }}).</p>
           {% endif %}
         </div>
         <script>
@@ -144,9 +145,9 @@
         <label>Variant B hook line (optional; renders a second reel, same clip)
           <select name="hook_line_b">
             <option value="" selected>no variant B</option>
-            {% if job.hooks.hook_line %}
-            <option value="{{ job.hooks.hook_line }}">{{ job.hooks.hook_line }}</option>
-            {% endif %}
+            {% for h in job.hooks.hooks %}
+            <option value="{{ h.hook_line }}">[{{ h.angle }}] {{ h.hook_line }}</option>
+            {% endfor %}
           </select>
         </label>
         <button type="submit">Render with this hook</button>
@@ -205,6 +206,15 @@
           <option value="training">training (CrossFit / Hyrox / funcional)</option>
           <option value="yoga">yoga</option>
         </select>
+      </label>
+      <label>Audience
+        <select name="audience">
+          <option value="prospects">prospects (sell the gym/class)</option>
+          <option value="members">members (recognise the session)</option>
+        </select>
+      </label>
+      <label>Brief (optional; only applies from the hooks stage on)
+        <input type="text" name="brief" maxlength="200">
       </label>
       <label>Hook text (manual, skips the LLM; only applies from the hooks stage on)
         <input type="text" name="hook_line" maxlength="40" placeholder="La barra despega del suelo">

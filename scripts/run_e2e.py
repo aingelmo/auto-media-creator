@@ -74,6 +74,17 @@ def parse_args() -> argparse.Namespace:
         help="Operator-typed hook text; skips the hook-copy LLM call",
     )
     parser.add_argument(
+        "--brief",
+        default="",
+        help="Operator session brief (e.g. 'Hyrox class, Thursday, 12 people')",
+    )
+    parser.add_argument(
+        "--audience",
+        choices=["prospects", "members"],
+        default="prospects",
+        help="Hook copy tone: sell the class, or recognise the session",
+    )
+    parser.add_argument(
         "--cache-dir",
         type=Path,
         default=Path("data/cache"),
@@ -171,6 +182,8 @@ def main() -> None:
             client,
             args.model,
             hook_line_override=args.hook_line,
+            brief=args.brief,
+            audience=args.audience,
         )
 
     edl_path = session / "edl.json"

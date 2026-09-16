@@ -475,3 +475,13 @@ def test_clean_hook_line_non_strict_still_accepts_operator_length() -> None:
     assert clean_hook_line(" ".join(["ya"] * 9), strict=False) == ""
 
 
+def test_clean_hook_line_strict_allows_number_from_brief() -> None:
+    assert (
+        clean_hook_line(
+            "12 personas a tope", strict=True, allowed_numbers=frozenset({"12"})
+        )
+        == "12 personas a tope"
+    )
+    assert clean_hook_line("12 personas a tope", strict=True) == ""
+
+

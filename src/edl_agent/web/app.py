@@ -179,6 +179,8 @@ async def create_session(
     handle: str = Form(""),
     line: str = Form(""),
     hook_line: str = Form(""),
+    brief: str = Form(""),
+    audience: str = Form("prospects"),
 ) -> HTMLResponse | RedirectResponse:
     """Save uploaded media (+ optional brand logo) into a new session dir and launch."""
     key_env = PROVIDER_API_KEY_ENV.get(provider)
@@ -240,6 +242,8 @@ async def create_session(
         job,
         theme=theme,
         hook_line_override=clean_hook_line(hook_line),
+        brief=brief.strip(),
+        audience=audience,
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -264,6 +268,8 @@ def retry_session(name: str, background_tasks: BackgroundTasks) -> RedirectRespo
         True,
         old_job.theme,
         old_job.hook_line_override,
+        old_job.brief,
+        old_job.audience,
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -281,6 +287,8 @@ def regenerate_session(
     handle: str = Form(""),
     line: str = Form(""),
     hook_line: str = Form(""),
+    brief: str = Form(""),
+    audience: str = Form("prospects"),
 ) -> RedirectResponse:
     """Force `from_stage` onward to redo, reusing already-completed earlier stages.
 
@@ -311,6 +319,8 @@ def regenerate_session(
         True,
         theme,
         clean_hook_line(hook_line),
+        brief.strip(),
+        audience,
     )
 
     return RedirectResponse(f"/sessions/{name}", status_code=303)
@@ -388,7 +398,7 @@ def session_confirm(
     selected `hook_line` radio value, `hook_line_b` (idea #7) picks the
     hook line for a second variant reel (`""` = no variant B), `hook_flash`
     (checked by default in the template) toggles the hook's white flash,
-    and `more=True` regenerates a fresh batch of 6 lines instead of
+    and `more=True` regenerates a fresh batch of 3 lines instead of
     proceeding to the final render.
     """
     job = _jobs.get(name)

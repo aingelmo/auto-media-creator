@@ -128,19 +128,25 @@ Se adjunta a cada candidato solo `id`, `kind`, `src`, `multi_subject`; no se pas
 
 ### 5.7 Hook lines — `hooks.json`
 
-Ya no hay un único `hook_line` dentro de `selection.json`. Tras la selección hay una llamada LLM separada (mismo proveedor/modelo), estrechada a una sola línea anclada a evidencia, con contrato verificable: `{candidate_id, evidence, hook_line}` (`hook_copy_schema` en `selector/hooks.py`).
+Ya no hay un único `hook_line` dentro de `selection.json`. Tras la selección hay una llamada LLM separada (mismo proveedor/modelo) que devuelve 3 líneas, una por ángulo fijo, con contrato verificable: `{candidate_id, evidence, hooks: [{angle, hook_line}]}` (`hook_copy_schema` en `selector/hooks.py`).
 
-Input: los 3 fotogramas de pico del candidato hook elegido, el ejercicio y el tema (`training`/`yoga`), igual que el resto del selector. No se le pasan tiempos ni coordenadas.
+Input: un brief opcional del operador (`str`, libre) y la audiencia (`"prospects"` | `"members"`, elegidos por sesión); un resumen en texto de toda la selección (`session/hooks.py: selection_context` — rol/ejercicio/tipo/velocidad de cada clip elegido, si hay grupo, duración del reel, notas y motivos del selector); y los 3 fotogramas de pico del candidato hook elegido con su ejercicio y velocidad, igual que el resto del selector.
 
-Prompt: primero pide `evidence` (0-3 hechos visibles: objeto, fase del movimiento, posición del cuerpo; nada inferido), luego `hook_line` de 3-6 palabras que describa solo esa evidencia. Prohíbe explícitamente reps/kilos/tiempos/récords, emociones, segunda persona, exclamaciones, emojis, hashtags, comillas, punto final y lenguaje motivacional/eslogan. Cadena vacía en `hook_line` si no hay evidencia clara que sostenga una frase concreta (abstención legítima). Temperatura 0.2.
+Ángulos (enum fijo, una línea cada uno):
+- `contexto` — qué es este reel (sesión/clase/día/lugar); reconocimiento para socios, encuadre para prospectos.
+- `afirmacion` — afirmación rotunda y defendible sobre el ejercicio o la sesión (hot take).
+- `adelanto` — lo que el espectador está a punto de ver (contraste o progresión entre los clips elegidos).
 
-Validación en código (`generate_hook_copy`, `session/hooks.py`):
-- `candidate_id` de la respuesta distinto del candidato hook real → `hook_line = ""`, `rejected: "candidate_id_mismatch"`.
-- `clean_hook_line(hook_line, strict=True)` (`selection/s_checks.py`) vacía la línea si no tiene 3-6 palabras, contiene dígitos, o coincide con una frase de `GENERIC_PHRASES` (slogans conocidos) → `rejected: "invalid_copy"`. Si el modelo ya devolvió `""`, es abstención legítima: `rejected: None`.
-- `hook_line` no vacía pero `evidence` vacía → se descarta igual, `rejected: "no_evidence"`.
+La audiencia solo cambia el párrafo de tono del prompt; el tema mantiene su matiz existente vía `THEMES[theme]["hook_line"]`. Regla de anclaje: toda frase debe apoyarse en el brief, el resumen de la selección, o los fotogramas; los números solo se permiten si aparecen literales en el brief (`numbers_in`/`allowed_numbers` en `clean_hook_line`). Prohíbe explícitamente reps/kilos/tiempos/récords inventados, emociones, segunda persona, preguntas, exclamaciones, emojis, hashtags, comillas, punto final y lenguaje motivacional/eslogan. Cadena vacía en cualquier `hook_line` que no se pueda anclar (abstención legítima por ángulo). Temperatura 0.7.
+
+Validación en código (`generate_hook_copy`, `selector/hooks.py`):
+- `candidate_id` de la respuesta distinto del candidato hook real → todas las líneas se descartan, `rejected: "candidate_id_mismatch"`.
+- Cada `hooks[i].hook_line` pasa por `clean_hook_line(line, strict=True, allowed_numbers=numbers_in(brief))` (`selection/s_checks.py`); las líneas inválidas se descartan y se listan en `dropped: [{angle, hook_line, why}]`.
+- `hooks` en el resultado = las líneas que sobreviven; `hook_line` (compatibilidad con el CLI/planner) = `hooks[0]["hook_line"]` o `""`.
+- `rejected: "invalid_copy"` solo si el modelo devolvió ≥1 línea y ninguna sobrevivió.
 - Un solo reintento, solo por `status: "incomplete"` o error de red/JSON; nunca por abstención.
 
 Si el operador ya escribió texto (`hook_line_override`, desde el formulario de alta o de regenerar), se salta la llamada LLM por completo: `hooks.json` se escribe con `source: "override"`, `evidence: []`, `cost_usd: 0.0`.
 
-El operador ve la línea (o el aviso de abstención) renderizada sobre el hook, más una variante sin texto, en la pausa `hook_choice` de la web UI, y puede aceptarla, escribir texto propio, o elegir "sin texto"; el CLI usa `hooks.json["hook_line"]` sin pausa.
+El operador ve las 3 líneas (con su ángulo) renderizadas sobre el hook, más una variante sin texto, en la pausa `hook_choice` de la web UI, y puede aceptar una, escribir texto propio, o elegir "sin texto"; "Regenerate" pide un lote nuevo de 3. El CLI usa `hooks.json["hook_line"]` sin pausa. `hooks.json` también guarda `brief`, `audience` y `context` (el resumen enviado), para depuración.
 

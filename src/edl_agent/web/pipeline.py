@@ -161,8 +161,12 @@ class JobState:
         theme: Selector prompt theme (`"training"` | `"yoga"`).
         hook_line_override: Operator-typed text from the new-session form;
             if non-empty, `run_hooks` skips its LLM call entirely.
-        hooks: Latest `hooks.json` dict (`hook_line`, `evidence`,
-            `rejected`, `source`), for the hook-choice template.
+        brief: Operator-typed session brief from the new-session form,
+            passed to `run_hooks` to ground the `contexto` angle.
+        audience: `"prospects"` | `"members"`, from the new-session form,
+            passed to `run_hooks` to set the copy's tone.
+        hooks: Latest `hooks.json` dict (`hook_line`, `hooks`, `dropped`,
+            `evidence`, `rejected`, `source`), for the hook-choice template.
         hook_slot: Slot number of the hook clip, so the template can build
             preview URLs (`hook_previews/{key}/seg_{hook_slot:02d}.mp4`).
         hook_choice: Chosen/custom hook text (`""` = no text), set via
@@ -174,7 +178,7 @@ class JobState:
             beat, set via `/sessions/{name}/confirm` during a
             `"hook_choice"` pause; defaults to `True`.
         more_hooks: `True` (set via `/sessions/{name}/confirm`) to
-            generate a fresh batch of 6 lines instead of proceeding to the
+            generate a fresh batch of 3 lines instead of proceeding to the
             final render.
         check_results_b: Stringified `run_render_checks` results for
             variant B, once the `checks` stage completes with a B variant.
@@ -202,6 +206,8 @@ class JobState:
     model: str = ""
     theme: str = "training"
     hook_line_override: str = ""
+    brief: str = ""
+    audience: str = "prospects"
     hooks: dict = field(default_factory=dict)
     hook_slot: int = 0
     hook_choice: str = ""
@@ -472,6 +478,8 @@ def _run_hooks_and_planner_stage(
                     client,
                     model,
                     hook_line_override=job.hook_line_override,
+                    brief=job.brief,
+                    audience=job.audience,
                 )
         job.hooks = hooks
         job.detail["hooks"] = "building preview EDL"
@@ -493,7 +501,7 @@ def _run_hooks_and_planner_stage(
             preview_edl,
             manifest,
             session_dir,
-            [hooks["hook_line"]] if hooks["hook_line"] else [],
+            [h["hook_line"] for h in hooks["hooks"] if h["hook_line"]],
             THREADS,
             tonemap_chain,
         )
@@ -659,6 +667,8 @@ def run_pipeline_job(
     resume: bool = False,
     theme: str = "training",
     hook_line_override: str = "",
+    brief: str = "",
+    audience: str = "prospects",
 ) -> None:
     """Run the full ingest->render pipeline for a session, updating `job` along the way.
 
@@ -678,11 +688,15 @@ def run_pipeline_job(
         theme: Selector prompt theme, a key of `edl_agent.selector.prompts.THEMES`.
         hook_line_override: Operator-typed hook text from the new-session
             form; if non-empty, the `hooks` stage skips its LLM call.
+        brief: Operator-typed session brief from the new-session form.
+        audience: `"prospects"` | `"members"`, from the new-session form.
     """
     job.provider = provider
     job.model = model
     job.theme = theme
     job.hook_line_override = hook_line_override
+    job.brief = brief
+    job.audience = audience
     try:
         manifest, slots = _run_ingest_stage(session_dir, job, resume)
         candidates, slots = _run_candidates_stage(

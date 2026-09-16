@@ -51,6 +51,10 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
         return {
             "candidate_id": "hook1",
             "hook_line": "la barra despega del suelo",
+            "hooks": [
+                {"angle": "afirmacion", "hook_line": "la barra despega del suelo"}
+            ],
+            "dropped": [],
             "evidence": ["barra en el suelo"],
             "rejected": None,
             "source": "llm",
@@ -72,9 +76,7 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
         patch("edl_agent.web.pipeline.run_ingest", return_value=manifest),
         patch("edl_agent.web.pipeline.slots_from_file", return_value=slots),
         patch("edl_agent.web.pipeline.yolo_pose_detector", return_value=Mock()),
-        patch(
-            "edl_agent.web.pipeline.run_candidates", side_effect=fake_run_candidates
-        ),
+        patch("edl_agent.web.pipeline.run_candidates", side_effect=fake_run_candidates),
         patch("edl_agent.web.pipeline.run_hooks", side_effect=fake_run_hooks),
         patch("edl_agent.web.pipeline.run_planner", side_effect=fake_run_planner),
         patch("edl_agent.web.pipeline.render_hook_previews"),
@@ -82,9 +84,7 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
         patch("edl_agent.web.pipeline.render_segments"),
         patch("edl_agent.web.pipeline.concat_and_audio"),
         patch("edl_agent.web.pipeline.run_render_checks", return_value=[]),
-        patch(
-            "edl_agent.llm.ollama_client.requests.post", return_value=ollama_reply
-        ),
+        patch("edl_agent.llm.ollama_client.requests.post", return_value=ollama_reply),
     ):
         thread = threading.Thread(
             target=run_pipeline_job,
@@ -184,6 +184,10 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
         return {
             "candidate_id": "c01",
             "hook_line": "la barra despega del suelo",
+            "hooks": [
+                {"angle": "afirmacion", "hook_line": "la barra despega del suelo"}
+            ],
+            "dropped": [],
             "evidence": ["barra en el suelo"],
             "rejected": None,
             "source": "llm",
@@ -256,8 +260,13 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
 
 
 def _run_job_to_hook_choice(
-    tmp_path, hook_choice_b: str, hook_line_override: str = "", hook_flash: bool = True
-) -> tuple[JobState, Mock, list[dict], list[dict]]:
+    tmp_path,
+    hook_choice_b: str,
+    hook_line_override: str = "",
+    hook_flash: bool = True,
+    brief: str = "",
+    audience: str = "prospects",
+) -> tuple[JobState, Mock, list[dict], list[dict], Mock]:
     """Drive a job to the hook-choice pause (image-only sources skip both
     pauses), answer it with `hook_choice_b`, then run it to completion with
     every render/planner call mocked. Returns the job and the `render_segments`
@@ -291,12 +300,19 @@ def _run_job_to_hook_choice(
         return {
             "candidate_id": "c01",
             "hook_line": "la barra despega del suelo",
+            "hooks": [
+                {"angle": "contexto", "hook_line": "el jueves de hyrox"},
+                {"angle": "afirmacion", "hook_line": "la barra despega del suelo"},
+                {"angle": "adelanto", "hook_line": "cinco estaciones seguidas"},
+            ],
+            "dropped": [],
             "evidence": ["barra en el suelo"],
             "rejected": None,
             "source": "llm",
         }
 
     render_segments_mock = Mock()
+    render_hook_previews_mock = Mock()
     job = JobState()
     with (
         patch("edl_agent.web.pipeline.run_ingest", return_value=manifest),
@@ -309,7 +325,7 @@ def _run_job_to_hook_choice(
         ),
         patch("edl_agent.web.pipeline.run_hooks", side_effect=fake_run_hooks),
         patch("edl_agent.web.pipeline.run_planner", side_effect=fake_run_planner),
-        patch("edl_agent.web.pipeline.render_hook_previews"),
+        patch("edl_agent.web.pipeline.render_hook_previews", render_hook_previews_mock),
         patch("edl_agent.web.pipeline.render_preview_segments"),
         patch("edl_agent.web.pipeline.render_segments", render_segments_mock),
         patch("edl_agent.web.pipeline.concat_and_audio"),
@@ -325,6 +341,8 @@ def _run_job_to_hook_choice(
                 False,
                 "training",
                 hook_line_override,
+                brief,
+                audience,
             ),
         )
         thread.start()
@@ -344,12 +362,18 @@ def _run_job_to_hook_choice(
     assert not thread.is_alive()
     assert job.error is None
     assert job.done
-    return job, render_segments_mock, hooks_calls, planner_calls
+    return (
+        job,
+        render_segments_mock,
+        hooks_calls,
+        planner_calls,
+        render_hook_previews_mock,
+    )
 
 
 def test_hook_choice_b_renders_variant_b_reel(tmp_path) -> None:
-    job, render_segments_mock, _hooks_calls, _planner_calls = _run_job_to_hook_choice(
-        tmp_path, "line b"
+    job, render_segments_mock, _hooks_calls, _planner_calls, _hp = (
+        _run_job_to_hook_choice(tmp_path, "line b")
     )
 
     calls = render_segments_mock.call_args_list
@@ -359,8 +383,8 @@ def test_hook_choice_b_renders_variant_b_reel(tmp_path) -> None:
 
 
 def test_no_hook_choice_b_skips_variant_b_render(tmp_path) -> None:
-    job, render_segments_mock, _hooks_calls, _planner_calls = _run_job_to_hook_choice(
-        tmp_path, ""
+    job, render_segments_mock, _hooks_calls, _planner_calls, _hp = (
+        _run_job_to_hook_choice(tmp_path, "")
     )
 
     calls = render_segments_mock.call_args_list
@@ -369,19 +393,52 @@ def test_no_hook_choice_b_skips_variant_b_render(tmp_path) -> None:
 
 
 def test_job_hook_line_override_is_passed_to_run_hooks(tmp_path) -> None:
-    _job, _render_segments_mock, hooks_calls, _planner_calls = _run_job_to_hook_choice(
+    _job, _rsm, hooks_calls, _pc, _hp = _run_job_to_hook_choice(
         tmp_path, "", hook_line_override="Del operador"
     )
 
-    assert hooks_calls == [{"hook_line_override": "Del operador"}]
+    assert hooks_calls == [
+        {
+            "hook_line_override": "Del operador",
+            "brief": "",
+            "audience": "prospects",
+        }
+    ]
+
+
+def test_job_brief_and_audience_are_passed_to_run_hooks(tmp_path) -> None:
+    _job, _rsm, hooks_calls, _pc, _hp = _run_job_to_hook_choice(
+        tmp_path, "", brief="Clase de Hyrox del jueves", audience="members"
+    )
+
+    assert hooks_calls == [
+        {
+            "hook_line_override": "",
+            "brief": "Clase de Hyrox del jueves",
+            "audience": "members",
+        }
+    ]
 
 
 def test_job_hook_flash_is_passed_to_run_planner(tmp_path) -> None:
-    _job, _render_segments_mock, _hooks_calls, planner_calls = _run_job_to_hook_choice(
+    _job, _rsm, _hooks_calls, planner_calls, _hp = _run_job_to_hook_choice(
         tmp_path, "", hook_flash=False
     )
 
     assert planner_calls[-1]["config"]["hook_flash"] is False
+
+
+def test_render_hook_previews_receives_all_three_hook_lines(tmp_path) -> None:
+    _job, _rsm, _hooks_calls, _pc, render_hook_previews_mock = _run_job_to_hook_choice(
+        tmp_path, ""
+    )
+
+    lines = render_hook_previews_mock.call_args_list[0].args[3]
+    assert lines == [
+        "el jueves de hyrox",
+        "la barra despega del suelo",
+        "cinco estaciones seguidas",
+    ]
 
 
 def test_clear_stage_artifacts_from_selection_keeps_earlier_stages_and_backs_up_reel(

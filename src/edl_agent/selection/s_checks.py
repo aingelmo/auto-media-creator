@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from edl_agent.selection._common import ROLES, _admits, _slot_indices
 
 HOOK_LINE_MAX_WORDS = 8  # operator-typed text (strict=False)
@@ -31,7 +33,18 @@ GENERIC_PHRASES: tuple[str, ...] = (
 )
 
 
-def clean_hook_line(raw: object, strict: bool = False) -> str:
+def numbers_in(text: str) -> frozenset[str]:
+    """Digit substrings appearing verbatim in `text`.
+
+    Used as `clean_hook_line`'s `allowed_numbers` (numbers from an operator
+    brief are grounded, not invented).
+    """
+    return frozenset(re.findall(r"\d+", text))
+
+
+def clean_hook_line(
+    raw: object, strict: bool = False, allowed_numbers: frozenset[str] = frozenset()
+) -> str:
     """Trim/unquote/validate a hook line; `""` if it fails any check.
 
     Always applied: strip whitespace/quotes, drop a trailing `.`/`!`/`?`,
@@ -41,14 +54,16 @@ def clean_hook_line(raw: object, strict: bool = False) -> str:
 
     `strict=True` (LLM output, #5.7) additionally rejects: fewer than
     `HOOK_LINE_MIN_WORDS` or more than `HOOK_LINE_STRICT_MAX_WORDS` words,
-    any digit (invented reps/kg/times), or a substring from
-    `GENERIC_PHRASES` (invented slogan).
+    any digit not in `allowed_numbers` (invented reps/kg/times, unless it
+    appeared verbatim in the operator's brief, see `numbers_in`), or a
+    substring from `GENERIC_PHRASES` (invented slogan).
 
     `strict=False` (operator-typed text, `hook_custom` in the web form)
     keeps the looser 1-`HOOK_LINE_MAX_WORDS`-word check only.
     """
     line = str(raw or "").strip().strip("\"'“”«»").strip().rstrip(".!?").strip()
     words = line.split()
+    unlisted_digits = any(n not in allowed_numbers for n in re.findall(r"\d+", line))
 
     rejected = (
         not line
@@ -57,7 +72,7 @@ def clean_hook_line(raw: object, strict: bool = False) -> str:
         or any(ord(ch) > 0x2000 for ch in line)
         or (
             not HOOK_LINE_MIN_WORDS <= len(words) <= HOOK_LINE_STRICT_MAX_WORDS
-            or any(ch.isdigit() for ch in line)
+            or unlisted_digits
             or any(phrase in line.casefold() for phrase in GENERIC_PHRASES)
             if strict
             else not 0 < len(words) <= HOOK_LINE_MAX_WORDS
