@@ -8,6 +8,13 @@ import ThemeAudienceFields from "./ThemeAudienceFields";
 
 const REGEN_STAGES = ["candidates", "selection", "hooks", "planner", "render"] as const;
 
+// Provider/theme/audience/brief/hook fields only affect a regen that
+// actually re-runs the LLM-driven selection/hooks stages; from planner on,
+// those stages are resumed from disk untouched, so the fields are dead
+// weight (kept mounted+hidden, not unmounted, so their values still submit
+// with the form's remembered defaults intact).
+const LLM_STAGES = new Set<string>(["candidates", "selection", "hooks"]);
+
 export default function RegenerateForm({
   name,
   config,
@@ -20,6 +27,7 @@ export default function RegenerateForm({
   onStarted: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [fromStage, setFromStage] = useState(defaultFromStage);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -36,7 +44,12 @@ export default function RegenerateForm({
       <form onSubmit={handleSubmit} className="form-grid">
         <label htmlFor="regen-from-stage">
           From stage
-          <select id="regen-from-stage" name="from_stage" defaultValue={defaultFromStage}>
+          <select
+            id="regen-from-stage"
+            name="from_stage"
+            value={fromStage}
+            onChange={(e) => setFromStage(e.target.value)}
+          >
             {REGEN_STAGES.map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -44,12 +57,14 @@ export default function RegenerateForm({
             ))}
           </select>
         </label>
-        <ProviderModelFields
-          providers={config.providers}
-          defaultModels={config.default_models}
-          idPrefix="regen"
-        />
-        <ThemeAudienceFields idPrefix="regen" />
+        <div className="form-grid" hidden={!LLM_STAGES.has(fromStage)}>
+          <ProviderModelFields
+            providers={config.providers}
+            defaultModels={config.default_models}
+            idPrefix="regen"
+          />
+          <ThemeAudienceFields idPrefix="regen" />
+        </div>
         <BrandFieldset
           idPrefix="regen"
           legend="Brand (optional; new logo replaces the session's, applies from planner on)"

@@ -69,6 +69,18 @@ export interface JobPayload {
   music_candidates: MusicCandidate[];
 }
 
+export interface HistoryEntry {
+  ts: string;
+  from_stage: string;
+  provider: string;
+  model: string;
+  theme: string;
+  audience: string;
+  brief: string;
+  hook_line: string;
+  brand_updated: boolean;
+}
+
 export interface SessionDetail {
   name: string;
   job: JobPayload | null;
@@ -79,6 +91,7 @@ export interface SessionDetail {
   providers: Provider[];
   default_models: Record<string, string>;
   default_from_stage: string;
+  history: HistoryEntry[];
 }
 
 export interface StatusPayload {

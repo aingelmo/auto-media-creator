@@ -127,9 +127,14 @@ select {
   column-gap: var(--space-6);
 }
 
+.form-grid[hidden] {
+  display: none;
+}
+
 .form-grid > fieldset,
 .form-grid > details,
-.form-grid > p {
+.form-grid > p,
+.form-grid > .form-grid {
   grid-column: 1 / -1;
 }
 
@@ -271,6 +276,44 @@ button.primary {
   accent-color: var(--signal);
 }
 
+.stage-rail-collapsed {
+  margin-bottom: var(--space-6);
+}
+
+.stage-rail-collapsed > summary {
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+}
+
+.stage-rail-collapsed[open] > summary {
+  margin-bottom: var(--space-3);
+}
+
+.stage-rail-collapsed .stage-rail {
+  margin-bottom: 0;
+}
+
+.regen-history {
+  margin-top: var(--space-6);
+}
+
+.regen-history > summary {
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+}
+
+.regen-history table {
+  margin-top: var(--space-3);
+  margin-bottom: 0;
+}
+
+.regen-history td {
+  vertical-align: top;
+  font-size: var(--text-xs);
+}
+
 .warning {
   border: 1px solid var(--rule);
   border-left: 3px solid var(--signal);
@@ -324,8 +367,34 @@ button.primary {
 }
 
 .reel-player {
-  width: 100%;
-  max-width: 640px;
+  width: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 160px);
   background: #000;
   border-radius: 4px;
+}
+
+/* Session result: video (+ checks) beside the regenerate form, instead of
+   stacked, so a tall portrait reel doesn't push the form far below the fold. */
+.session-result {
+  display: flex;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.session-result > .session-result-video {
+  flex: 0 1 640px;
+  min-width: 0;
+}
+
+.session-result > .session-result-regen {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .session-result {
+    display: block;
+  }
 }

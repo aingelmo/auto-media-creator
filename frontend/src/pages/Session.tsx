@@ -5,6 +5,7 @@ import HookPicker from "../components/HookPicker";
 import LowCandidatesPause from "../components/LowCandidatesPause";
 import MusicPicker from "../components/MusicPicker";
 import RegenerateForm from "../components/RegenerateForm";
+import RegenHistory from "../components/RegenHistory";
 import StageRail from "../components/StageRail";
 import StartForm from "../components/StartForm";
 import VerificationPause from "../components/VerificationPause";
@@ -107,49 +108,54 @@ export default function Session() {
       )}
 
       {!job?.awaiting_confirmation && (job === null || (job.done && !job.error)) && !allPending && (
-        <>
-          {session.reel_exists ? (
-            <>
-              <video className="reel-player" controls src={reelUrl(name)} />
-              <p>
-                <a href={reelUrl(name)} download>
-                  Download reel.mp4
-                </a>
-              </p>
-            </>
-          ) : (
-            <p>Server restarted mid-run. Pick the next stage below to resume.</p>
-          )}
-          {job?.check_results && job.check_results.length > 0 && (
-            <>
-              <h3>Render checks</h3>
-              <pre>{job.check_results.join("\n")}</pre>
-            </>
-          )}
-          {session.reel_b_exists && (
-            <>
-              <h3>Variant B</h3>
-              <video className="reel-player" controls src={fileUrl(name, "reel_b.mp4")} />
-              <p>
-                <a href={fileUrl(name, "reel_b.mp4")} download>
-                  Download reel_b.mp4
-                </a>
-              </p>
-              {job?.check_results_b && job.check_results_b.length > 0 && (
-                <>
-                  <h3>Render checks (B)</h3>
-                  <pre>{job.check_results_b.join("\n")}</pre>
-                </>
-              )}
-            </>
-          )}
-          <RegenerateForm
-            name={name}
-            config={config}
-            defaultFromStage={session.default_from_stage}
-            onStarted={refresh}
-          />
-        </>
+        <div className="session-result">
+          <div className="session-result-video">
+            {session.reel_exists ? (
+              <>
+                <video className="reel-player" controls src={reelUrl(name)} />
+                <p>
+                  <a href={reelUrl(name)} download>
+                    Download reel.mp4
+                  </a>
+                </p>
+              </>
+            ) : (
+              <p>Server restarted mid-run. Pick the next stage below to resume.</p>
+            )}
+            {job?.check_results && job.check_results.length > 0 && (
+              <>
+                <h3>Render checks</h3>
+                <pre>{job.check_results.join("\n")}</pre>
+              </>
+            )}
+            {session.reel_b_exists && (
+              <>
+                <h3>Variant B</h3>
+                <video className="reel-player" controls src={fileUrl(name, "reel_b.mp4")} />
+                <p>
+                  <a href={fileUrl(name, "reel_b.mp4")} download>
+                    Download reel_b.mp4
+                  </a>
+                </p>
+                {job?.check_results_b && job.check_results_b.length > 0 && (
+                  <>
+                    <h3>Render checks (B)</h3>
+                    <pre>{job.check_results_b.join("\n")}</pre>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+          <div className="session-result-regen">
+            <RegenerateForm
+              name={name}
+              config={config}
+              defaultFromStage={session.default_from_stage}
+              onStarted={refresh}
+            />
+            <RegenHistory entries={session.history} />
+          </div>
+        </div>
       )}
 
       {!job?.awaiting_confirmation && job?.error && (

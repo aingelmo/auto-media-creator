@@ -32,7 +32,7 @@ export default function StageRail({
   stageStatuses: Record<StageName, StageStatus>;
   detail?: Record<StageName, string>;
 }) {
-  return (
+  const list = (
     <ul className="stage-rail">
       {stages.map((s) => {
         const status = stageStatuses[s];
@@ -59,5 +59,20 @@ export default function StageRail({
         );
       })}
     </ul>
+  );
+
+  // All done is the common, low-information state once a session is
+  // revisited to iterate — collapse it so the video/regenerate form (what
+  // you actually look at) isn't pushed down by 7 identical "done" rows.
+  const allDone = stages.every((s) => stageStatuses[s] === "done");
+  if (!allDone) return list;
+
+  return (
+    <details className="stage-rail-collapsed">
+      <summary>
+        pipeline done — {stages.length}/{stages.length} stages
+      </summary>
+      {list}
+    </details>
   );
 }
