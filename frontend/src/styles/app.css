@@ -336,12 +336,6 @@ button.primary {
   border-left-color: var(--fail);
 }
 
-.source-toggle {
-  display: flex;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-}
-
 /* Contact sheet: hook/music preview grids and candidate peak frames. */
 .contact-sheet {
   display: grid;

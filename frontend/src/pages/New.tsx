@@ -38,7 +38,6 @@ export default function New() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState("");
-  const [source, setSource] = useState<"upload" | "library">("upload");
   const [clipRefs, setClipRefs] = useState<string[]>([]);
   const [musicRef, setMusicRef] = useState("");
   const [step, setStep] = useState(0);
@@ -59,18 +58,20 @@ export default function New() {
     const clipsInput = field<HTMLInputElement>("clips");
     const musicInput = field<HTMLInputElement>("music");
     const logoInput = field<HTMLInputElement>("logo");
+    const uploadedClips = clipsInput?.files?.length ?? 0;
+    const uploadedMusic = musicInput?.files?.[0]?.name;
     setReview({
       name: field<HTMLInputElement>("name")?.value || "—",
       clips:
-        source === "library"
-          ? `${clipRefs.length} picked`
-          : `${clipsInput?.files?.length ?? 0} file(s)`,
-      music:
-        source === "library"
-          ? musicRef
-            ? fileName(musicRef)
-            : "—"
-          : (musicInput?.files?.[0]?.name ?? "—"),
+        clipRefs.length + uploadedClips > 0
+          ? [
+              clipRefs.length && `${clipRefs.length} picked`,
+              uploadedClips && `${uploadedClips} uploaded`,
+            ]
+              .filter(Boolean)
+              .join(", ")
+          : "—",
+      music: uploadedMusic ?? (musicRef ? fileName(musicRef) : "—"),
       theme: field<HTMLSelectElement>("theme")?.selectedOptions[0]?.textContent ?? "—",
       audience: field<HTMLSelectElement>("audience")?.selectedOptions[0]?.textContent ?? "—",
       brief: field<HTMLInputElement>("brief")?.value || "—",
@@ -79,7 +80,7 @@ export default function New() {
       handle: field<HTMLInputElement>("handle")?.value || "—",
       line: field<HTMLInputElement>("line")?.value || "—",
     });
-  }, [step, source, clipRefs, musicRef]);
+  }, [step, clipRefs, musicRef]);
 
   /** True if every required input/select visible in step `i` is filled in.
    * Reports the first invalid one so the browser's native bubble shows up
@@ -112,22 +113,20 @@ export default function New() {
         return;
       }
     }
-    if (source === "library" && (clipRefs.length === 0 || !musicRef)) {
+    const formData = new FormData(formRef.current);
+    const hasClipUpload = (formData.get("clips") as File | null)?.size;
+    const hasMusicUpload = (formData.get("music") as File | null)?.size;
+    if ((clipRefs.length === 0 && !hasClipUpload) || (!musicRef && !hasMusicUpload)) {
       setStep(0);
-      setError("Pick at least one clip and a music track from the library.");
+      setError("Pick or upload at least one clip and a music track.");
       return;
     }
 
     setUploading(true);
     setError(null);
     setStatus("Uploading...");
-    const formData = new FormData(formRef.current);
-    if (source === "library") {
-      formData.delete("clips");
-      formData.delete("music");
-      for (const ref of clipRefs) formData.append("clip_refs", ref);
-      formData.set("music_ref", musicRef);
-    }
+    for (const ref of clipRefs) formData.append("clip_refs", ref);
+    formData.set("music_ref", musicRef);
     saveFormMemory(formData);
     try {
       const { name } = await createSessionWithProgress(formData, (loaded, total) => {
@@ -168,45 +167,7 @@ export default function New() {
             Session name
             <input id="new-name" type="text" name="name" required pattern="[A-Za-z0-9_-]+" />
           </label>
-          <fieldset>
-            <legend>Clips &amp; music</legend>
-            <div className="source-toggle">
-              <button
-                type="button"
-                disabled={source === "upload"}
-                onClick={() => setSource("upload")}
-              >
-                Upload files
-              </button>
-              <button
-                type="button"
-                disabled={source === "library"}
-                onClick={() => setSource("library")}
-              >
-                Pick from past sessions
-              </button>
-            </div>
-            {source === "upload" ? (
-              <div className="form-grid">
-                <label htmlFor="new-clips">
-                  Clips / photos
-                  <input id="new-clips" type="file" name="clips" multiple required />
-                </label>
-                <label htmlFor="new-music">
-                  Music track (mp3, wav, or mp4/m4a)
-                  <input
-                    id="new-music"
-                    type="file"
-                    name="music"
-                    accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
-                    required
-                  />
-                </label>
-              </div>
-            ) : (
-              <MediaLibraryPicker onClipsChange={setClipRefs} onMusicChange={setMusicRef} />
-            )}
-          </fieldset>
+          <MediaLibraryPicker onClipsChange={setClipRefs} onMusicChange={setMusicRef} />
         </div>
 
         <div
