@@ -47,18 +47,21 @@ def _run_hooks_and_planner_stage(
     # Build the reel once, with no hook text, so hook-copy generation (#5.7)
     # can be fed the final, ordered clip list -- the reel the viewer will
     # actually see -- instead of the selector's pre-planning candidate pool.
-    job.detail["hooks"] = "building preview EDL"
-    base_edl = run_planner(
-        session_dir,
-        manifest,
-        candidates,
-        slots,
-        selection,
-        selection_meta,
-        threads=THREADS,
-        config={"hook_line_override": ""},
-        out_name="edl_base.json",
-    )
+    # This runs under the "planner" stage (not "hooks"), so the UI reflects
+    # that reel planning happens before hook-copy generation, not after.
+    with job.running("planner"):
+        job.detail["planner"] = "building preview EDL"
+        base_edl = run_planner(
+            session_dir,
+            manifest,
+            candidates,
+            slots,
+            selection,
+            selection_meta,
+            threads=THREADS,
+            config={"hook_line_override": ""},
+            out_name="edl_base.json",
+        )
     job.hook_slot = next(c["slot"] for c in base_edl["clips"] if c["role"] == "hook")
 
     while True:
