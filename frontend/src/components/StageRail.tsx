@@ -1,36 +1,26 @@
-import { Link } from "react-router-dom";
-import { fileUrl } from "../api";
 import type { StageName, StageStatus } from "../types";
 
-const STAGE_ROUTES: Partial<Record<StageName, string>> = {
-  ingest: "ingest",
-  candidates: "candidates",
-  selection: "selection",
-  planner: "planner",
-};
+const VIEWABLE_STAGES: ReadonlySet<StageName> = new Set([
+  "ingest",
+  "candidates",
+  "selection",
+  "hooks",
+  "planner",
+] satisfies StageName[]);
 
 /** `(n/m)` in a stage's detail text drives its progress bar, e.g. "encoding (12/19)". */
 const PROGRESS_RE = /\((\d+)\/(\d+)\)/;
 
-function StageLink({ name, stage }: { name: string; stage: StageName }) {
-  if (stage === "hooks") {
-    return <a href={fileUrl(name, "hooks.json")}>view</a>;
-  }
-  const route = STAGE_ROUTES[stage];
-  if (!route) return null;
-  return <Link to={`/sessions/${name}/${route}`}>view</Link>;
-}
-
 export default function StageRail({
-  name,
   stages,
   stageStatuses,
   detail,
+  onView,
 }: {
-  name: string;
   stages: readonly StageName[];
   stageStatuses: Record<StageName, StageStatus>;
   detail?: Record<StageName, string>;
+  onView: (stage: StageName) => void;
 }) {
   const list = (
     <ul className="stage-rail">
@@ -45,10 +35,12 @@ export default function StageRail({
             <span className="stage-detail">
               {status}
               {text ? ` — ${text}` : ""}
-              {(status === "done" || status === "failed") && (
+              {(status === "done" || status === "failed") && VIEWABLE_STAGES.has(s) && (
                 <>
                   {" — "}
-                  <StageLink name={name} stage={s} />
+                  <button type="button" className="link-button" onClick={() => onView(s)}>
+                    view
+                  </button>
                 </>
               )}
             </span>

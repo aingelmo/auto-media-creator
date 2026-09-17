@@ -71,10 +71,14 @@ pre {
   overflow-x: auto;
 }
 
+.table-scroll {
+  overflow-x: auto;
+  margin-bottom: var(--space-4);
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
-  margin-bottom: var(--space-4);
   font-size: var(--text-sm);
 }
 
@@ -402,4 +406,41 @@ button.primary {
   .session-result {
     display: block;
   }
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--signal);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.stage-modal {
+  position: relative;
+  width: min(900px, 90vw);
+  max-height: 85vh;
+  overflow: auto;
+  padding: var(--space-6);
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  color: var(--ink);
+}
+
+.stage-modal::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+
+.stage-modal-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  background: none;
+  border: none;
+  color: var(--ink-dim);
+  font-size: var(--text-xl);
+  line-height: 1;
+  cursor: pointer;
 }

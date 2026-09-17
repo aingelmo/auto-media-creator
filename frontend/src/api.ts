@@ -3,6 +3,7 @@ import type {
   CandidatesPayload,
   Config,
   Edl,
+  Hooks,
   Manifest,
   SelectionPayload,
   SessionDetail,
@@ -53,6 +54,9 @@ export const api = {
     fetch(`/api/sessions/${encodeURIComponent(name)}/selection`).then((r) =>
       asJson<SelectionPayload>(r),
     ),
+
+  getHooks: (name: string) =>
+    fetch(`/api/sessions/${encodeURIComponent(name)}/hooks`).then((r) => asJson<Hooks>(r)),
 
   getPlanner: (name: string) =>
     fetch(`/api/sessions/${encodeURIComponent(name)}/planner`).then((r) => asJson<Edl>(r)),

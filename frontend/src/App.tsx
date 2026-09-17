@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, Route, Routes, useNavigate } from "react-router-dom";
 import Candidates from "./pages/Candidates";
+import Hooks from "./pages/Hooks";
 import Ingest from "./pages/Ingest";
 import Index from "./pages/Index";
 import New from "./pages/New";
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/sessions/:name" element={<Session />} />
           <Route path="/sessions/:name/ingest" element={<Ingest />} />
           <Route path="/sessions/:name/candidates" element={<Candidates />} />
+          <Route path="/sessions/:name/hooks" element={<Hooks />} />
           <Route path="/sessions/:name/selection" element={<Selection />} />
           <Route path="/sessions/:name/planner" element={<Planner />} />
         </Routes>

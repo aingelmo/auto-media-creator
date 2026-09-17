@@ -3,18 +3,33 @@ import { useParams } from "react-router-dom";
 import { api, fileUrl, reelUrl } from "../api";
 import HookPicker from "../components/HookPicker";
 import LowCandidatesPause from "../components/LowCandidatesPause";
+import Modal from "../components/Modal";
 import MusicPicker from "../components/MusicPicker";
 import RegenerateForm from "../components/RegenerateForm";
 import RegenHistory from "../components/RegenHistory";
 import StageRail from "../components/StageRail";
 import StartForm from "../components/StartForm";
 import VerificationPause from "../components/VerificationPause";
-import type { Config, SessionDetail } from "../types";
+import type { Config, SessionDetail, StageName } from "../types";
+import Candidates from "./Candidates";
+import Hooks from "./Hooks";
+import Ingest from "./Ingest";
+import Planner from "./Planner";
+import Selection from "./Selection";
+
+const STAGE_VIEWS: Partial<Record<StageName, React.ComponentType>> = {
+  ingest: Ingest,
+  candidates: Candidates,
+  selection: Selection,
+  hooks: Hooks,
+  planner: Planner,
+};
 
 export default function Session() {
   const { name = "" } = useParams();
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
+  const [viewStage, setViewStage] = useState<StageName | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
@@ -77,11 +92,22 @@ export default function Session() {
     <>
       <h2>{name}</h2>
       <StageRail
-        name={name}
         stages={session.stages}
         stageStatuses={session.stage_statuses}
         detail={job?.detail}
+        onView={setViewStage}
       />
+
+      {viewStage &&
+        STAGE_VIEWS[viewStage] &&
+        (() => {
+          const StageView = STAGE_VIEWS[viewStage];
+          return (
+            <Modal onClose={() => setViewStage(null)}>
+              <StageView />
+            </Modal>
+          );
+        })()}
 
       {job && job.awaiting_confirmation && job.pause_kind === "music_choice" && (
         <MusicPicker name={name} candidates={job.music_candidates} onDone={refresh} />

@@ -43,6 +43,12 @@ def selection_page(name: str) -> dict:
     return {"attempts": [json.loads(p.read_text()) for p in attempts]}
 
 
+@router.get("/api/sessions/{name}/hooks")
+def hooks_page(name: str) -> dict:
+    """`hooks.json` for debugging the hook-line stage."""
+    return load_json(name, "hooks.json")
+
+
 @router.get("/api/sessions/{name}/planner")
 def planner_page(name: str) -> dict:
     """`edl.json`'s clip list for debugging the planner stage."""

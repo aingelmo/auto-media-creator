@@ -229,3 +229,6 @@ __marimo__/
 # Playwright CLI output and local machine config
 .playwright-cli/
 .playwright/
+
+# Vite-built frontend SPA (build locally, don't commit)
+/src/edl_agent/web/static/
