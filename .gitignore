@@ -232,3 +232,4 @@ __marimo__/
 
 # Vite-built frontend SPA (build locally, don't commit)
 /src/edl_agent/web/static/
+CLAUDE.local.md
