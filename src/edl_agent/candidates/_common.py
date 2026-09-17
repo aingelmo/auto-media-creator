@@ -38,6 +38,11 @@ CALM_MAX_PER_CLIP = 3
 PEAK_FRAME_OFFSETS_S = (-0.3, 0.0, 0.3)
 PEAK_FRAME_SIDE_PX = 512
 
+MIN_SUBJECT_AREA = 0.02  # frame fraction; below this the subject reads as
+# "far away" (#4.3 LLM rejection bucket: "sujeto pequeño"/"plano lejano").
+# p5 of subject_bbox areas across existing sessions is ~0.028, so this cuts
+# only the bottom few percent.
+
 
 def edge_margin_s(clip_duration_s: float) -> float:
     """Compute the edge-exclusion margin for a clip, per #4.3.2.
@@ -52,3 +57,25 @@ def edge_margin_s(clip_duration_s: float) -> float:
         a usable window.
     """
     return 0.5 if clip_duration_s >= 5.0 else 0.25
+
+
+def bbox_area(bbox: tuple | None) -> float:
+    """Fraction of frame area covered by `bbox`, or 1.0 if untracked."""
+    if bbox is None:
+        return 1.0
+    x0, y0, x1, y1 = bbox
+    return max(0.0, x1 - x0) * max(0.0, y1 - y0)
+
+
+def nearest_index(features: dict, t: float) -> int:
+    """Sample index in `features["t_s"]` closest to timestamp `t`."""
+    t_s = features["t_s"]
+    return min(range(len(t_s)), key=lambda i: abs(t_s[i] - t))
+
+
+def window_bbox(features: dict, w: dict) -> tuple | None:
+    """Subject bbox for window `w` (peak: by `index`; calm: nearest sample)."""
+    i = w.get("index")
+    if i is None:
+        i = nearest_index(features, w["t_peak"])
+    return features["subject_bbox"][i]

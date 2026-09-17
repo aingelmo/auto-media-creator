@@ -19,6 +19,8 @@ from edl_agent.candidates._common import (
     PEAK_MAX_PER_CLIP,
     PEAK_NMS_IOU_MAX,
     PEAK_PHASH_MAX_DISTANCE,
+    bbox_area,
+    window_bbox,
 )
 
 
@@ -88,21 +90,26 @@ def _probe_frame(proxy_path: str, t: float, out_path: Path) -> None:
     subprocess.run(cmd, check=True, capture_output=True, text=True)
 
 
-def dedup_windows_by_phash(windows: list[dict], proxy_path: str) -> list[dict]:
+def dedup_windows_by_phash(
+    windows: list[dict], proxy_path: str, features: dict
+) -> list[dict]:
     """Drop visually near-identical windows via perceptual hash, per #4.3.
 
     Complements `suppress_peak_windows`: two peaks far enough apart in time
     to survive the temporal-overlap NMS can still be the same visual moment
     (the same rep with a brief drop in speed between, or a static hold
     logged as two separate calm runs). Extracts one small probe frame per
-    window at `t_peak` (cheaper than the final 3-frame extraction) and
-    drops any window whose probe frame is within `PEAK_PHASH_MAX_DISTANCE`
-    Hamming bits of an earlier-kept one's, using the same `imagehash.phash`
-    convention as `verify.py`'s `_phash`.
+    window at `t_peak` (cheaper than the final 3-frame extraction) and,
+    among windows within `PEAK_PHASH_MAX_DISTANCE` Hamming bits of each
+    other, keeps the one with the largest subject bbox (the closest framing
+    of near-duplicate shots; #4.3 LLM rejection bucket: "sujeto pequeño"),
+    using the same `imagehash.phash` convention as `verify.py`'s `_phash`.
 
     Args:
         windows: Window dicts (peak or calm), all from the same clip.
         proxy_path: Path to the proxy video to probe frames from.
+        features: Feature series for the clip, used to look up each
+            window's subject bbox (see `_common.window_bbox`).
 
     Returns:
         Surviving windows, in their original relative (temporal) order.
@@ -116,9 +123,11 @@ def dedup_windows_by_phash(windows: list[dict], proxy_path: str) -> list[dict]:
             _probe_frame(proxy_path, w["t_peak"], probe_path)
             hashes.append(imagehash.phash(Image.open(probe_path)))
 
-    kept: list[int] = []
-    for i in range(len(windows)):
+    areas = [bbox_area(window_bbox(features, w)) for w in windows]
+    order = sorted(range(len(windows)), key=lambda i: areas[i], reverse=True)
+    kept: set[int] = set()
+    for i in order:
         if any(hashes[i] - hashes[k] <= PEAK_PHASH_MAX_DISTANCE for k in kept):
             continue
-        kept.append(i)
-    return [windows[i] for i in kept]
+        kept.add(i)
+    return [w for i, w in enumerate(windows) if i in kept]

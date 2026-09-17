@@ -54,7 +54,34 @@ def test_dedup_windows_by_phash_drops_visual_duplicate(monkeypatch) -> None:
         {"kind": "peak", "t_peak": 0.1, "window": [0.1, 1.1]},  # near-dup of the above
         {"kind": "peak", "t_peak": 9.0, "window": [9.0, 10.0]},
     ]
+    features = {
+        "t_s": [0.0, 0.1, 9.0],
+        "subject_bbox": [(0.4, 0.2, 0.6, 0.8)] * 3,  # equal area: ties keep the first
+    }
 
-    kept = dedup_windows_by_phash(windows, "unused.mp4")
+    kept = dedup_windows_by_phash(windows, "unused.mp4", features)
 
     assert [w["t_peak"] for w in kept] == [0.0, 9.0]
+
+
+def test_dedup_windows_by_phash_prefers_larger_subject_on_duplicate(
+    monkeypatch,
+) -> None:
+    def fake_probe(proxy_path, t, out_path) -> None:
+        arr = np.random.default_rng(1).integers(0, 256, (96, 128, 3), dtype=np.uint8)
+        Image.fromarray(arr).save(out_path)  # identical content: always a "duplicate"
+
+    monkeypatch.setattr("edl_agent.candidates.dedup._probe_frame", fake_probe)
+
+    windows = [
+        {"kind": "peak", "t_peak": 0.0, "window": [0.0, 1.0]},  # small/far subject
+        {"kind": "peak", "t_peak": 5.0, "window": [5.0, 6.0]},  # closer framing
+    ]
+    features = {
+        "t_s": [0.0, 5.0],
+        "subject_bbox": [(0.45, 0.45, 0.55, 0.55), (0.1, 0.1, 0.9, 0.9)],
+    }
+
+    kept = dedup_windows_by_phash(windows, "unused.mp4", features)
+
+    assert [w["t_peak"] for w in kept] == [5.0]

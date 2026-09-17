@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from edl_agent.candidates._common import (
+    MIN_SUBJECT_AREA,
+    bbox_area,
+    nearest_index,
+    window_bbox,
+)
 from edl_agent.candidates.calm import find_calm_windows
 from edl_agent.candidates.dedup import dedup_windows_by_phash, suppress_peak_windows
 from edl_agent.candidates.frames import build_contact_sheet, extract_peak_frames
@@ -79,17 +85,16 @@ def build_video_candidates(
         find_peak_windows(features, clip_duration_s, scene_cuts_s), features
     )
     windows = dedup_windows_by_phash(
-        peak_windows + find_calm_windows(features), proxy_path
+        peak_windows + find_calm_windows(features), proxy_path, features
     )
+    windows = [
+        w for w in windows if bbox_area(window_bbox(features, w)) >= MIN_SUBJECT_AREA
+    ]
     out = []
     for n, w in enumerate(windows):
         cand_id = f"c{id_start + n:02d}"
         i = w.get("index")
-        bbox = (
-            features["subject_bbox"][i]
-            if i is not None
-            else _bbox_at(features, w["t_peak"])
-        )
+        bbox = window_bbox(features, w)
         kp_speed = (
             features["kp_speed"][i]
             if i is not None
@@ -97,7 +102,7 @@ def build_video_candidates(
         )
         kp_speed_abs = (
             features.get("kp_speed_abs", [0.0] * len(features["t_s"]))[
-                i if i is not None else _nearest_index(features, w["t_peak"])
+                i if i is not None else nearest_index(features, w["t_peak"])
             ]
         )
         sharpness = (
@@ -133,6 +138,7 @@ def build_video_candidates(
                 "motion_bg": motion_bg,
                 "sharpness": sharpness,
                 "subject_bbox": list(bbox) if bbox else [0.0, 0.0, 1.0, 1.0],
+                "subject_area": round(bbox_area(bbox), 3),
                 "multi_subject": bool(multi_subject),
                 "score_cv": score_cv(kp_speed, sharpness, bbox, w["kind"]),
                 "admits_slots": admits_slots(tuple(w["window"]), slots, speed),
@@ -143,17 +149,8 @@ def build_video_candidates(
     return out
 
 
-def _nearest_index(features: dict, t: float) -> int:
-    t_s = features["t_s"]
-    return min(range(len(t_s)), key=lambda i: abs(t_s[i] - t))
-
-
-def _bbox_at(features: dict, t: float) -> tuple | None:
-    return features["subject_bbox"][_nearest_index(features, t)]
-
-
 def _value_at(features: dict, key: str, t: float) -> float:
-    return features[key][_nearest_index(features, t)]
+    return features[key][nearest_index(features, t)]
 
 
 def build_image_candidate(

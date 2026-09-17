@@ -54,6 +54,24 @@ def motion_series(
     return motion_bg, motion
 
 
+def _subject_roi(
+    gray: np.ndarray, bbox: tuple | None, visible: bool
+) -> np.ndarray:
+    """Crop `gray` to `bbox` (normalized coords), or return it uncropped.
+
+    Falls back to the full frame when no subject is visible, a reasonable
+    default since `subject_visible` already excludes those instants from
+    the candidate filters that consume the sharpness series.
+    """
+    if not (visible and bbox is not None):
+        return gray
+    h, w = gray.shape
+    x0, y0, x1, y1 = bbox
+    x0i, y0i = int(x0 * w), int(y0 * h)
+    x1i, y1i = max(x0i + 1, int(x1 * w)), max(y0i + 1, int(y1 * h))
+    return gray[y0i:y1i, x0i:x1i]
+
+
 def sharpness_series(
     frames: list[np.ndarray],
     subject_bbox: list[tuple | None],
@@ -78,14 +96,8 @@ def sharpness_series(
     """
     out = np.zeros(len(frames))
     for i, frame in enumerate(frames):
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        roi = gray
-        bbox = subject_bbox[i]
-        if subject_visible[i] and bbox is not None:
-            h, w = gray.shape
-            x0, y0, x1, y1 = bbox
-            x0i, y0i = int(x0 * w), int(y0 * h)
-            x1i, y1i = max(x0i + 1, int(x1 * w)), max(y0i + 1, int(y1 * h))
-            roi = gray[y0i:y1i, x0i:x1i]
+        roi = _subject_roi(
+            cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), subject_bbox[i], subject_visible[i]
+        )
         out[i] = float(cv2.Laplacian(roi, cv2.CV_64F).var()) if roi.size else 0.0
     return out
