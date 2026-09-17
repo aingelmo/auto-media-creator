@@ -103,9 +103,9 @@ export interface ManifestSource {
 
 export interface Manifest {
   sources: ManifestSource[];
-  warnings: string[];
+  warnings?: string[];
   target: unknown;
-  music: unknown;
+  music?: unknown;
 }
 
 export interface Candidate {

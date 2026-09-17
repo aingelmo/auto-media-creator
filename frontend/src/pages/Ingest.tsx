@@ -46,7 +46,7 @@ export default function Ingest() {
           ))}
         </tbody>
       </table>
-      {manifest.warnings.length > 0 && (
+      {manifest.warnings && manifest.warnings.length > 0 && (
         <>
           <h3>Warnings</h3>
           <ul>
