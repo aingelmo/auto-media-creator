@@ -184,6 +184,10 @@ def build_slots(
     # is never merged backward). Merging slot j (bounds[j]..bounds[j+1])
     # into slot j-1 means deleting boundary bounds[j].
     bounds = list(slot_bounds)
+    # The hook (bounds[0]..bounds[1]) has no predecessor to merge backward
+    # into, so a short hook is merged forward into develop/close instead.
+    if len(bounds) > 2 and bounds[1] - bounds[0] < MIN_SLOT_FRAMES:
+        del bounds[1]
     changed = True
     while changed:
         changed = False

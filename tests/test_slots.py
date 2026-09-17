@@ -86,6 +86,19 @@ def test_trailing_gap_falls_back_to_uniform_grid() -> None:
     assert max_slot_s <= UNIFORM_GRID_S + 0.1
 
 
+def test_short_hook_merges_forward() -> None:
+    # Irregular beat spacing puts the hook's first 3-beat group at frame 28
+    # (< MIN_SLOT_FRAMES); the hook has no predecessor to merge into, so it
+    # must merge forward into slot 1 instead of surviving as a 28-frame slot.
+    beats_s = [0.0, 1 / 30, 15 / 30, 28 / 30, 68 / 30, 108 / 30]
+    result = build_slots(
+        duration_s=15.0, tempo_bpm=133.9, beats_s=beats_s, confident=True
+    )
+    slots = result["slots"]
+    assert slots[0]["role"] == "hook"
+    assert slots[0]["end_f"] - slots[0]["start_f"] >= 30
+
+
 def test_single_slot_is_error() -> None:
     with pytest.raises(ValueError):
         build_slots(duration_s=0.5, tempo_bpm=60.0, beats_s=[0.0], confident=True)
