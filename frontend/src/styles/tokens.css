@@ -37,6 +37,20 @@
   color-scheme: dark;
 }
 
+[data-theme="light"] {
+  --surround: #f4f2ee;
+  --panel: #ffffff;
+  --panel-raised: #ececea;
+  --rule: #d8d5cf;
+  --ink: #1c1c1c;
+  --ink-dim: #6b665c;
+  --signal: #0f8a90;
+  --signal-dim: #cfeceb;
+  --fail: #b23029;
+  --fail-dim: #f6dcda;
+  color-scheme: light;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

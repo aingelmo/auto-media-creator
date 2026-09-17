@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 import Candidates from "./pages/Candidates";
 import Ingest from "./pages/Ingest";
@@ -7,6 +8,23 @@ import Planner from "./pages/Planner";
 import Selection from "./pages/Selection";
 import Session from "./pages/Session";
 
+function ThemeToggle() {
+  const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? "dark");
+
+  const toggle = () => {
+    const next = theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem("theme", next);
+    setTheme(next);
+  };
+
+  return (
+    <button type="button" onClick={toggle}>
+      {theme === "light" ? "dark mode" : "light mode"}
+    </button>
+  );
+}
+
 export default function App() {
   return (
     <div className="app-shell" style={{ flexDirection: "column", width: "100%" }}>
@@ -14,6 +32,7 @@ export default function App() {
         <Link to="/">
           <h1>edl-agent</h1>
         </Link>
+        <ThemeToggle />
       </header>
       <main className="app-body">
         <Routes>
