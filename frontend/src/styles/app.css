@@ -202,6 +202,11 @@ button.primary {
   color: var(--ink);
 }
 
+.app-header-actions {
+  display: flex;
+  gap: var(--space-4);
+}
+
 .app-body {
   padding: var(--space-6);
   max-width: 1100px;

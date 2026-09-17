@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, Route, Routes, useNavigate } from "react-router-dom";
 import Candidates from "./pages/Candidates";
 import Ingest from "./pages/Ingest";
 import Index from "./pages/Index";
@@ -26,13 +26,20 @@ function ThemeToggle() {
 }
 
 export default function App() {
+  const navigate = useNavigate();
+
   return (
     <div className="app-shell" style={{ flexDirection: "column", width: "100%" }}>
       <header className="app-header">
         <Link to="/">
           <h1>edl-agent</h1>
         </Link>
-        <ThemeToggle />
+        <div className="app-header-actions">
+          <button type="button" onClick={() => navigate("/new")}>
+            New session
+          </button>
+          <ThemeToggle />
+        </div>
       </header>
       <main className="app-body">
         <Routes>
