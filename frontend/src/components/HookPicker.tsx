@@ -57,7 +57,7 @@ export default function HookPicker({
               <input
                 type="radio"
                 name="hook_line"
-                checked={selected === "" && hooks.hooks.length === 0}
+                checked={selected === ""}
                 onChange={() => setSelected("")}
               />{" "}
               no text
