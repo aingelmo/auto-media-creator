@@ -18,9 +18,11 @@ from edl_agent.web.routes.config import save_brand
 from edl_agent.web.state import (
     PROVIDER_API_KEY_ENV,
     UI_PROVIDERS,
+    append_history,
     job_payload,
     jobs,
     lock,
+    read_history,
     session_status,
     stage_statuses,
 )
@@ -198,11 +200,25 @@ def regenerate_session(
     if from_stage not in STAGES:
         raise HTTPException(status_code=400, detail=f"unknown stage {from_stage!r}")
 
-    if logo is not None and logo.filename:
+    brand_updated = logo is not None and bool(logo.filename)
+    if brand_updated:
         save_brand(session_dir, logo, handle, line)
         if STAGES.index(from_stage) > STAGES.index("planner"):
             from_stage = "planner"
     clear_stage_artifacts(session_dir, from_stage)
+    append_history(
+        name,
+        {
+            "from_stage": from_stage,
+            "provider": provider,
+            "model": model,
+            "theme": theme,
+            "audience": audience,
+            "brief": brief.strip(),
+            "hook_line": clean_hook_line(hook_line),
+            "brand_updated": brand_updated,
+        },
+    )
 
     job = JobState()
     with lock:
@@ -244,6 +260,7 @@ def session_page(name: str) -> dict:
         "providers": UI_PROVIDERS,
         "default_models": DEFAULT_MODELS,
         "default_from_stage": default_from_stage,
+        "history": read_history(name),
     }
 
 

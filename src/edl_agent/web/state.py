@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import threading
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException
@@ -85,6 +86,38 @@ def stage_statuses(name: str) -> dict[str, str]:
         else "pending"
         for stage in STAGES
     }
+
+
+HISTORY_LIMIT = 20
+
+
+def append_history(name: str, entry: dict[str, Any]) -> None:
+    """Append a regenerate-request record to a session's `history.jsonl`.
+
+    Args:
+        name: Session directory name under `SESSIONS_DIR`.
+        entry: JSON-serialisable record; a UTC `ts` field is added.
+    """
+    path = SESSIONS_DIR / name / "history.jsonl"
+    record = {"ts": datetime.now(UTC).isoformat(timespec="seconds"), **entry}
+    with path.open("a") as f:
+        f.write(json.dumps(record) + "\n")
+
+
+def read_history(name: str) -> list[dict[str, Any]]:
+    """Read a session's regenerate history, most recent first.
+
+    Args:
+        name: Session directory name under `SESSIONS_DIR`.
+
+    Returns:
+        Up to `HISTORY_LIMIT` records, newest first. Empty if none logged.
+    """
+    path = SESSIONS_DIR / name / "history.jsonl"
+    if not path.exists():
+        return []
+    lines = path.read_text().splitlines()[-HISTORY_LIMIT:]
+    return [json.loads(line) for line in reversed(lines)]
 
 
 def load_json(name: str, filename: str) -> dict:
