@@ -10,7 +10,7 @@ import requests
 
 from edl_agent.selector._common import DEFAULTS
 from edl_agent.selector.client import _usage_dict
-from edl_agent.selector.pricing import _cost_usd
+from edl_agent.selector.pricing import _cost_usd, append_cost_entry
 from edl_agent.selector.prompts import (
     REINFORCED_SUFFIX,
     admissible_candidates,
@@ -94,6 +94,7 @@ def select(
             )
             usage = _usage_dict(getattr(interaction, "usage", None))
             cost = _cost_usd(usage, config["model"])
+            append_cost_entry(session_dir, "selection", config["model"], usage, cost)
             attempt_record = {
                 "attempt": attempt,
                 "status": interaction.status,

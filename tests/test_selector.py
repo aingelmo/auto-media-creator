@@ -131,6 +131,31 @@ def test_select_returns_selection_on_first_complete_attempt(tmp_path) -> None:
     assert not (tmp_path / "selection_attempt_2.json").exists()
 
 
+def test_select_appends_to_cost_ledger_across_regenerates(tmp_path) -> None:
+    jpg = tmp_path / "f.jpg"
+    jpg.write_bytes(b"x")
+    candidates_json = {"candidates": [_cand("c1", [0], jpg)]}
+
+    for _ in range(2):
+        client = _FakeClient(
+            [_FakeInteraction("completed", json.dumps(_selection_payload()))]
+        )
+        (tmp_path / "selection.json").write_text(json.dumps({}))
+        select(
+            candidates_json,
+            _slots_json(),
+            duration_s=20.0,
+            client=client,
+            session_dir=tmp_path,
+        )
+        (tmp_path / "selection.json").unlink()  # regenerate clears this, not the ledger
+
+    lines = (tmp_path / "costs.jsonl").read_text().splitlines()
+    assert len(lines) == 2
+    assert all(json.loads(line)["stage"] == "selection" for line in lines)
+    assert all(json.loads(line)["cost_usd"] > 0 for line in lines)
+
+
 def test_select_retries_once_on_incomplete_then_succeeds(tmp_path) -> None:
     jpg = tmp_path / "f.jpg"
     jpg.write_bytes(b"x")

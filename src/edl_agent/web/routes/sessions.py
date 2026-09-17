@@ -25,6 +25,7 @@ from edl_agent.web.state import (
     read_history,
     session_status,
     stage_statuses,
+    total_cost_usd,
 )
 
 router = APIRouter()
@@ -295,6 +296,7 @@ def session_page(name: str) -> dict:
         "default_models": DEFAULT_MODELS,
         "default_from_stage": default_from_stage,
         "history": read_history(name),
+        "total_cost_usd": total_cost_usd(name),
     }
 
 

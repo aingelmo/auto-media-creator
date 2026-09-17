@@ -468,6 +468,12 @@ button.primary {
   min-height: 0;
 }
 
+.cost-badge {
+  font-size: 0.6em;
+  font-weight: normal;
+  color: var(--ink-dim);
+}
+
 .link-button {
   background: none;
   border: none;

@@ -90,7 +90,9 @@ export default function Session() {
 
   return (
     <div className="session-page">
-      <h2>{name}</h2>
+      <h2>
+        {name} <span className="cost-badge">${session.total_cost_usd.toFixed(4)}</span>
+      </h2>
       <StageRail
         stages={session.stages}
         stageStatuses={session.stage_statuses}

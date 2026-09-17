@@ -104,6 +104,7 @@ export interface SessionDetail {
   default_models: Record<string, string>;
   default_from_stage: string;
   history: HistoryEntry[];
+  total_cost_usd: number;
 }
 
 export interface StatusPayload {

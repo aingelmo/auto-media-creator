@@ -500,3 +500,15 @@ def test_clear_stage_artifacts_from_selection_keeps_earlier_stages_and_backs_up_
     assert not (tmp_path / "reel.mp4").exists()
     assert not (tmp_path / "segments").exists()
     assert (tmp_path / "reel.prev.mp4").read_text() == "old reel"
+
+
+def test_clear_stage_artifacts_does_not_touch_cost_ledger(tmp_path) -> None:
+    """A regenerate clears selection.json/hooks.json but must never clear
+    costs.jsonl, or the lifetime cost total would reset on every regenerate."""
+    (tmp_path / "selection.json").write_text("{}")
+    (tmp_path / "costs.jsonl").write_text('{"stage": "selection", "cost_usd": 0.01}\n')
+
+    clear_stage_artifacts(tmp_path, "selection")
+
+    assert not (tmp_path / "selection.json").exists()
+    assert (tmp_path / "costs.jsonl").exists()

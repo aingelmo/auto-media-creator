@@ -19,7 +19,7 @@ import requests
 
 from edl_agent.selection.s_checks import clean_hook_line, numbers_in
 from edl_agent.selector.client import _usage_dict
-from edl_agent.selector.pricing import _cost_usd
+from edl_agent.selector.pricing import _cost_usd, append_cost_entry
 from edl_agent.selector.prompts import THEMES, build_parts
 
 DEVICES: tuple[str, ...] = ("pregunta", "contraste", "detalle", "afirmacion", "tu")
@@ -288,7 +288,9 @@ def generate_hook_copy(
                 generation_config={"temperature": 0.7, "max_output_tokens": 768},
             )
             usage = _usage_dict(getattr(interaction, "usage", None))
-            cost += _cost_usd(usage, model)
+            call_cost = _cost_usd(usage, model)
+            cost += call_cost
+            append_cost_entry(session_dir, "hooks", model, usage, call_cost)
             if interaction.status == "incomplete":
                 raw = {}
                 continue

@@ -120,6 +120,25 @@ def read_history(name: str) -> list[dict[str, Any]]:
     return [json.loads(line) for line in reversed(lines)]
 
 
+def total_cost_usd(name: str) -> float:
+    """Sum a session's lifetime LLM cost from its `costs.jsonl` ledger.
+
+    Unlike `selection_meta.json`/`hooks.json`'s `cost_usd` (only the latest
+    run), this ledger (`selector.pricing.append_cost_entry`) is never
+    cleared by a regenerate, so it covers every attempt ever made.
+
+    Args:
+        name: Session directory name under `SESSIONS_DIR`.
+
+    Returns:
+        Total USD cost; `0.0` if no calls have been logged yet.
+    """
+    path = SESSIONS_DIR / name / "costs.jsonl"
+    if not path.exists():
+        return 0.0
+    return sum(json.loads(line)["cost_usd"] for line in path.read_text().splitlines())
+
+
 def load_json(name: str, filename: str) -> dict:
     """Read and parse a session artifact JSON file, or 404.
 
