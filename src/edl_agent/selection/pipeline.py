@@ -6,6 +6,10 @@ from edl_agent.selection._common import _slot_indices
 from edl_agent.selection.fallback import fallback_close, fallback_develop, fallback_hook
 from edl_agent.selection.s_checks import apply_s_checks
 
+# Extra develop candidates to pull beyond `develop_k`, so `select_develop`'s
+# packer has spare options when the LLM's own picks geometrically collide.
+DEVELOP_PACKING_SLACK = 2
+
 
 def _preempt_develop(
     cleaned: list[dict], candidate_id: str, warnings: list[str], role: str
@@ -127,5 +131,24 @@ def build_selected(
         used_ids.update(e["candidate_id"] for e in extra)
         if "develop" not in fallback_roles:
             fallback_roles.append("develop")
+        develop_count += len(extra)
+
+    # `assign_slots.select_develop` packs by slot duration/timing fit, not
+    # just count -- an LLM selection that already meets `develop_k` can
+    # still fall short there (e.g. several picks only fit the same one
+    # slot). Pad a few spare candidates beyond `develop_k` so the packer
+    # has other options to fall back on instead of raising. Doesn't affect
+    # `fallback_roles`/warnings since these are slack, not a filled gap.
+    if develop_k > 0:
+        padding = fallback_develop(
+            candidates,
+            _slot_indices(slots, "develop"),
+            used_ids,
+            max(0, (develop_k + DEVELOP_PACKING_SLACK) - develop_count),
+        )
+        for i, entry in enumerate(padding):
+            entry["rank"] = develop_count + i + 1
+        cleaned.extend(padding)
+        used_ids.update(e["candidate_id"] for e in padding)
 
     return cleaned, warnings, fallback_roles

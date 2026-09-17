@@ -553,6 +553,31 @@ def test_select_develop_tries_other_admissible_slots_before_rejecting() -> None:
     assert [s["candidate_id"] for s in taken] == ["c1"]
 
 
+def test_select_develop_constrained_first_avoids_starving_tight_candidate() -> None:
+    # slot0 is short, slot1 is long. c2's window only admits slot0; c1's
+    # window admits both. Rank order alone (c1 first) would let c1 grab
+    # slot0 and leave c2 stranded with no admissible slot at all -- the
+    # fix must place the tighter-fit candidate first so both land.
+    slots = [
+        {"start_f": 0, "end_f": 10, "role": "develop", "beats_rel_f": [0]},
+        {"start_f": 10, "end_f": 110, "role": "develop", "beats_rel_f": [0]},
+    ]
+    candidates_by_id = {
+        "c1": _candidate("c1", "a.mov", "peak", 2.0, (0.0, 5.0)),  # fits both
+        "c2": _candidate("c2", "b.mov", "peak", 0.2, (0.0, 0.5)),  # fits only slot0
+    }
+    selected = [
+        _selected("c1", "develop", 1, exercise="squat"),
+        _selected("c2", "develop", 2, exercise="deadlift"),
+    ]
+
+    taken = select_develop(selected, candidates_by_id, slots, [], DEFAULT_CONFIG)
+
+    assert {s["candidate_id"] for s in taken} == {"c1", "c2"}
+    # Returned in rank order regardless of the packing order used internally.
+    assert [s["candidate_id"] for s in taken] == ["c1", "c2"]
+
+
 def test_select_develop_relaxation_cant_manufacture_missing_candidates() -> None:
     # Only 2 develop candidates exist at all for 3 slots -- no relaxation
     # stage can conjure a 3rd, so assign_slots must still raise.

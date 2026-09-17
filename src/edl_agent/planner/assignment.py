@@ -203,9 +203,20 @@ def select_develop(
     """
     k = len(develop_slots)
     free_slots = list(develop_slots)
+
+    def _slot_options(s: dict) -> int:
+        window = tuple(candidates_by_id[s["candidate_id"]]["window"])
+        return sum(
+            1 for sl in develop_slots if admits(window, sl["end_f"] - sl["start_f"], 1.0)
+        )
+
+    # Most-constrained-first: a candidate whose window fits few slots must be
+    # placed before a flexible one grabs its only option (#P7-style greedy
+    # order bug -- a wide-window, high-rank candidate would otherwise starve
+    # a tight-window, lower-rank one out of its single viable slot).
     pool = sorted(
         (s for s in selected if s["role"] == "develop"),
-        key=lambda s: s["rank"],
+        key=lambda s: (_slot_options(s), s["rank"]),
     )
     default_gap_s = config["adjacency_gap_s"]
     relaxed_gap_s = max(default_gap_s, 1.0)  # #6.2.5 stage 2: same-src needs more room
@@ -232,7 +243,9 @@ def select_develop(
             taken = candidate_taken
         if len(taken) >= k:
             break
-    return taken
+    # `pool` is constrained-first for packing, but callers (place_develop_arc)
+    # expect `taken` in rank order.
+    return sorted(taken, key=lambda s: s["rank"])
 
 
 def arc_order(k: int) -> list[int]:
