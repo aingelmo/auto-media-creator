@@ -117,12 +117,12 @@ async def create_session(
                 status_code=400,
                 detail=f"Music must be one of {sorted(MUSIC_EXTS)}, got {music_ext!r}.",
             )
-        with (music_dir / f"track{music_ext}").open("wb") as f:
+        music_name = Path(music.filename).name
+        with (music_dir / music_name).open("wb") as f:
             shutil.copyfileobj(music.file, f)
         have_music = True
     elif music_ref:
-        music_ext = Path(music_ref).suffix.lower()
-        _link_ref(music_ref, music_dir, f"track{music_ext}")
+        _link_ref(music_ref, music_dir, Path(music_ref).name)
         have_music = True
     if not have_music:
         raise HTTPException(status_code=400, detail="a music track is required")
