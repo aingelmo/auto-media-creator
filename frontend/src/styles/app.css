@@ -450,6 +450,27 @@ button.primary {
   align-items: center;
 }
 
+.render-checks {
+  margin-top: var(--space-6);
+}
+
+.render-checks > summary {
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+}
+
+.render-checks h3 {
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.render-checks pre {
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: var(--text-xs);
+}
+
 .session-result > .session-result-regen {
   flex: 1 1 320px;
   min-width: 0;

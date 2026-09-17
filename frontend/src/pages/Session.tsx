@@ -151,12 +151,6 @@ export default function Session() {
               ) : (
                 <p>Server restarted mid-run. Pick the next stage below to resume.</p>
               )}
-              {job?.check_results && job.check_results.length > 0 && (
-                <>
-                  <h3>Render checks</h3>
-                  <pre>{job.check_results.join("\n")}</pre>
-                </>
-              )}
             </div>
             {session.reel_b_exists && (
               <div className="reel-variant">
@@ -167,12 +161,6 @@ export default function Session() {
                     Download reel_b.mp4
                   </a>
                 </p>
-                {job?.check_results_b && job.check_results_b.length > 0 && (
-                  <>
-                    <h3>Render checks (B)</h3>
-                    <pre>{job.check_results_b.join("\n")}</pre>
-                  </>
-                )}
               </div>
             )}
           </div>
@@ -184,6 +172,24 @@ export default function Session() {
               onStarted={refresh}
             />
             <RegenHistory entries={session.history} />
+            {((job?.check_results && job.check_results.length > 0) ||
+              (job?.check_results_b && job.check_results_b.length > 0)) && (
+              <details className="render-checks">
+                <summary>render checks</summary>
+                {job?.check_results && job.check_results.length > 0 && (
+                  <>
+                    <h3>Render checks</h3>
+                    <pre>{job.check_results.join("\n")}</pre>
+                  </>
+                )}
+                {job?.check_results_b && job.check_results_b.length > 0 && (
+                  <>
+                    <h3>Render checks (B)</h3>
+                    <pre>{job.check_results_b.join("\n")}</pre>
+                  </>
+                )}
+              </details>
+            )}
           </div>
         </div>
       )}
