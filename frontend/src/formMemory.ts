@@ -1,8 +1,8 @@
-/** Remembers cross-run form fields (provider/model/theme/audience/brand) in
+/** Remembers cross-run form fields (provider/theme/audience/brand) in
  * localStorage so New/Start/Regenerate forms don't need retyping every run.
  */
 const KEY = "edl-agent:form-memory";
-const REMEMBERED_FIELDS = ["provider", "model", "theme", "audience", "handle", "line"] as const;
+const REMEMBERED_FIELDS = ["provider", "theme", "audience", "handle", "line"] as const;
 type RememberedField = (typeof REMEMBERED_FIELDS)[number];
 
 function readAll(): Partial<Record<RememberedField, string>> {

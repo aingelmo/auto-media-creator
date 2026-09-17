@@ -1,11 +1,10 @@
-import { useState } from "react";
 import { getFormMemory } from "../formMemory";
 import type { Provider } from "../types";
 
 /**
- * Provider dropdown + model text input pair, auto-filling the model from
- * `defaultModels` whenever the provider changes (mirrors the inline sync
- * script duplicated across new.html/session.html's three forms).
+ * Model picker: each supported provider only offers one model, so the
+ * select shows the model name and submits its provider as a hidden
+ * `provider` field plus the resolved `model`.
  */
 export default function ProviderModelFields({
   providers,
@@ -21,42 +20,17 @@ export default function ProviderModelFields({
     rememberedProvider && providers.includes(rememberedProvider as Provider)
       ? rememberedProvider
       : (providers[0] ?? "");
-  const [provider, setProvider] = useState<string>(initialProvider);
-  const [model, setModel] = useState(
-    getFormMemory("model") || defaultModels[initialProvider] || "",
-  );
 
   return (
-    <>
-      <label htmlFor={`${idPrefix}-provider`}>
-        LLM provider
-        <select
-          id={`${idPrefix}-provider`}
-          name="provider"
-          value={provider}
-          onChange={(e) => {
-            const next = e.target.value;
-            setProvider(next);
-            setModel(defaultModels[next] ?? "");
-          }}
-        >
-          {providers.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label htmlFor={`${idPrefix}-model`}>
-        Model
-        <input
-          id={`${idPrefix}-model`}
-          type="text"
-          name="model"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-        />
-      </label>
-    </>
+    <label htmlFor={`${idPrefix}-provider`}>
+      Model
+      <select id={`${idPrefix}-provider`} name="provider" defaultValue={initialProvider}>
+        {providers.map((p) => (
+          <option key={p} value={p}>
+            {defaultModels[p] ?? p}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
