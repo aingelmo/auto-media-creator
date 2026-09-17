@@ -456,7 +456,9 @@ def test_place_develop_arc_repairs_boundary_violation_against_close() -> None:
     }
     taken = [dev_rank1, dev_rank2]  # sorted by rank, rank1 first
 
-    placement, arc_fallback = place_develop_arc(taken, hook, close, candidates_by_id)
+    placement, arc_fallback = place_develop_arc(
+        taken, hook, close, candidates_by_id, _develop_slots(2)
+    )
 
     assert arc_fallback is False
     chain = [hook, *placement, close]
@@ -482,10 +484,49 @@ def test_place_develop_arc_falls_back_when_unrepairable() -> None:
         "dev1": _candidate("dev1", "dev1.mov", "peak", 5.0, (1.0, 9.0)),
     }
 
-    placement, arc_fallback = place_develop_arc([dev], hook, close, candidates_by_id)
+    placement, arc_fallback = place_develop_arc(
+        [dev], hook, close, candidates_by_id, _develop_slots(1)
+    )
 
     assert arc_fallback is True
     assert placement == [dev]
+
+
+def test_place_develop_arc_repairs_duration_violation() -> None:
+    # arc_order(3) = [2, 3, 1]: rank2 lands in slot0 first. Give rank2 a
+    # window too narrow for slot0's 90 frames but wide enough for the
+    # other two (20 frames each) -- the arc placement must swap it into a
+    # slot it actually admits (P3), not just fix exercise adjacency.
+    develop_slots = [
+        {"slot": 1, "start_f": 0, "end_f": 90, "role": "develop", "beats_rel_f": [0]},
+        {"slot": 2, "start_f": 90, "end_f": 110, "role": "develop", "beats_rel_f": [0]},
+        {
+            "slot": 3,
+            "start_f": 110,
+            "end_f": 130,
+            "role": "develop",
+            "beats_rel_f": [0],
+        },
+    ]
+    dev_rank1 = _selected("dev1", "develop", 1, exercise="squat")
+    dev_rank2 = _selected("dev2", "develop", 2, exercise="burpee")
+    dev_rank3 = _selected("dev3", "develop", 3, exercise="lunge")
+    candidates_by_id = {
+        "dev1": _candidate("dev1", "a.mov", "peak", 5.0, (0.0, 20.0)),
+        "dev2": _candidate("dev2", "b.mov", "peak", 5.0, (4.5, 5.5)),  # too narrow
+        "dev3": _candidate("dev3", "c.mov", "peak", 5.0, (0.0, 20.0)),
+    }
+    taken = [dev_rank1, dev_rank2, dev_rank3]
+
+    placement, arc_fallback = place_develop_arc(
+        taken, None, None, candidates_by_id, develop_slots
+    )
+
+    assert arc_fallback is False
+    for entry, slot in zip(placement, develop_slots, strict=True):
+        window = candidates_by_id[entry["candidate_id"]]["window"]
+        assert admits(window, slot["end_f"] - slot["start_f"], 1.0)
+    assert {e["candidate_id"] for e in placement} == {"dev1", "dev2", "dev3"}
 
 
 def _develop_slots(k: int, develop_f: int = 40):

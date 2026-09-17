@@ -289,19 +289,51 @@ def _adjacency_violations(
     return bad
 
 
+def _fits(entry: dict, slot: dict, candidates_by_id: dict) -> bool:
+    window = tuple(candidates_by_id[entry["candidate_id"]]["window"])
+    return admits(window, slot["end_f"] - slot["start_f"], 1.0)
+
+
+def _fit_to_slots(
+    taken: list[dict], develop_slots: list[dict], candidates_by_id: dict
+) -> list[dict]:
+    """Match `taken` to `develop_slots` by duration fit, most-constrained-first.
+
+    `admits` is monotonic in slot duration (a candidate that admits a long
+    slot admits every shorter one too), so this greedy always finds a
+    matching -- `taken` was chosen by `select_develop` precisely because
+    one exists.
+    """
+
+    def n_options(s: dict) -> int:
+        return sum(1 for sl in develop_slots if _fits(s, sl, candidates_by_id))
+
+    free_slots = list(develop_slots)
+    placement: dict[int, dict] = {}
+    for s in sorted(taken, key=n_options):
+        sl = next(sl for sl in free_slots if _fits(s, sl, candidates_by_id))
+        placement[sl["slot"]] = s
+        free_slots.remove(sl)
+    return [placement[sl["slot"]] for sl in develop_slots]
+
+
 def place_develop_arc(
     taken: list[dict],
     hook: dict | None,
     close: dict | None,
     candidates_by_id: dict,
+    develop_slots: list[dict],
 ) -> tuple[list[dict], bool]:
     """Place the `taken` develop entries into slot order, per #6.2.4.
 
-    Starts from `arc_order(k)`, then repairs up to 3 times by swapping
-    adjacent develop entries whenever two neighbors (including the hook
-    before and the close after) repeat an exercise or source. If a
-    violation can't be fixed by swapping develops (e.g. it's against hook
-    or close), falls back to plain rank order.
+    Starts from `arc_order(k)`, then repairs duration mismatches (a
+    candidate's window must admit the slot it lands in, P3) by swapping
+    entries between slots, and repairs up to 3 adjacency violations
+    (neighbors, including the hook before and the close after, repeating
+    an exercise or source) the same way -- both repairs only swap entries
+    when it doesn't break the other's duration fit. If either kind of
+    violation can't be fixed by swapping, falls back to a duration-safe
+    slot assignment in rank order.
 
     Args:
         taken: Develop entries selected by `select_develop`, already
@@ -311,12 +343,14 @@ def place_develop_arc(
         close: The entry placed in the close slot (or `None`), used only to
             check adjacency against the last develop slot.
         candidates_by_id: Mapping `candidate_id -> candidate dict`.
+        develop_slots: The develop slot dicts, in slot order (s1..sk).
 
     Returns:
         `(placement, arc_fallback)`: `placement` is `taken` reordered for
         slots s1..sk; `arc_fallback` is `True` if no arc arrangement was
-        found and `placement` is just `taken` in rank order (caller should
-        add an `"arc_fallback"` warning in that case).
+        found and `placement` falls back to a duration-safe rank-ordered
+        assignment (caller should add an `"arc_fallback"` warning in that
+        case).
     """
     k = len(taken)
     if k == 0:
@@ -326,6 +360,32 @@ def place_develop_arc(
     }  # taken is already sorted by rank
     order = arc_order(k)
     placement = [by_rank[r] for r in order]
+
+    def duration_violations(p: list[dict]) -> list[int]:
+        return [
+            i
+            for i, (entry, slot) in enumerate(zip(p, develop_slots, strict=True))
+            if not _fits(entry, slot, candidates_by_id)
+        ]
+
+    for _ in range(k):
+        bad = duration_violations(placement)
+        if not bad:
+            break
+        i = bad[0]
+        j = next(
+            (
+                j
+                for j in range(k)
+                if j != i
+                and _fits(placement[i], develop_slots[j], candidates_by_id)
+                and _fits(placement[j], develop_slots[i], candidates_by_id)
+            ),
+            None,
+        )
+        if j is None:
+            return _fit_to_slots(taken, develop_slots, candidates_by_id), True
+        placement[i], placement[j] = placement[j], placement[i]
 
     for _ in range(3):
         chain = [hook, *placement, close]
@@ -346,18 +406,24 @@ def place_develop_arc(
             dev_i = len(placement) - 2
         else:
             dev_i = i - 1
-        if dev_i >= 0 and dev_i + 1 < len(placement):
+        if (
+            dev_i >= 0
+            and dev_i + 1 < len(placement)
+            and _fits(placement[dev_i], develop_slots[dev_i + 1], candidates_by_id)
+            and _fits(placement[dev_i + 1], develop_slots[dev_i], candidates_by_id)
+        ):
             placement[dev_i], placement[dev_i + 1] = (
                 placement[dev_i + 1],
                 placement[dev_i],
             )
         else:
-            # only one develop slot: no develop-side neighbor to swap with
+            # only one develop slot, or the swap would break duration fit
             break
 
     chain = [hook, *placement, close]
     if _adjacency_violations(chain, candidates_by_id):
-        return list(taken), True  # #6.2.4: rank order, warning: arc_fallback
+        # #6.2.4: rank order, but still duration-safe; warning: arc_fallback
+        return _fit_to_slots(taken, develop_slots, candidates_by_id), True
     return placement, False
 
 
@@ -474,7 +540,9 @@ def assign_slots(
             msg,
         )
 
-    placement, arc_fallback = place_develop_arc(taken, hook, close, candidates_by_id)
+    placement, arc_fallback = place_develop_arc(
+        taken, hook, close, candidates_by_id, develop_slots
+    )
     if arc_fallback:
         warnings.append("arc_fallback")
 
