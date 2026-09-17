@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from edl_agent.candidates.calm import find_calm_windows
+from edl_agent.candidates.dedup import dedup_windows_by_phash, suppress_peak_windows
 from edl_agent.candidates.frames import build_contact_sheet, extract_peak_frames
 from edl_agent.candidates.peaks import find_peak_windows
 from edl_agent.candidates.scoring import admits_slots, score_cv
@@ -74,9 +75,12 @@ def build_video_candidates(
         - `peak_frames` (list[str]): paths to the 3 extracted JPEGs.
         - `peak_frames_sha256` (list[str]): their SHA-256 hex digests.
     """
-    windows = find_peak_windows(
-        features, clip_duration_s, scene_cuts_s
-    ) + find_calm_windows(features)
+    peak_windows = suppress_peak_windows(
+        find_peak_windows(features, clip_duration_s, scene_cuts_s), features
+    )
+    windows = dedup_windows_by_phash(
+        peak_windows + find_calm_windows(features), proxy_path
+    )
     out = []
     for n, w in enumerate(windows):
         cand_id = f"c{id_start + n:02d}"

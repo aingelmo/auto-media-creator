@@ -10,6 +10,7 @@ from edl_agent.candidates._common import (
     PEAK_MIN_PROMINENCE,
     PEAK_MOTION_BG_MAX,
     PEAK_WINDOW_MAX_S,
+    PEAK_WINDOW_MIN_HALF_S,
     PEAK_WINDOW_SHARPNESS_TOLERANCE,
     SHARPNESS_MIN,
     edge_margin_s,
@@ -74,7 +75,7 @@ def find_peak_windows(
             continue
         if any(abs(t_peak - c) < margin for c in scene_cuts_s):
             continue
-        window = _peak_window(features, int(i), scene_cuts_s)
+        window = _peak_window(features, int(i), scene_cuts_s, idxs.tolist())
         out.append(
             {"kind": "peak", "t_peak": t_peak, "window": window, "index": int(i)}
         )
@@ -86,14 +87,19 @@ def _crosses_cut(t_a: float, t_b: float, scene_cuts_s: list[float]) -> bool:
     return any(lo < c <= hi for c in scene_cuts_s)
 
 
-def _peak_window(features: dict, i: int, scene_cuts_s: list[float]) -> list[float]:
+def _peak_window(
+    features: dict, i: int, scene_cuts_s: list[float], peak_idxs: list[int]
+) -> list[float]:
     """Grow a candidate window outward from a peak sample, in both directions.
 
     A scene cut or loss of subject tracking is a hard boundary and stops the
     window immediately; a short run of low sharpness (motion blur from the
     explosive movement that produced the peak itself) is tolerated without
     stopping the window, but the window boundary never advances past the
-    last sharp frame.
+    last sharp frame. Growth is also soft-capped at the midpoint to the
+    nearest sibling peak (but never below `PEAK_WINDOW_MIN_HALF_S`), so
+    adjacent peaks in the same clip don't converge on one identical window
+    (#4.3; the dedup pass in `candidates.dedup` still catches the rest).
 
     Args:
         features: Feature series for one clip (see `find_peak_windows` for
@@ -101,6 +107,9 @@ def _peak_window(features: dict, i: int, scene_cuts_s: list[float]) -> list[floa
         i: Sample index of the peak within `features["t_s"]`.
         scene_cuts_s: Timestamps (seconds) of scene cuts detected in the
             clip.
+        peak_idxs: Sample indices of every surviving peak in this clip
+            (including `i`), used to compute the midpoint cap to the
+            nearest sibling peak in each direction.
 
     Returns:
         `[start_s, end_s]`: the grown window bounds, in seconds.
@@ -110,10 +119,25 @@ def _peak_window(features: dict, i: int, scene_cuts_s: list[float]) -> list[floa
     subject_visible = features["subject_visible"]
     t_peak = t_s[i]
 
-    def hard_ok(j: int) -> bool:
-        return subject_visible[j] and not _crosses_cut(t_peak, t_s[j], scene_cuts_s)
+    left_neighbors = sorted(t_s[j] for j in peak_idxs if t_s[j] < t_peak)
+    right_neighbors = sorted(t_s[j] for j in peak_idxs if t_s[j] > t_peak)
+    left_cap = (
+        min((t_peak + left_neighbors[-1]) / 2, t_peak - PEAK_WINDOW_MIN_HALF_S)
+        if left_neighbors
+        else float("-inf")
+    )
+    right_cap = (
+        max((t_peak + right_neighbors[0]) / 2, t_peak + PEAK_WINDOW_MIN_HALF_S)
+        if right_neighbors
+        else float("inf")
+    )
 
-    def extend(step: int) -> int:
+    def hard_ok(j: int, cap: float, step: int) -> bool:
+        if not subject_visible[j] or _crosses_cut(t_peak, t_s[j], scene_cuts_s):
+            return False
+        return t_s[j] >= cap if step < 0 else t_s[j] <= cap
+
+    def extend(step: int, cap: float) -> int:
         boundary = i
         j = i
         low_sharpness_streak = 0
@@ -121,7 +145,7 @@ def _peak_window(features: dict, i: int, scene_cuts_s: list[float]) -> list[floa
             nxt = j + step
             if not (0 <= nxt < len(t_s)) or abs(t_s[nxt] - t_peak) > PEAK_WINDOW_MAX_S:
                 break
-            if not hard_ok(nxt):
+            if not hard_ok(nxt, cap, step):
                 break
             j = nxt
             if sharpness[j] >= SHARPNESS_MIN:
@@ -133,6 +157,6 @@ def _peak_window(features: dict, i: int, scene_cuts_s: list[float]) -> list[floa
                     break
         return boundary
 
-    lo = extend(-1)
-    hi = extend(1)
+    lo = extend(-1, left_cap)
+    hi = extend(1, right_cap)
     return [t_s[lo], t_s[hi]]

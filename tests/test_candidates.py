@@ -79,6 +79,22 @@ def test_find_peak_windows_discards_near_clip_edge() -> None:
     assert find_peak_windows(feats, clip_duration_s=3.0, scene_cuts_s=[]) == []
 
 
+def test_find_peak_windows_clamps_adjacent_peaks_to_distinct_windows() -> None:
+    # Two peaks close enough that unclamped growth would converge on the
+    # same maximal window (#4.3); the neighbor-midpoint cap should keep
+    # them distinct.
+    n = 100  # 10s a 10Hz
+    kp = [0.1] * n
+    kp[30], kp[50] = 1.0, 1.0
+    feats = _flat_features(n, kp_speed=kp)
+
+    peaks = find_peak_windows(feats, clip_duration_s=10.0, scene_cuts_s=[])
+
+    assert len(peaks) == 2
+    assert peaks[0]["window"] != peaks[1]["window"]
+    assert peaks[0]["window"][1] <= peaks[1]["window"][0] + 1e-9
+
+
 def test_find_calm_windows_picks_longest_two_over_two_seconds() -> None:
     n = 300  # 30s a 10Hz
     kp = [0.9] * n
@@ -97,10 +113,38 @@ def test_find_calm_windows_picks_longest_two_over_two_seconds() -> None:
     ]  # window = [t_first, t_last] del tramo (n-1 pasos de 0.1s)
 
 
-def test_find_calm_windows_rejects_uncentered_subject() -> None:
+def test_find_calm_windows_includes_uncentered_subject() -> None:
+    # Centering is a score, not a hard gate (#4.3): an off-center but
+    # otherwise stable subject still yields a calm candidate.
     n = 50
     feats = _flat_features(n, kp_speed=[0.1] * n, bbox=(0.0, 0.0, 0.1, 0.2))
-    assert find_calm_windows(feats) == []
+    calm = find_calm_windows(feats)
+    assert len(calm) == 1
+
+
+def test_find_calm_windows_gap_tolerance_bridges_dropout() -> None:
+    n = 25  # 2.4s a 10Hz
+    subject_visible = [True] * n
+    subject_visible[12] = False  # single dropped detection mid-run
+    feats = _flat_features(n, kp_speed=[0.1] * n, subject_visible=subject_visible)
+
+    calm = find_calm_windows(feats)
+
+    assert len(calm) == 1
+    assert calm[0]["window"][1] - calm[0]["window"][0] == pytest.approx(2.4)
+
+
+def test_find_calm_windows_relaxed_floor_when_no_run_qualifies() -> None:
+    # sharpness never meets CALM_SHARPNESS_MIN, so no run passes the normal
+    # gates; the relaxed action-only floor still returns the quietest run
+    # rather than leaving the clip with zero calm candidates.
+    n = 40
+    feats = _flat_features(n, kp_speed=[0.1] * n, sharpness=[0.2] * n)
+
+    calm = find_calm_windows(feats)
+
+    assert len(calm) == 1
+    assert calm[0]["kind"] == "calm"
 
 
 def test_edge_margin_short_vs_long_clip() -> None:

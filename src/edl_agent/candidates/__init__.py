@@ -14,6 +14,7 @@ from edl_agent.candidates.build import (
     readmit_candidates,
 )
 from edl_agent.candidates.calm import find_calm_windows
+from edl_agent.candidates.dedup import dedup_windows_by_phash, suppress_peak_windows
 from edl_agent.candidates.frames import build_contact_sheet, extract_peak_frames
 from edl_agent.candidates.peaks import find_peak_windows
 from edl_agent.candidates.scoring import admits_slots, score_cv
@@ -24,10 +25,12 @@ __all__ = [
     "build_contact_sheet",
     "build_image_candidate",
     "build_video_candidates",
+    "dedup_windows_by_phash",
     "edge_margin_s",
     "extract_peak_frames",
     "find_calm_windows",
     "find_peak_windows",
     "readmit_candidates",
     "score_cv",
+    "suppress_peak_windows",
 ]
