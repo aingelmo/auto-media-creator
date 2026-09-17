@@ -47,6 +47,18 @@ export interface MusicCandidate {
   score: number | null;
 }
 
+export interface MediaEntry {
+  session: string;
+  path: string;
+  filename: string;
+  size: number;
+}
+
+export interface MediaLibrary {
+  clips: MediaEntry[];
+  music: MediaEntry[];
+}
+
 export interface LowCandidates {
   real_sources?: number;
   slot_count?: number;

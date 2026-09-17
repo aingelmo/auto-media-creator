@@ -5,6 +5,7 @@ import type {
   Edl,
   Hooks,
   Manifest,
+  MediaLibrary,
   SelectionPayload,
   SessionDetail,
   SessionListEntry,
@@ -35,6 +36,8 @@ export const api = {
   listSessions: () => fetch("/api/sessions").then((r) => asJson<SessionListEntry[]>(r)),
 
   getConfig: () => fetch("/api/config").then((r) => asJson<Config>(r)),
+
+  getMedia: () => fetch("/api/media").then((r) => asJson<MediaLibrary>(r)),
 
   getSession: (name: string) =>
     fetch(`/api/sessions/${encodeURIComponent(name)}`).then((r) => asJson<SessionDetail>(r)),

@@ -38,21 +38,48 @@ def list_sessions() -> list[dict]:
     return [{"name": n, "status": session_status(n)} for n in names]
 
 
+def _link_ref(ref: str, dest_dir: Path, dest_name: str) -> None:
+    """Symlink a `"{session}/{path}"` picker ref into `dest_dir/dest_name`.
+
+    Mirrors `ingest.cache.link_into`'s symlink-to-resolved-absolute-path
+    pattern. Raises 400/404 if the ref doesn't resolve to a real file
+    inside `SESSIONS_DIR` (same containment check as
+    `routes/files.py:session_file`).
+    """
+    ref_session, _, ref_path = ref.partition("/")
+    if not ref_session or not ref_path:
+        raise HTTPException(status_code=400, detail=f"malformed media ref {ref!r}")
+    src_dir = (SESSIONS_DIR / ref_session).resolve()
+    src_path = (src_dir / ref_path).resolve()
+    if src_dir not in src_path.parents or not src_path.is_file():
+        raise HTTPException(status_code=404, detail=f"no such media {ref!r}")
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    (dest_dir / dest_name).symlink_to(src_path)
+
+
 @router.post("/api/sessions")
 async def create_session(
     background_tasks: BackgroundTasks,
     name: str = Form(...),
     provider: str = Form(...),
     theme: str = Form("training"),
-    clips: list[UploadFile] = Form(...),
-    music: UploadFile = Form(...),
+    clips: list[UploadFile] = Form([]),
+    music: UploadFile | None = None,
+    clip_refs: list[str] = Form([]),
+    music_ref: str = Form(""),
     logo: UploadFile | None = None,
     handle: str = Form(""),
     line: str = Form(""),
     brief: str = Form(""),
     audience: str = Form("prospects"),
 ) -> JSONResponse:
-    """Save uploaded media (+ optional brand logo) into a new session dir and launch."""
+    """Save uploaded/picked media (+ optional brand logo), then launch the pipeline.
+
+    Clips/music can come from a fresh upload (`clips`/`music`) and/or be
+    picked from a past session's already-on-disk files (`clip_refs`/
+    `music_ref`, each `"{session}/{path}"` from `GET /api/media`) — the two
+    are symlinked/copied together into the new session's `inputs`/`music`.
+    """
     key_env = PROVIDER_API_KEY_ENV.get(provider)
     if key_env and not os.environ.get(key_env):
         raise HTTPException(
@@ -68,23 +95,37 @@ async def create_session(
     music_dir.mkdir(parents=True, exist_ok=True)
 
     allowed_exts = VIDEO_EXTS | IMAGE_EXTS
+    clip_count = 0
     for clip in clips:
         filename = Path(clip.filename or "").name
-        if Path(filename).suffix.lower() not in allowed_exts:
+        if not filename or Path(filename).suffix.lower() not in allowed_exts:
             continue
         with (inputs_dir / filename).open("wb") as f:
             shutil.copyfileobj(clip.file, f)
+        clip_count += 1
+    for ref in clip_refs:
+        _link_ref(ref, inputs_dir, Path(ref).name)
+        clip_count += 1
+    if clip_count == 0:
+        raise HTTPException(status_code=400, detail="at least one clip is required")
 
-    music_ext = Path(music.filename or "").suffix.lower()
-    if music_ext not in MUSIC_EXTS:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Music file must be one of {sorted(MUSIC_EXTS)}, got {music_ext!r}."
-            ),
-        )
-    with (music_dir / f"track{music_ext}").open("wb") as f:
-        shutil.copyfileobj(music.file, f)
+    have_music = False
+    if music is not None and music.filename:
+        music_ext = Path(music.filename).suffix.lower()
+        if music_ext not in MUSIC_EXTS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Music must be one of {sorted(MUSIC_EXTS)}, got {music_ext!r}.",
+            )
+        with (music_dir / f"track{music_ext}").open("wb") as f:
+            shutil.copyfileobj(music.file, f)
+        have_music = True
+    elif music_ref:
+        music_ext = Path(music_ref).suffix.lower()
+        _link_ref(music_ref, music_dir, f"track{music_ext}")
+        have_music = True
+    if not have_music:
+        raise HTTPException(status_code=400, detail="a music track is required")
 
     save_brand(session_dir, logo, handle, line)
 

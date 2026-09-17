@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from edl_agent.web.routes import config, files, sessions, stages
+from edl_agent.web.routes import config, files, media, sessions, stages
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -24,6 +24,7 @@ app.include_router(sessions.router)
 app.include_router(files.router)
 app.include_router(stages.router)
 app.include_router(config.router)
+app.include_router(media.router)
 
 # Mounted at /assets (not "/") so it can't shadow the /api and /sessions
 # routes above; the catch-all route below serves index.html for every other

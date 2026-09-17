@@ -336,6 +336,12 @@ button.primary {
   border-left-color: var(--fail);
 }
 
+.source-toggle {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
 /* Contact sheet: hook/music preview grids and candidate peak frames. */
 .contact-sheet {
   display: grid;
@@ -359,6 +365,31 @@ button.primary {
 .contact-sheet figcaption {
   margin-top: var(--space-2);
   font-size: var(--text-sm);
+}
+
+.contact-sheet.contact-sheet--compact {
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: var(--space-2);
+}
+
+.media-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.media-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.media-list label {
+  flex: 0 0 auto;
+  min-width: 220px;
 }
 
 .candidate {
