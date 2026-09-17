@@ -475,3 +475,82 @@ button.primary {
   line-height: 1;
   cursor: pointer;
 }
+
+/* Wizard step header for the new-session form. */
+.form-steps {
+  display: flex;
+  flex-wrap: wrap;
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.form-steps li {
+  flex: 1 1 auto;
+}
+
+.form-steps button {
+  width: 100%;
+  margin: 0;
+  background: var(--panel);
+  border: none;
+  border-right: 1px solid var(--rule);
+  border-radius: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+}
+
+.form-steps li:last-child button {
+  border-right: none;
+}
+
+.form-steps button:hover {
+  color: var(--ink);
+}
+
+.form-steps button[aria-current="step"] {
+  background: var(--signal-dim);
+  color: var(--ink);
+}
+
+.form-steps li.is-done button {
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .form-steps {
+    flex-direction: column;
+  }
+
+  .form-steps button {
+    border-right: none;
+    border-bottom: 1px solid var(--rule);
+    text-align: left;
+  }
+
+  .form-steps li:last-child button {
+    border-bottom: none;
+  }
+}
+
+.review-list {
+  margin: 0;
+}
+
+.review-list dt {
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+  margin-top: var(--space-3);
+}
+
+.review-list dd {
+  margin: 0;
+}
+
+.review-list dd.is-empty {
+  color: var(--ink-dim);
+}
