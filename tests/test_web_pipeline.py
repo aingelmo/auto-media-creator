@@ -73,17 +73,22 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
 
     job = JobState()
     with (
-        patch("edl_agent.web.pipeline.run_ingest", return_value=manifest),
-        patch("edl_agent.web.pipeline.slots_from_file", return_value=slots),
-        patch("edl_agent.web.pipeline.yolo_pose_detector", return_value=Mock()),
-        patch("edl_agent.web.pipeline.run_candidates", side_effect=fake_run_candidates),
-        patch("edl_agent.web.pipeline.run_hooks", side_effect=fake_run_hooks),
-        patch("edl_agent.web.pipeline.run_planner", side_effect=fake_run_planner),
-        patch("edl_agent.web.pipeline.render_hook_previews"),
-        patch("edl_agent.web.pipeline.render_preview_segments"),
-        patch("edl_agent.web.pipeline.render_segments"),
-        patch("edl_agent.web.pipeline.concat_and_audio"),
-        patch("edl_agent.web.pipeline.run_render_checks", return_value=[]),
+        patch("edl_agent.web.stages.ingest.run_ingest", return_value=manifest),
+        patch("edl_agent.web.stages.ingest.slots_from_file", return_value=slots),
+        patch(
+            "edl_agent.web.stages.candidates.yolo_pose_detector", return_value=Mock()
+        ),
+        patch(
+            "edl_agent.web.stages.candidates.run_candidates",
+            side_effect=fake_run_candidates,
+        ),
+        patch("edl_agent.web.stages.planner.run_hooks", side_effect=fake_run_hooks),
+        patch("edl_agent.web.stages.planner.run_planner", side_effect=fake_run_planner),
+        patch("edl_agent.web.stages.planner.render_hook_previews"),
+        patch("edl_agent.web.stages.render.render_preview_segments"),
+        patch("edl_agent.web.stages.render.render_segments"),
+        patch("edl_agent.web.stages.render.concat_and_audio"),
+        patch("edl_agent.web.stages.render.run_render_checks", return_value=[]),
         patch("edl_agent.llm.ollama_client.requests.post", return_value=ollama_reply),
     ):
         thread = threading.Thread(
@@ -195,26 +200,33 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
 
     job = JobState()
     with (
-        patch("edl_agent.web.pipeline.run_ingest", return_value=manifest),
+        patch("edl_agent.web.stages.ingest.run_ingest", return_value=manifest),
         patch(
-            "edl_agent.web.pipeline.slots_from_file",
-            side_effect=[initial_slots, shortened_slots],
+            "edl_agent.web.stages.ingest.slots_from_file", return_value=initial_slots
         ),
-        patch("edl_agent.web.pipeline.yolo_pose_detector", return_value=Mock()),
-        patch("edl_agent.web.pipeline.run_candidates", return_value=candidates),
-        patch("edl_agent.web.pipeline.cut_music"),
-        patch("edl_agent.web.pipeline.sha256_file", return_value="new"),
         patch(
-            "edl_agent.web.pipeline.run_selection",
+            "edl_agent.web.stages.candidates.slots_from_file",
+            return_value=shortened_slots,
+        ),
+        patch(
+            "edl_agent.web.stages.candidates.yolo_pose_detector", return_value=Mock()
+        ),
+        patch(
+            "edl_agent.web.stages.candidates.run_candidates", return_value=candidates
+        ),
+        patch("edl_agent.web.stages.candidates.cut_music"),
+        patch("edl_agent.web.stages.candidates.sha256_file", return_value="new"),
+        patch(
+            "edl_agent.web.stages.selection.run_selection",
             return_value=({"selected": [], "rejected": [], "notes": ""}, {}),
         ),
-        patch("edl_agent.web.pipeline.run_hooks", side_effect=fake_run_hooks),
-        patch("edl_agent.web.pipeline.run_planner", side_effect=fake_run_planner),
-        patch("edl_agent.web.pipeline.render_hook_previews"),
-        patch("edl_agent.web.pipeline.render_preview_segments"),
-        patch("edl_agent.web.pipeline.render_segments"),
-        patch("edl_agent.web.pipeline.concat_and_audio"),
-        patch("edl_agent.web.pipeline.run_render_checks", return_value=[]),
+        patch("edl_agent.web.stages.planner.run_hooks", side_effect=fake_run_hooks),
+        patch("edl_agent.web.stages.planner.run_planner", side_effect=fake_run_planner),
+        patch("edl_agent.web.stages.planner.render_hook_previews"),
+        patch("edl_agent.web.stages.render.render_preview_segments"),
+        patch("edl_agent.web.stages.render.render_segments"),
+        patch("edl_agent.web.stages.render.concat_and_audio"),
+        patch("edl_agent.web.stages.render.run_render_checks", return_value=[]),
     ):
         thread = threading.Thread(
             target=run_pipeline_job,
@@ -314,22 +326,39 @@ def _run_job_to_hook_choice(
     render_segments_mock = Mock()
     render_hook_previews_mock = Mock()
     job = JobState()
+    # render_segments/run_planner are shared mocks patched into both the
+    # `render` stage (variant A) and `variant_b` stage (variant B), which
+    # import them independently -- see AGENTS.md's note on module splits.
     with (
-        patch("edl_agent.web.pipeline.run_ingest", return_value=manifest),
-        patch("edl_agent.web.pipeline.slots_from_file", return_value=slots),
-        patch("edl_agent.web.pipeline.yolo_pose_detector", return_value=Mock()),
-        patch("edl_agent.web.pipeline.run_candidates", return_value=candidates),
+        patch("edl_agent.web.stages.ingest.run_ingest", return_value=manifest),
+        patch("edl_agent.web.stages.ingest.slots_from_file", return_value=slots),
         patch(
-            "edl_agent.web.pipeline.run_selection",
+            "edl_agent.web.stages.candidates.yolo_pose_detector", return_value=Mock()
+        ),
+        patch(
+            "edl_agent.web.stages.candidates.run_candidates", return_value=candidates
+        ),
+        patch(
+            "edl_agent.web.stages.selection.run_selection",
             return_value=({"selected": [], "rejected": [], "notes": ""}, {}),
         ),
-        patch("edl_agent.web.pipeline.run_hooks", side_effect=fake_run_hooks),
-        patch("edl_agent.web.pipeline.run_planner", side_effect=fake_run_planner),
-        patch("edl_agent.web.pipeline.render_hook_previews", render_hook_previews_mock),
-        patch("edl_agent.web.pipeline.render_preview_segments"),
-        patch("edl_agent.web.pipeline.render_segments", render_segments_mock),
-        patch("edl_agent.web.pipeline.concat_and_audio"),
-        patch("edl_agent.web.pipeline.run_render_checks", return_value=[]),
+        patch("edl_agent.web.stages.planner.run_hooks", side_effect=fake_run_hooks),
+        patch("edl_agent.web.stages.planner.run_planner", side_effect=fake_run_planner),
+        patch(
+            "edl_agent.web.stages.variant_b.run_planner", side_effect=fake_run_planner
+        ),
+        patch(
+            "edl_agent.web.stages.planner.render_hook_previews",
+            render_hook_previews_mock,
+        ),
+        patch("edl_agent.web.stages.render.render_preview_segments"),
+        patch("edl_agent.web.stages.variant_b.render_preview_segments"),
+        patch("edl_agent.web.stages.render.render_segments", render_segments_mock),
+        patch("edl_agent.web.stages.variant_b.render_segments", render_segments_mock),
+        patch("edl_agent.web.stages.render.concat_and_audio"),
+        patch("edl_agent.web.stages.variant_b.concat_and_audio"),
+        patch("edl_agent.web.stages.render.run_render_checks", return_value=[]),
+        patch("edl_agent.web.stages.variant_b.run_render_checks", return_value=[]),
     ):
         thread = threading.Thread(
             target=run_pipeline_job,
