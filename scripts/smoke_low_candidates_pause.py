@@ -7,7 +7,7 @@ selection call) in a background thread, and drives the confirmation pause
 the way the web UI's "Shorten"/"Keep" buttons would.
 
 Requires a local Ollama with the selector model pulled (see
-DEFAULT_MODEL below) and models/yolov8n-pose.pt present.
+DEFAULT_MODEL below) and var/models/yolov8n-pose.pt present.
 
 Usage: uv run scripts/smoke_low_candidates_pause.py [--keep]
 """
@@ -25,6 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from edl_agent.paths import SESSIONS_DIR
 from edl_agent.session._common import MUSIC_EXTS
 from edl_agent.web.pipeline import JobState, run_pipeline_job
 
@@ -34,9 +35,9 @@ DEFAULT_CLIPS = ["IMG_1056.MOV", "IMG_8105.mov"]  # known to yield real candidat
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    default_src = ROOT / "sessions/deepseek_test_06"
+    default_src = SESSIONS_DIR / "deepseek_test_06"
     parser.add_argument("--src-session", type=Path, default=default_src)
-    default_out = ROOT / "sessions/low_candidates_smoke"
+    default_out = SESSIONS_DIR / "low_candidates_smoke"
     parser.add_argument("--out", type=Path, default=default_out)
     parser.add_argument(
         "--keep",

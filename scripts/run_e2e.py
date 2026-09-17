@@ -1,7 +1,7 @@
 """Manual end-to-end driver for a session, per docs/architecture/README.md.
 Not part of the library; ad-hoc script for real_test_02 validation.
 
-Usage: uv run scripts/run_e2e.py sessions/real_test_02 [--provider ollama]
+Usage: uv run scripts/run_e2e.py var/sessions/real_test_02 [--provider ollama]
     [--model qwen3-vl:8b-instruct]
 """
 
@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from edl_agent.features import yolo_pose_detector
 from edl_agent.llm import PROVIDERS, get_client
+from edl_agent.paths import CACHE_DIR, MODELS_DIR
 from edl_agent.render import (
     concat_and_audio,
     render_preview_segments,
@@ -31,7 +32,7 @@ from edl_agent.session import (
 )
 from edl_agent.slots import slots_from_file
 
-POSE_MODEL = "models/yolov8n-pose.pt"
+POSE_MODEL = str(MODELS_DIR / "yolov8n-pose.pt")
 
 DEFAULT_MODELS = {
     "gemini": "gemini-3.8-flash",
@@ -87,7 +88,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cache-dir",
         type=Path,
-        default=Path("data/cache"),
+        default=CACHE_DIR,
         help="Content-addressed cache dir for per-source ingest/features work",
     )
     parser.add_argument(

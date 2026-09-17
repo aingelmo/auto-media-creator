@@ -27,6 +27,7 @@ from edl_agent.ingest import (
     write_manifest,
 )
 from edl_agent.llm.ollama_client import OllamaClient
+from edl_agent.paths import DATA_DIR, MODELS_DIR, SESSIONS_DIR
 from edl_agent.planner._common import PlannerError
 from edl_agent.render import (
     concat_and_audio,
@@ -43,17 +44,17 @@ from edl_agent.session import (
 from edl_agent.slots import slots_from_file
 
 VIDEOS = sorted(
-    p for p in (ROOT / "data/test/videos").glob("*")
+    p for p in (DATA_DIR / "test/videos").glob("*")
     if p.suffix.lower() in {".mov", ".mp4"} and "Zone.Identifier" not in p.name
 )
 SONGS = sorted(
-    p for p in (ROOT / "data/test/songs").glob("*.mp4")
+    p for p in (DATA_DIR / "test/songs").glob("*.mp4")
     if "Zone.Identifier" not in p.name
 )
-POSE_MODEL = "models/yolov8n-pose.pt"
+POSE_MODEL = str(MODELS_DIR / "yolov8n-pose.pt")
 THREADS = 4
-CACHE_PROXIES = ROOT / "data/test/proxy_cache/proxies"
-CACHE_INFO = ROOT / "data/test/proxy_cache/info.json"
+CACHE_PROXIES = DATA_DIR / "test/proxy_cache/proxies"
+CACHE_INFO = DATA_DIR / "test/proxy_cache/info.json"
 
 
 def load_pool() -> dict[str, VideoSourceInfo]:
@@ -140,7 +141,7 @@ def build_session(
 
 
 def run_one(name: str, seed: int, pool: dict[str, VideoSourceInfo]) -> dict:
-    session = ROOT / "sessions" / name
+    session = SESSIONS_DIR / name
     detector = yolo_pose_detector(POSE_MODEL)
     client = OllamaClient()
 
@@ -210,7 +211,7 @@ def main() -> None:
     name, seed = sys.argv[1], int(sys.argv[2])
     pool = load_pool()
     result = run_one(name, seed, pool)
-    (ROOT / "sessions" / name / "_gap_eval_result.json").write_text(
+    (SESSIONS_DIR / name / "_gap_eval_result.json").write_text(
         json.dumps(result, indent=2, ensure_ascii=False)
     )
     print(json.dumps(result))

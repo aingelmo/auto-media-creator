@@ -22,18 +22,19 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from edl_agent.ingest import TONEMAP_CHAIN_HLG, build_proxy, probe_video_source
+from edl_agent.paths import DATA_DIR, SESSIONS_DIR
 from edl_agent.verify import verify_source
 
 VIDEOS = sorted(
-    p for p in (ROOT / "data/test/videos").glob("*")
+    p for p in (DATA_DIR / "test/videos").glob("*")
     if p.suffix.lower() in {".mov", ".mp4"} and "Zone.Identifier" not in p.name
 )
 N_SESSIONS = 15
 THREADS = 4
 
-CACHE_DIR = ROOT / "data/test/proxy_cache"
-CACHE_PROXIES = CACHE_DIR / "proxies"
-CACHE_INFO = CACHE_DIR / "info.json"
+PROXY_CACHE_DIR = DATA_DIR / "test/proxy_cache"
+CACHE_PROXIES = PROXY_CACHE_DIR / "proxies"
+CACHE_INFO = PROXY_CACHE_DIR / "info.json"
 
 
 def build_proxy_cache() -> None:
@@ -91,7 +92,7 @@ def main() -> None:
             ],
             check=False,
         )
-        result_path = ROOT / "sessions" / name / "_gap_eval_result.json"
+        result_path = SESSIONS_DIR / name / "_gap_eval_result.json"
         if proc.returncode == 0 and result_path.exists():
             results_log.append(json.loads(result_path.read_text()))
         else:
@@ -108,7 +109,7 @@ def main() -> None:
         error_str = str(error_msg)[:150] if error_msg else ""
         print(r["name"], "OK" if r.get("ok") else f"FAIL: {error_str}")
 
-    (ROOT / "sessions" / "_gap_eval_report.json").write_text(
+    (SESSIONS_DIR / "_gap_eval_report.json").write_text(
         json.dumps(results_log, indent=2, ensure_ascii=False)
     )
 

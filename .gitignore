@@ -220,12 +220,9 @@ __marimo__/
 # Claude Code / headroom local state
 .claude/.headroom_wrap_*
 
-# Video assets and session data
-/data/
-/sessions/
-
-# Downloaded model weights (YOLO-pose etc.)
-/models/
+# Runtime data: sessions, feature cache, downloaded model weights (see
+# src/edl_agent/paths.py)
+/var/
 
 # WSL/Windows NTFS zone-identifier marker
 *:Zone.Identifier

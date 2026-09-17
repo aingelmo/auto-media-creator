@@ -17,7 +17,7 @@ uv run scripts/run_web.py
 
 Open http://127.0.0.1:8000/. From there you can:
 
-- see existing sessions (`sessions/<name>`) and their status,
+- see existing sessions (`var/sessions/<name>`) and their status,
 - start a new session (`/new`): upload clips/photos + a music track, pick an
   LLM provider/model, and submit — the pipeline runs in the background,
 - watch a session's page for live progress, then preview/download the
@@ -36,7 +36,7 @@ local Ollama server instead.
 ## CLI (scripting / dev)
 
 ```bash
-uv run scripts/run_e2e.py sessions/<name> [--provider ollama] [--model qwen3-vl:8b-instruct]
+uv run scripts/run_e2e.py var/sessions/<name> [--provider ollama] [--model qwen3-vl:8b-instruct]
 ```
 
 A session directory needs `inputs/` (clips/photos) and `music/track.mp3`

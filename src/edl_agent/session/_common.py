@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from edl_agent.ingest import TONEMAP_CHAIN_HLG
+from edl_agent.paths import CACHE_DIR
 
 VIDEO_EXTS = {".mov", ".mp4", ".m4v"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".heic", ".heif"}
@@ -13,7 +12,7 @@ MUSIC_EXTS = {".mp3", ".wav", ".mp4", ".m4a"}
 # Content-addressed cache of per-source ingest/features work, shared across
 # sessions (`ingest.cache`). Reused clips (the common case) skip re-probing,
 # re-encoding, and re-extracting features on every run after the first.
-DEFAULT_CACHE_DIR = Path("data/cache")
+DEFAULT_CACHE_DIR = CACHE_DIR
 
 
 def tonemap_chain_for_manifest(manifest: dict) -> str:

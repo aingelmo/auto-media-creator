@@ -20,6 +20,7 @@ from edl_agent.ingest import (
     write_manifest,
 )
 from edl_agent.llm import get_client
+from edl_agent.paths import MODELS_DIR
 from edl_agent.render import (
     concat_and_audio,
     render_hook_previews,
@@ -44,7 +45,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-POSE_MODEL = "models/yolov8n-pose.pt"
+POSE_MODEL = str(MODELS_DIR / "yolov8n-pose.pt")
 THREADS = 4
 MUSIC_OFFSET_S = 15.0
 MUSIC_MAX_DURATION_S = 15.0

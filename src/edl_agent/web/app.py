@@ -21,6 +21,7 @@ from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from edl_agent.paths import SESSIONS_DIR
 from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
 from edl_agent.web.pipeline import (
@@ -31,7 +32,6 @@ from edl_agent.web.pipeline import (
     run_pipeline_job,
 )
 
-SESSIONS_DIR = Path("sessions")
 STATIC_DIR = Path(__file__).parent / "static"
 
 # Providers offered in the UI dropdown, deepseek first so it's the default
