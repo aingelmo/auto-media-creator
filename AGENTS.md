@@ -12,35 +12,42 @@ code map 1:1 to file prefixes, e.g. `#4.3` → `docs/architecture/04-features.md
 
 - Package manager: `uv` (not pip/poetry). Install: `uv sync`.
 - Run: `uv run python scripts/run_e2e.py ...` or `uv run python -m edl_agent...`.
+- Runtime data (sessions, feature cache, downloaded models) lives under
+  `var/` (gitignored), not the repo root — see `src/edl_agent/paths.py`.
+  Override with `EDL_AGENT_VAR` to point at a different disk.
 - Web UI: `uv run scripts/run_web.py [--host HOST] [--port PORT]` (defaults
   to `127.0.0.1:8000`); open the printed URL in a browser to upload media
   and run sessions without the CLI. This needs no node/npm — it serves the
   React/TS SPA already built into `src/edl_agent/web/static/` (committed to
-  git). `src/edl_agent/web/app.py` is a thin JSON API (`/api/*`) over
-  `src/edl_agent/web/pipeline.py`, which holds all the pipeline-orchestration
-  logic and stays framework-agnostic.
-- Frontend dev: only needed when editing the UI itself. `cd frontend && npm
-  install`, then `npm run dev` (Vite, hot reload, proxies `/api` and
-  `/sessions/*/files` to `:8000` — run the Python server alongside it) or
-  `npm run build` to refresh the committed `web/static/` output before
-  committing a UI change.
-- Checks (all must pass before considering a task done):
-  `uv run ruff check .`, `uv run ty check`, `uv run pytest -q`, and for
-  frontend changes, `cd frontend && npm run lint && npm run format:check &&
-  npx tsc -b --noEmit && npm run build`. If your shell auto-rewrites
-  `npm run lint` via an `rtk` hook, see the note in `frontend/README.md` —
-  it assumes ESLint and breaks on this project's oxlint setup; use
-  `npx oxlint`/`npx oxfmt --check src` directly instead.
+  git). `src/edl_agent/web/app.py` mounts thin per-resource routers
+  (`src/edl_agent/web/routes/`) over `src/edl_agent/web/pipeline.py`, which
+  orchestrates the per-stage modules in `src/edl_agent/web/stages/` and
+  stays framework-agnostic. Frontend source lives in `frontend/` (see
+  `frontend/AGENTS.md`) — this repo intentionally keeps it as a sibling of
+  `src/`, not nested inside the Python package, matching the majority
+  convention for Python tools that ship a web UI (Streamlit, Gradio,
+  JupyterLab); nesting would drag `frontend/node_modules` inside every
+  Python source glob.
+- Checks (all must pass before considering a task done): `uv run ruff check
+  .`, `uv run ty check`, `uv run pytest -q`. For frontend changes, see
+  `frontend/AGENTS.md`.
 
 ## Structure
 
 - `src/edl_agent/` — library code, one subpackage per pipeline stage:
   `ingest/`, `features/`, `candidates/`, `selection/`, `selector/`,
   `planner/`, `render/`, `session/`, plus top-level `edl.py`, `slots.py`,
-  `verify.py`, `ollama_client.py`.
+  `verify.py`, `ollama_client.py`, `paths.py` (runtime data dirs).
+  `web/` holds the FastAPI app: `app.py` (mounts routers), `pipeline.py`
+  (orchestrator), `jobs.py`/`state.py` (shared job-tracking state),
+  `stages/` (one module per pipeline stage), `routes/` (one module per
+  resource).
+- `frontend/` — React/TS SPA source; see `frontend/AGENTS.md`.
 - `scripts/` — CLI entry points (e.g. `run_e2e.py`).
 - `tests/` — mirrors `src/edl_agent/` layout, one `test_*.py` per module.
 - `docs/architecture/` — spec documents referenced by docstrings/comments.
+- `var/` — gitignored runtime data (sessions, cache, model weights); not
+  checked in, not code.
 
 ## Docstrings
 
