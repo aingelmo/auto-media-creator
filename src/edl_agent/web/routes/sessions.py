@@ -13,7 +13,13 @@ from edl_agent.paths import SESSIONS_DIR
 from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
 from edl_agent.web.artifacts import clear_stage_artifacts
-from edl_agent.web.pipeline import DEFAULT_MODELS, STAGES, JobState, run_pipeline_job
+from edl_agent.web.pipeline import (
+    DEFAULT_MODELS,
+    DISPLAY_STAGES,
+    STAGES,
+    JobState,
+    run_pipeline_job,
+)
 from edl_agent.web.routes.config import save_brand
 from edl_agent.web.state import (
     PROVIDER_API_KEY_ENV,
@@ -281,7 +287,7 @@ def session_page(name: str) -> dict:
     reel_exists = (SESSIONS_DIR / name / "reel.mp4").exists()
     reel_b_exists = (SESSIONS_DIR / name / "reel_b.mp4").exists()
     statuses = stage_statuses(name)
-    regen_stages = ("candidates", "selection", "hooks", "planner", "render")
+    regen_stages = ("candidates", "selection", "planner", "hooks", "render")
     default_from_stage = next(
         (s for s in regen_stages if statuses.get(s) == "pending"), "selection"
     )
@@ -290,7 +296,7 @@ def session_page(name: str) -> dict:
         "job": job_payload(job),
         "reel_exists": reel_exists,
         "reel_b_exists": reel_b_exists,
-        "stages": STAGES,
+        "stages": DISPLAY_STAGES,
         "stage_statuses": statuses,
         "providers": UI_PROVIDERS,
         "default_models": DEFAULT_MODELS,

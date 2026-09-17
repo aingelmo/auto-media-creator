@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from edl_agent.session import tonemap_chain_for_manifest
 from edl_agent.web.artifacts import clear_stage_artifacts
-from edl_agent.web.jobs import STAGES, JobState, _JobCancelledError
+from edl_agent.web.jobs import DISPLAY_STAGES, STAGES, JobState, _JobCancelledError
 from edl_agent.web.stages.candidates import _run_candidates_stage
 from edl_agent.web.stages.ingest import _run_ingest_stage
 from edl_agent.web.stages.planner import _run_hooks_and_planner_stage
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DEFAULT_MODELS",
+    "DISPLAY_STAGES",
     "STAGES",
     "JobState",
     "clear_stage_artifacts",

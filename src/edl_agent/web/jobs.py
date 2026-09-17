@@ -25,6 +25,19 @@ STAGES = (
     "checks",
 )
 
+# UI-facing order: reel planning actually starts (and finishes) around hook
+# generation, so display it before "hooks" even though STAGES (which drives
+# regen artifact clearing) keeps "hooks" first for that index math.
+DISPLAY_STAGES = (
+    "ingest",
+    "candidates",
+    "selection",
+    "planner",
+    "hooks",
+    "render",
+    "checks",
+)
+
 
 @dataclass
 class JobState:

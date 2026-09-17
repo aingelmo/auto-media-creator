@@ -6,7 +6,7 @@ import BrandFieldset from "./BrandFieldset";
 import ProviderModelFields from "./ProviderModelFields";
 import ThemeAudienceFields from "./ThemeAudienceFields";
 
-const REGEN_STAGES = ["candidates", "selection", "hooks", "planner", "render"] as const;
+const REGEN_STAGES = ["candidates", "selection", "planner", "hooks", "render"] as const;
 
 // Provider/theme/audience/brief/hook fields only affect a regen that
 // actually re-runs the LLM-driven selection/hooks stages; from planner on,
