@@ -54,11 +54,16 @@ def _clamp(x: float, lo: float, hi: float) -> float:
 
 
 def color_fix_for(measured: dict, target: dict, strength: float) -> dict:
-    """Compute `eq`/`colorcorrect` params moving `measured` toward `target`.
+    """Compute `eq` brightness moving `measured` toward `target`, luma-only.
 
     Gains verified empirically on ffmpeg 5.1: `eq=brightness=b` shifts Y by
-    ~b*255; `colorcorrect=rl=r` shifts V by ~r*255 and `bl=b` shifts U by
-    ~b*255 (positive = up).
+    ~b*255.
+
+    Chroma (U/V) matching was tried and removed: frame-mean U/V tracks what's
+    in shot (skin, wood, sky), not white balance, so `colorcorrect` dragged
+    neutrals off-neutral and read as an orange cast; `SATAVG` is too noisy at
+    typical levels (single-digit values) to drive a saturation gain safely.
+    Don't re-add either without a real white-balance measurement.
 
     Args:
         measured: `{"y", "u", "v", "sat"}` of the clip.
@@ -66,20 +71,14 @@ def color_fix_for(measured: dict, target: dict, strength: float) -> dict:
         strength: 0..1 fraction of the gap to close.
 
     Returns:
-        `{"brightness", "saturation", "rl", "bl", "measured"}`.
+        `{"brightness", "measured"}`.
     """
     # ponytail: lift-only. Clips at Y~110+ (~45 IRE) are already well exposed
     # per colourist references; darkening them toward a median dragged down by
     # dark clips looked wrong. Add a "darken above Y>=X" rule if blown-out
     # sources show up.
-    sat_ratio = target["sat"] / measured["sat"] if measured["sat"] else 1.0
     return {
         "brightness": _clamp(strength * (target["y"] - measured["y"]) / 255, 0, 0.15),
-        # Tight band: lifting luma already raises apparent saturation, and skin
-        # goes orange past ~1.15 (skin should stay at 20-50% vectorscope sat).
-        "saturation": _clamp(1 + strength * (sat_ratio - 1), 0.85, 1.15),
-        "rl": _clamp(strength * (target["v"] - measured["v"]) / 255, -0.10, 0.10),
-        "bl": _clamp(strength * (target["u"] - measured["u"]) / 255, -0.10, 0.10),
         "measured": measured,
     }
 

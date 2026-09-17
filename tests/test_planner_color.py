@@ -32,24 +32,16 @@ def _make_color(path: Path, color: str, duration: float = 1) -> None:
 
 def test_color_fix_identity_when_equal() -> None:
     fix = color_fix_for(_GREY, _GREY, 0.7)
-    assert (fix["brightness"], fix["saturation"], fix["rl"], fix["bl"]) == (
-        0,
-        1.0,
-        0,
-        0,
-    )
+    assert fix["brightness"] == 0
+    assert set(fix) == {"brightness", "measured"}  # luma-only, no chroma keys
 
 
 def test_color_fix_dark_clip_brightens_and_clamps() -> None:
     dark = {**_GREY, "y": 50.0, "sat": 5.0}
     fix = color_fix_for(dark, _GREY, 1.0)
     assert 0 < fix["brightness"] <= 0.15
-    assert fix["saturation"] == 1.15  # ratio 2.0 clamped
     extreme = color_fix_for({"y": 0.0, "u": 0.0, "v": 255.0, "sat": 0.0}, _GREY, 1.0)
     assert extreme["brightness"] == 0.15
-    assert extreme["bl"] == 0.10
-    assert extreme["rl"] == -0.10
-    assert extreme["saturation"] == 1.0  # sat=0 -> no ratio, identity
     bright = color_fix_for({**_GREY, "y": 250.0}, _GREY, 1.0)
     assert bright["brightness"] == 0  # lift-only, never darkens
 

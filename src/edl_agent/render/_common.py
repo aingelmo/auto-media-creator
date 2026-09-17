@@ -49,10 +49,7 @@ def _video_codec_args(threads: int, preview: bool) -> list[str]:
     ]
 
 
-COLOR_FIX_FILTER_TEMPLATE = (
-    "eq=brightness={brightness}:saturation={saturation},"
-    "colorcorrect=rl={rl}:bl={bl}:rh={rl}:bh={bl},"
-)
+COLOR_FIX_FILTER_TEMPLATE = "eq=brightness={brightness},"
 
 
 def color_fix_filter(clip: dict) -> str:
