@@ -26,6 +26,8 @@ def _scan(subdir: str, exts: set[str]) -> list[dict]:
         for f in d.iterdir():
             if not f.is_file() or f.suffix.lower() not in exts:
                 continue
+            if subdir == "music" and f.name == "track_cut.wav":
+                continue  # generated output, not an original upload
             stat = f.stat()
             entries.append(
                 {
