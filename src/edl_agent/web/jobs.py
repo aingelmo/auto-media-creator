@@ -64,8 +64,8 @@ class JobState:
             with; kept so `/sessions/{name}/retry` can relaunch it.
         model: LLM model this job was (or should be, on retry) run with.
         theme: Selector prompt theme (`"training"` | `"yoga"`).
-        hook_line_override: Operator-typed text from the new-session form;
-            if non-empty, `run_hooks` skips its LLM call entirely.
+        hook_line_override: Operator-typed text from the regenerate-from-hooks
+            form; if non-empty, `run_hooks` skips its LLM call entirely.
         brief: Operator-typed session brief from the new-session form,
             passed to `run_hooks` to ground the `contexto` angle.
         audience: `"prospects"` | `"members"`, from the new-session form,

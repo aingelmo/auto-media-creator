@@ -50,7 +50,6 @@ async def create_session(
     logo: UploadFile | None = None,
     handle: str = Form(""),
     line: str = Form(""),
-    hook_line: str = Form(""),
     brief: str = Form(""),
     audience: str = Form("prospects"),
 ) -> JSONResponse:
@@ -100,7 +99,6 @@ async def create_session(
         model,
         job,
         theme=theme,
-        hook_line_override=clean_hook_line(hook_line),
         brief=brief.strip(),
         audience=audience,
     )
@@ -115,7 +113,6 @@ def start_session(
     provider: str = Form(...),
     model: str = Form(...),
     theme: str = Form("training"),
-    hook_line: str = Form(""),
     brief: str = Form(""),
     audience: str = Form("prospects"),
 ) -> JSONResponse:
@@ -138,11 +135,10 @@ def start_session(
         provider,
         model,
         job,
-        True,
-        theme,
-        clean_hook_line(hook_line),
-        brief.strip(),
-        audience,
+        resume=True,
+        theme=theme,
+        brief=brief.strip(),
+        audience=audience,
     )
 
     return JSONResponse({"name": name})

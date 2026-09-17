@@ -1,6 +1,6 @@
 import { getFormMemory } from "../formMemory";
 
-/** Theme/audience/brief/hook-line fields shared by the new/start/regenerate forms. */
+/** Theme/audience/brief fields shared by the new/start/regenerate forms. */
 export default function ThemeAudienceFields({ idPrefix }: { idPrefix: string }) {
   return (
     <>
@@ -29,16 +29,6 @@ export default function ThemeAudienceFields({ idPrefix }: { idPrefix: string }) 
       <label htmlFor={`${idPrefix}-brief`}>
         Brief (optional; e.g. "Hyrox class, Thursday, 12 people, partner WOD")
         <input id={`${idPrefix}-brief`} type="text" name="brief" maxLength={200} />
-      </label>
-      <label htmlFor={`${idPrefix}-hook`}>
-        Hook text (manual, skips the LLM)
-        <input
-          id={`${idPrefix}-hook`}
-          type="text"
-          name="hook_line"
-          maxLength={40}
-          placeholder="La barra despega del suelo"
-        />
       </label>
     </>
   );

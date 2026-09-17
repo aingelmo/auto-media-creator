@@ -66,8 +66,9 @@ def run_pipeline_job(
         resume: If `True`, skip any stage whose output file already exists
             on disk (loading it instead), per `/sessions/{name}/retry`.
         theme: Selector prompt theme, a key of `edl_agent.selector.prompts.THEMES`.
-        hook_line_override: Operator-typed hook text from the new-session
-            form; if non-empty, the `hooks` stage skips its LLM call.
+        hook_line_override: Operator-typed hook text from the
+            regenerate-from-hooks form; if non-empty, the `hooks` stage
+            skips its LLM call.
         brief: Operator-typed session brief from the new-session form.
         audience: `"prospects"` | `"members"`, from the new-session form.
     """

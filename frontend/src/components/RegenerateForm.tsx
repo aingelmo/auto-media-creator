@@ -65,6 +65,16 @@ export default function RegenerateForm({
           />
           <ThemeAudienceFields idPrefix="regen" />
         </div>
+        <label htmlFor="regen-hook" hidden={fromStage !== "hooks"}>
+          Hook text (manual, skips the LLM)
+          <input
+            id="regen-hook"
+            type="text"
+            name="hook_line"
+            maxLength={40}
+            placeholder="La barra despega del suelo"
+          />
+        </label>
         <BrandFieldset
           idPrefix="regen"
           legend="Brand (optional; new logo replaces the session's, applies from planner on)"
