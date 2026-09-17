@@ -103,7 +103,7 @@ export default function Session() {
         (() => {
           const StageView = STAGE_VIEWS[viewStage];
           return (
-            <Modal onClose={() => setViewStage(null)}>
+            <Modal open onClose={() => setViewStage(null)}>
               <StageView />
             </Modal>
           );

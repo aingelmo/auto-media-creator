@@ -71,56 +71,54 @@ export default function MediaLibraryPicker({
             {uploadedClipsCount > 0 && `, ${uploadedClipsCount} uploaded`})
           </button>
         </p>
-        {clipsOpen && (
-          <Modal onClose={() => setClipsOpen(false)}>
-            <p>
-              {clips.length > 0 && (
-                <>
-                  <button type="button" onClick={selectAllClips}>
-                    Select all
-                  </button>{" "}
-                  <button type="button" onClick={clearClips}>
-                    Clear
-                  </button>{" "}
-                </>
-              )}
-              <label htmlFor="new-clips">
-                Upload {clips.length > 0 ? "more clips" : "clips"}
-                <input
-                  id="new-clips"
-                  type="file"
-                  name="clips"
-                  multiple
-                  onChange={(e) => setUploadedClipsCount(e.target.files?.length ?? 0)}
-                />
-              </label>
-            </p>
-            {clips.length === 0 ? (
-              <p>No clips from past sessions yet.</p>
-            ) : (
-              <div className="contact-sheet contact-sheet--compact">
-                {clips.map((c) => {
-                  const ref = `${c.session}/${c.path}`;
-                  return (
-                    <figure key={ref}>
-                      <video muted preload="metadata" src={fileUrl(c.session, c.path)} />
-                      <figcaption>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={selectedClips.has(ref)}
-                            onChange={() => toggleClip(ref)}
-                          />
-                          {c.filename} &middot; {formatKb(c.size)}
-                        </label>
-                      </figcaption>
-                    </figure>
-                  );
-                })}
-              </div>
+        <Modal open={clipsOpen} onClose={() => setClipsOpen(false)}>
+          <p>
+            {clips.length > 0 && (
+              <>
+                <button type="button" onClick={selectAllClips}>
+                  Select all
+                </button>{" "}
+                <button type="button" onClick={clearClips}>
+                  Clear
+                </button>{" "}
+              </>
             )}
-          </Modal>
-        )}
+            <label htmlFor="new-clips">
+              Upload {clips.length > 0 ? "more clips" : "clips"}
+              <input
+                id="new-clips"
+                type="file"
+                name="clips"
+                multiple
+                onChange={(e) => setUploadedClipsCount(e.target.files?.length ?? 0)}
+              />
+            </label>
+          </p>
+          {clips.length === 0 ? (
+            <p>No clips from past sessions yet.</p>
+          ) : (
+            <div className="contact-sheet contact-sheet--compact">
+              {clips.map((c) => {
+                const ref = `${c.session}/${c.path}`;
+                return (
+                  <figure key={ref}>
+                    <video muted preload="metadata" src={fileUrl(c.session, c.path)} />
+                    <figcaption>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={selectedClips.has(ref)}
+                          onChange={() => toggleClip(ref)}
+                        />
+                        {c.filename} &middot; {formatKb(c.size)}
+                      </label>
+                    </figcaption>
+                  </figure>
+                );
+              })}
+            </div>
+          )}
+        </Modal>
       </fieldset>
       <fieldset>
         <legend>Music</legend>
@@ -134,45 +132,43 @@ export default function MediaLibraryPicker({
                 : "(none chosen)"}
           </button>
         </p>
-        {musicOpen && (
-          <Modal onClose={() => setMusicOpen(false)}>
-            <p>
-              <label htmlFor="new-music">
-                Upload {music.length > 0 ? "a different track" : "a track"} (mp3, wav, or mp4/m4a)
-                <input
-                  id="new-music"
-                  type="file"
-                  name="music"
-                  accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
-                  onChange={(e) => setUploadedMusicName(e.target.files?.[0]?.name ?? "")}
-                />
-              </label>
-            </p>
-            {music.length === 0 ? (
-              <p>No music from past sessions yet.</p>
-            ) : (
-              <ul className="media-list">
-                {music.map((m) => {
-                  const ref = `${m.session}/${m.path}`;
-                  return (
-                    <li key={ref}>
-                      <label>
-                        <input
-                          type="radio"
-                          name="media-library-music"
-                          checked={selectedMusic === ref}
-                          onChange={() => pickMusic(ref)}
-                        />
-                        {m.filename} &middot; {formatKb(m.size)}
-                      </label>
-                      <audio controls preload="none" src={fileUrl(m.session, m.path)} />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Modal>
-        )}
+        <Modal open={musicOpen} onClose={() => setMusicOpen(false)}>
+          <p>
+            <label htmlFor="new-music">
+              Upload {music.length > 0 ? "a different track" : "a track"} (mp3, wav, or mp4/m4a)
+              <input
+                id="new-music"
+                type="file"
+                name="music"
+                accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
+                onChange={(e) => setUploadedMusicName(e.target.files?.[0]?.name ?? "")}
+              />
+            </label>
+          </p>
+          {music.length === 0 ? (
+            <p>No music from past sessions yet.</p>
+          ) : (
+            <ul className="media-list">
+              {music.map((m) => {
+                const ref = `${m.session}/${m.path}`;
+                return (
+                  <li key={ref}>
+                    <label>
+                      <input
+                        type="radio"
+                        name="media-library-music"
+                        checked={selectedMusic === ref}
+                        onChange={() => pickMusic(ref)}
+                      />
+                      {m.filename} &middot; {formatKb(m.size)}
+                    </label>
+                    <audio controls preload="none" src={fileUrl(m.session, m.path)} />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Modal>
       </fieldset>
     </div>
   );
