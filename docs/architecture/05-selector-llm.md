@@ -128,25 +128,29 @@ Se adjunta a cada candidato solo `id`, `kind`, `src`, `multi_subject`; no se pas
 
 ### 5.7 Hook lines — `hooks.json`
 
-Ya no hay un único `hook_line` dentro de `selection.json`. Tras la selección hay una llamada LLM separada (mismo proveedor/modelo) que devuelve 3 líneas, una por ángulo fijo, con contrato verificable: `{candidate_id, evidence, hooks: [{angle, hook_line}]}` (`hook_copy_schema` en `selector/hooks.py`).
+Ya no hay un único `hook_line` dentro de `selection.json`. La llamada de hook-copy corre **después del planner**, no antes: el planner primero construye el EDL con `hook_line_override=""` (§6), y esa EDL ya ordenada es lo que alimenta la llamada de hooks (mismo proveedor/modelo), que devuelve 3-5 líneas, cada una con un dispositivo de copy distinto, con contrato verificable: `{candidate_id, evidence, hooks: [{angle, hook_line}]}` (`hook_copy_schema` en `selector/hooks.py`; `angle` guarda el nombre del dispositivo, no un ángulo fijo). El planner corre una segunda vez con la línea elegida para producir el EDL final.
 
-Input: un brief opcional del operador (`str`, libre) y la audiencia (`"prospects"` | `"members"`, elegidos por sesión); un resumen en texto de toda la selección (`session/hooks.py: selection_context` — rol/ejercicio/tipo/velocidad de cada clip elegido, si hay grupo, duración del reel, notas y motivos del selector); y los 3 fotogramas de pico del candidato hook elegido con su ejercicio y velocidad, igual que el resto del selector.
+Este orden importa: generar los hooks antes de planificar solo daba al LLM la lista de candidatos del selector (rankeada, sin recortar a duración), no los clips que el planner realmente coloca en el reel — de ahí líneas que prometían un trineo o un kettlebell que no aparecían en el reel final.
 
-Ángulos (enum fijo, una línea cada uno):
-- `contexto` — qué es este reel (sesión/clase/día/lugar); reconocimiento para socios, encuadre para prospectos.
+Input: un brief opcional del operador (`str`, libre) y la audiencia (`"prospects"` | `"members"`, elegidos por sesión); un resumen en texto del EDL final en su orden de reproducción (`session/hooks.py: reel_context` — rol/ejercicio/duración/velocidad/motivo de cada clip *ya colocado*, el recuento real de clips y de develop, y las notas del selector); los 3 fotogramas de pico del candidato hook con su ejercicio y velocidad; y 1 fotograma (el central) de cada uno de los demás clips del reel, cada imagen etiquetada con el id de su clip, para que el modelo pueda anclar la línea en el reel entero y no solo en el primer clip.
+
+Dispositivos de copy (3-5 líneas, uno por dispositivo, sin ángulo fijo):
+- `pregunta` — pregunta corta sobre lo que se ve.
+- `contraste` — contrapone el clip gancho con lo que viene después.
+- `detalle` — un objeto, lugar o recuento concreto y real del reel.
 - `afirmacion` — afirmación rotunda y defendible sobre el ejercicio o la sesión (hot take).
-- `adelanto` — lo que el espectador está a punto de ver (contraste o progresión entre los clips elegidos).
+- `tu` — dirigida al espectador (tú/te), sin ser eslogan.
 
-La audiencia solo cambia el párrafo de tono del prompt; el tema mantiene su matiz existente vía `THEMES[theme]["hook_line"]`. Regla de anclaje: toda frase debe apoyarse en el brief, el resumen de la selección, o los fotogramas; los números solo se permiten si aparecen literales en el brief (`numbers_in`/`allowed_numbers` en `clean_hook_line`). Prohíbe explícitamente reps/kilos/tiempos/récords inventados, emociones, segunda persona, preguntas, exclamaciones, emojis, hashtags, comillas, punto final y lenguaje motivacional/eslogan. Cadena vacía en cualquier `hook_line` que no se pueda anclar (abstención legítima por ángulo). Temperatura 0.7.
+La audiencia solo cambia el párrafo de tono del prompt; el tema mantiene su matiz existente vía `THEMES[theme]["hook_line"]`. Regla de anclaje: toda frase debe apoyarse en el brief, el reel (incluido su recuento real de clips) o los fotogramas — nunca un objeto/ejercicio ausente del reel; los números solo se permiten si aparecen literales en el brief o en el resumen del reel (`numbers_in`/`allowed_numbers` en `clean_hook_line`, unión de ambos textos). Preguntas y segunda persona (tú/te) están permitidas — ya no prohibidas. Prohíbe explícitamente reps/kilos/tiempos/récords inventados, dolor/lesión, comentarios sobre el cuerpo, exclamaciones, emojis, hashtags, comillas, punto final y lenguaje motivacional/eslogan (incluye "transforma tu cuerpo", "quema grasa"). Cadena vacía en cualquier `hook_line` que no se pueda anclar (abstención legítima). Temperatura 0.7, hasta 8 palabras por línea (antes 6).
 
 Validación en código (`generate_hook_copy`, `selector/hooks.py`):
 - `candidate_id` de la respuesta distinto del candidato hook real → todas las líneas se descartan, `rejected: "candidate_id_mismatch"`.
-- Cada `hooks[i].hook_line` pasa por `clean_hook_line(line, strict=True, allowed_numbers=numbers_in(brief))` (`selection/s_checks.py`); las líneas inválidas se descartan y se listan en `dropped: [{angle, hook_line, why}]`.
+- Cada `hooks[i].hook_line` pasa por `clean_hook_line(line, strict=True, allowed_numbers=...)` (`selection/s_checks.py`); las líneas inválidas se descartan y se listan en `dropped: [{angle, hook_line, why}]`.
 - `hooks` en el resultado = las líneas que sobreviven; `hook_line` (compatibilidad con el CLI/planner) = `hooks[0]["hook_line"]` o `""`.
 - `rejected: "invalid_copy"` solo si el modelo devolvió ≥1 línea y ninguna sobrevivió.
 - Un solo reintento, solo por `status: "incomplete"` o error de red/JSON; nunca por abstención.
 
 Si el operador ya escribió texto (`hook_line_override`, desde el formulario de alta o de regenerar), se salta la llamada LLM por completo: `hooks.json` se escribe con `source: "override"`, `evidence: []`, `cost_usd: 0.0`.
 
-El operador ve las 3 líneas (con su ángulo) renderizadas sobre el hook, más una variante sin texto, en la pausa `hook_choice` de la web UI, y puede aceptar una, escribir texto propio, o elegir "sin texto"; "Regenerate" pide un lote nuevo de 3. El CLI usa `hooks.json["hook_line"]` sin pausa. `hooks.json` también guarda `brief`, `audience` y `context` (el resumen enviado), para depuración.
+El operador ve las líneas (con su dispositivo) renderizadas sobre el hook, más una variante sin texto, en la pausa `hook_choice` de la web UI, y puede aceptar una, escribir texto propio, o elegir "sin texto"; "Regenerate" pide un lote nuevo. El CLI usa `hooks.json["hook_line"]` sin pausa. `hooks.json` también guarda `brief`, `audience` y `context` (el resumen del reel enviado), para depuración.
 

@@ -44,6 +44,23 @@ def _run_hooks_and_planner_stage(
         return json.loads(edl_path.read_text())
 
     hooks_path = session_dir / "hooks.json"
+    # Build the reel once, with no hook text, so hook-copy generation (#5.7)
+    # can be fed the final, ordered clip list -- the reel the viewer will
+    # actually see -- instead of the selector's pre-planning candidate pool.
+    job.detail["hooks"] = "building preview EDL"
+    base_edl = run_planner(
+        session_dir,
+        manifest,
+        candidates,
+        slots,
+        selection,
+        selection_meta,
+        threads=THREADS,
+        config={"hook_line_override": ""},
+        out_name="edl_base.json",
+    )
+    job.hook_slot = next(c["slot"] for c in base_edl["clips"] if c["role"] == "hook")
+
     while True:
         if resume and hooks_path.exists() and not job.more_hooks:
             job.stages["hooks"] = "done"
@@ -55,7 +72,7 @@ def _run_hooks_and_planner_stage(
                 hooks = run_hooks(
                     session_dir,
                     candidates,
-                    slots,
+                    base_edl,
                     selection,
                     theme,
                     client,
@@ -65,20 +82,7 @@ def _run_hooks_and_planner_stage(
                     audience=job.audience,
                 )
         job.hooks = hooks
-        job.detail["hooks"] = "building preview EDL"
-        preview_edl = run_planner(
-            session_dir,
-            manifest,
-            candidates,
-            slots,
-            selection,
-            selection_meta,
-            threads=THREADS,
-            config={"hook_line_override": hooks["hook_line"]},
-        )
-        job.hook_slot = next(
-            c["slot"] for c in preview_edl["clips"] if c["role"] == "hook"
-        )
+        preview_edl = base_edl
         job.detail["hooks"] = "rendering hook line previews"
         render_hook_previews(
             preview_edl,

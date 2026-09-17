@@ -169,28 +169,41 @@ def main() -> None:
             json.dumps(selection_meta or {}, indent=2, ensure_ascii=False)
         )
 
-    hooks_path = session / "hooks.json"
-    if resume and hooks_path.exists():
-        hooks = _load_json(hooks_path)
-    else:
-        client = get_client(args.provider)
-        hooks = run_hooks(
-            session,
-            candidates,
-            slots,
-            selection,
-            args.theme,
-            client,
-            args.model,
-            hook_line_override=args.hook_line,
-            brief=args.brief,
-            audience=args.audience,
-        )
-
     edl_path = session / "edl.json"
+    hooks_path = session / "hooks.json"
     if resume and edl_path.exists():
         edl = _load_json(edl_path)
     else:
+        # Build the reel once with no hook text, so hook-copy generation
+        # (#5.7) reads the final, ordered clip list -- what the viewer will
+        # actually see -- instead of the selector's pre-planning pool.
+        base_edl = run_planner(
+            session,
+            manifest,
+            candidates,
+            slots,
+            selection,
+            selection_meta,
+            threads=args.threads,
+            config={"hook_line_override": ""},
+            out_name="edl_base.json",
+        )
+        if resume and hooks_path.exists():
+            hooks = _load_json(hooks_path)
+        else:
+            client = get_client(args.provider)
+            hooks = run_hooks(
+                session,
+                candidates,
+                base_edl,
+                selection,
+                args.theme,
+                client,
+                args.model,
+                hook_line_override=args.hook_line,
+                brief=args.brief,
+                audience=args.audience,
+            )
         edl = run_planner(
             session,
             manifest,

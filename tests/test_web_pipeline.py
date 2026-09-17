@@ -46,7 +46,7 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
         return {"clips": [{"slot": 0, "role": "hook", "effect_params": {}}]}
 
     def fake_run_hooks(
-        session_dir, candidates, slots, selection, theme, client, model, **kwargs
+        session_dir, candidates, edl, selection, theme, client, model, **kwargs
     ):
         return {
             "candidate_id": "hook1",
@@ -184,7 +184,7 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
         return {"clips": [{"slot": 0, "role": "hook", "effect_params": {}}]}
 
     def fake_run_hooks(
-        session_dir, candidates, slots, selection, theme, client, model, **kwargs
+        session_dir, candidates, edl, selection, theme, client, model, **kwargs
     ):
         return {
             "candidate_id": "c01",
@@ -296,26 +296,29 @@ def _run_job_to_hook_choice(
     edl = {"clips": [{"slot": 0, "role": "hook", "effect_params": {}}]}
 
     planner_calls: list[dict] = []
+    call_order: list[str] = []
 
     def fake_run_planner(
         session_dir, manifest, candidates, slots, selection, meta, **kw
     ):
         planner_calls.append(kw)
+        call_order.append("planner")
         return edl
 
     hooks_calls = []
 
     def fake_run_hooks(
-        session_dir, candidates, slots, selection, theme, client, model, **kwargs
+        session_dir, candidates, edl, selection, theme, client, model, **kwargs
     ):
         hooks_calls.append(kwargs)
+        call_order.append("hooks")
         return {
             "candidate_id": "c01",
             "hook_line": "la barra despega del suelo",
             "hooks": [
-                {"angle": "contexto", "hook_line": "el jueves de hyrox"},
+                {"angle": "pregunta", "hook_line": "el jueves de hyrox"},
                 {"angle": "afirmacion", "hook_line": "la barra despega del suelo"},
-                {"angle": "adelanto", "hook_line": "cinco estaciones seguidas"},
+                {"angle": "contraste", "hook_line": "cinco estaciones seguidas"},
             ],
             "dropped": [],
             "evidence": ["barra en el suelo"],
@@ -391,6 +394,9 @@ def _run_job_to_hook_choice(
     assert not thread.is_alive()
     assert job.error is None
     assert job.done
+    # run_planner builds a hookless preview EDL before run_hooks is called,
+    # so hook-copy generation reads the final, ordered clip list (#5.7).
+    assert call_order[:2] == ["planner", "hooks"]
     return (
         job,
         render_segments_mock,

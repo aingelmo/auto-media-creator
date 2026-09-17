@@ -257,11 +257,15 @@ def test_hook_copy_schema_requires_contract_fields() -> None:
     schema = hook_copy_schema()
     assert schema["required"] == ["candidate_id", "evidence", "hooks"]
     assert schema["properties"]["evidence"]["maxItems"] == 3
+    assert schema["properties"]["hooks"]["minItems"] == 3
+    assert schema["properties"]["hooks"]["maxItems"] == 5
     hooks_items = schema["properties"]["hooks"]["items"]
     assert hooks_items["properties"]["angle"]["enum"] == [
-        "contexto",
+        "pregunta",
+        "contraste",
+        "detalle",
         "afirmacion",
-        "adelanto",
+        "tu",
     ]
 
 
@@ -278,9 +282,9 @@ def _hook_cand():
 
 def _three_hooks(**overrides):
     hooks = [
-        {"angle": "contexto", "hook_line": "el jueves de hyrox"},
+        {"angle": "pregunta", "hook_line": "¿Quién empuja la barra hoy?"},
         {"angle": "afirmacion", "hook_line": "la barra despega del suelo"},
-        {"angle": "adelanto", "hook_line": "cinco estaciones seguidas"},
+        {"angle": "contraste", "hook_line": "cinco estaciones seguidas"},
     ]
     payload = {
         "candidate_id": "hook1",
@@ -330,6 +334,48 @@ def test_hook_copy_accepts_three_lines_one_per_angle(tmp_path) -> None:
     assert result["audience"] == "members"
     assert (tmp_path / "hooks.json").exists()
     assert len(json.loads((tmp_path / "hooks.json").read_text())["hooks"]) == 3
+
+
+def test_hook_copy_sends_one_frame_per_other_clip(tmp_path) -> None:
+    payload = _three_hooks()
+    client = _FakeClient([_FakeInteraction("completed", json.dumps(payload))])
+    jpgs = []
+    for name in ("a.jpg", "b.jpg", "c.jpg", "d.jpg"):
+        jpg = tmp_path / name
+        jpg.write_bytes(b"x")
+        jpgs.append(str(jpg))
+    others = [
+        {
+            "id": "c2",
+            "kind": "peak",
+            "src": "b.mov",
+            "multi_subject": False,
+            "kp_speed_abs": 0.9,
+            "peak_frames": jpgs[:3],
+        },
+        {
+            "id": "c3",
+            "kind": "calm",
+            "src": "c.mov",
+            "multi_subject": True,
+            "kp_speed_abs": 0.1,
+            "peak_frames": [jpgs[3]],
+        },
+    ]
+
+    generate_hook_copy(
+        _hook_cand(),
+        "deadlift",
+        "training",
+        client,
+        "test-model",
+        tmp_path,
+        others=others,
+    )
+
+    parts = client.interactions.calls[0]["input"]
+    image_parts = [p for p in parts if p.get("type") == "image"]
+    assert len(image_parts) == len(others)
 
 
 def test_hook_copy_drops_one_invalid_line_keeps_the_rest(tmp_path) -> None:

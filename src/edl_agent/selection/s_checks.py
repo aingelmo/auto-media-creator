@@ -8,8 +8,8 @@ from edl_agent.selection._common import ROLES, _admits, _slot_indices
 
 HOOK_LINE_MAX_WORDS = 8  # operator-typed text (strict=False)
 HOOK_LINE_MIN_WORDS = 3
-HOOK_LINE_STRICT_MAX_WORDS = 6
-HOOK_LINE_MAX_CHARS = 40
+HOOK_LINE_STRICT_MAX_WORDS = 8
+HOOK_LINE_MAX_CHARS = 48
 
 # Substrings (casefold) that mark a line as an invented slogan rather than a
 # description of what's on screen.
@@ -30,6 +30,11 @@ GENERIC_PHRASES: tuple[str, ...] = (
     "vamos",
     "reto",
     "récord",
+    "transforma tu cuerpo",
+    "quema grasa",
+    "sin dolor",
+    "dolor",
+    "lesión",
 )
 
 
@@ -47,21 +52,24 @@ def clean_hook_line(
 ) -> str:
     """Trim/unquote/validate a hook line; `""` if it fails any check.
 
-    Always applied: strip whitespace/quotes, drop a trailing `.`/`!`/`?`,
-    reject if empty, contains `#`/`@`, or any character outside the es-ES
-    text/punctuation range (`ord > 0x2000`, which catches emoji); truncate
-    to `HOOK_LINE_MAX_CHARS`.
+    Always applied: strip whitespace/quotes, drop a trailing `.`/`!`
+    (a trailing `?` is kept -- questions are an allowed hook device, #5.7),
+    reject if empty, contains `#`/`@`, any character outside the es-ES
+    text/punctuation range (`ord > 0x2000`, which catches emoji), or longer
+    than `HOOK_LINE_MAX_CHARS` (rejected outright rather than truncated --
+    a hard cut mid-word, e.g. "kettlebells al lad", is worse than asking
+    for a shorter line).
 
     `strict=True` (LLM output, #5.7) additionally rejects: fewer than
     `HOOK_LINE_MIN_WORDS` or more than `HOOK_LINE_STRICT_MAX_WORDS` words,
     any digit not in `allowed_numbers` (invented reps/kg/times, unless it
-    appeared verbatim in the operator's brief, see `numbers_in`), or a
-    substring from `GENERIC_PHRASES` (invented slogan).
+    appeared verbatim in the operator's brief or the reel context, see
+    `numbers_in`), or a substring from `GENERIC_PHRASES` (invented slogan).
 
     `strict=False` (operator-typed text, `hook_custom` in the web form)
     keeps the looser 1-`HOOK_LINE_MAX_WORDS`-word check only.
     """
-    line = str(raw or "").strip().strip("\"'“”«»").strip().rstrip(".!?").strip()
+    line = str(raw or "").strip().strip("\"'“”«»").strip().rstrip(".!").strip()
     words = line.split()
     unlisted_digits = any(n not in allowed_numbers for n in re.findall(r"\d+", line))
 
@@ -69,6 +77,7 @@ def clean_hook_line(
         not line
         or "#" in line
         or "@" in line
+        or len(line) > HOOK_LINE_MAX_CHARS
         or any(ord(ch) > 0x2000 for ch in line)
         or (
             not HOOK_LINE_MIN_WORDS <= len(words) <= HOOK_LINE_STRICT_MAX_WORDS
@@ -78,7 +87,7 @@ def clean_hook_line(
             else not 0 < len(words) <= HOOK_LINE_MAX_WORDS
         )
     )
-    return "" if rejected else line[:HOOK_LINE_MAX_CHARS]
+    return "" if rejected else line
 
 
 def apply_s_checks(

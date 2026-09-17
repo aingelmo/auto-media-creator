@@ -1,9 +1,11 @@
-"""Hook line generation: a separate LLM call after selection, #5.7.
+"""Hook line generation: a separate LLM call after planning, #5.7.
 
-Fed the operator's brief/audience, a text summary of the whole selection,
-and the chosen hook candidate's peak frames + exercise + speed; returns 3
-lines (one per fixed angle: contexto/afirmacion/adelanto), each grounded in
-the brief, the selection summary, or the frames, with a verifiable
+Fed the operator's brief/audience, a text summary of the final EDL in
+timeline order, and one low-res frame per other clip plus the chosen hook
+candidate's 3 peak frames, so the model can ground the line in the whole
+reel instead of just its first clip. Returns 3-5 lines, one per copy
+device (pregunta/contraste/detalle/afirmacion/tu), each grounded in the
+brief, the reel context, or the frames, with a verifiable
 `{candidate_id, evidence, hooks}` contract.
 """
 
@@ -20,7 +22,7 @@ from edl_agent.selector.client import _usage_dict
 from edl_agent.selector.pricing import _cost_usd
 from edl_agent.selector.prompts import THEMES, build_parts
 
-ANGLES: tuple[str, ...] = ("contexto", "afirmacion", "adelanto")
+DEVICES: tuple[str, ...] = ("pregunta", "contraste", "detalle", "afirmacion", "tu")
 
 AUDIENCE_TONE: dict[str, str] = {
     "members": "Audiencia: socios que ya entrenan aquí. Busca reconocimiento y "
@@ -31,46 +33,60 @@ AUDIENCE_TONE: dict[str, str] = {
 
 HOOK_SYSTEM_PROMPT_TEMPLATE = """Eres copywriter de Reels para un gimnasio, \
 escribiendo en español de España el texto que se sobreimprime en el primer \
-segundo del vídeo.
+segundo del vídeo, mientras se reproduce el clip gancho. Después de ese \
+segundo se reproduce el resto del reel, clip a clip, en el orden que se te \
+da. La frase debe preparar el reel entero, no solo describir el clip 1.
 
-Recibes: un brief opcional del operador, la audiencia, un resumen de la \
-selección de clips del reel (roles, ejercicios, duración, notas), y los 3 \
-fotogramas del momento gancho (antes, pico, después) con su ejercicio y \
-velocidad real del sujeto en el pico (alturas de cuerpo por segundo; <0.7 es \
-controlado, >1.2 es explosivo).
+Recibes: un brief opcional del operador, la audiencia, el reel completo en \
+su orden final (rol/ejercicio/duración/velocidad/motivo de cada clip, y el \
+recuento real de clips), los 3 fotogramas del clip gancho (antes, pico, \
+después), y 1 fotograma de cada uno de los demás clips, cada fotograma \
+etiquetado con el id del clip al que pertenece. Velocidad = alturas de \
+cuerpo por segundo en el pico; <0.7 es controlado, >1.2 es explosivo.
 
 {audience_tone}
 
-Escribe exactamente 3 frases, una por cada ángulo:
-- contexto: qué es este reel (sesión/clase/día/lugar); usa el brief o el \
-resumen si los dan esa información, si no describe la sesión en general.
+Antes de escribir, anota 2-3 hechos de evidencia visibles en TODOS los \
+fotogramas (no solo el gancho): lugar, si es grupo o individual, material, \
+o el contraste entre el primer clip y los siguientes.
+
+Escribe entre 3 y 5 frases, cada una con un dispositivo distinto:
+- pregunta: una pregunta corta sobre lo que se ve (¿...?).
+- contraste: contrapone el clip gancho con lo que viene después.
+- detalle: un objeto, lugar o recuento concreto y real del reel (no del \
+gancho en solitario).
 - afirmacion: una afirmación rotunda y defendible sobre el ejercicio o la \
-sesión (hot take), anclada en lo que se ve o en el resumen.
-- adelanto: lo que el espectador está a punto de ver (contraste o \
-progresión entre los clips seleccionados).
+sesión (hot take).
+- tu: dirigida al espectador (tú/te), sin ser un eslogan.
 
-Cada frase de 3 a 6 palabras. Deja una frase en "" si no puedes anclarla en \
-el brief, el resumen o los fotogramas -- mejor vacía que inventada.
+Cada frase de 3 a 8 palabras. Deja una frase en "" si no puedes anclarla en \
+el brief, el reel o los fotogramas -- mejor vacía que inventada. Cuanto más \
+concreta y menos genérica, mejor: "Sesión de fuerza" no vale nada; nombrar \
+algo que se ve en pantalla sí.
 
-Regla de anclaje: toda frase debe apoyarse en el brief, el resumen de la \
-selección o los fotogramas. Números solo si aparecen tal cual en el brief.
+Regla de anclaje: toda frase debe apoyarse en el brief, el reel (incluido \
+su recuento real de clips) o los fotogramas -- nunca menciones un objeto o \
+ejercicio que no esté en el reel. Números solo si aparecen tal cual en el \
+brief o coinciden con el recuento real de clips.
 
 Prohibido en cualquier frase:
 - repeticiones, kilos, récords, tiempos, resultados (salvo que vengan \
 literales en el brief)
-- emociones, dolor, competición, intención
-- segunda persona (tú/te), preguntas, exclamaciones, emojis, hashtags, \
-comillas, punto final
-- lenguaje motivacional/eslogan ("sin excusas", "dalo todo", "a otro nivel", \
-"modo bestia", "el límite")
+- emociones, dolor, lesión, competición
+- eslóganes o clichés de marketing fitness ("sin excusas", "dalo todo", \
+"a otro nivel", "modo bestia", "el límite", "transforma tu cuerpo", \
+"quema grasa")
+- comentarios sobre el cuerpo de los sujetos, emojis, hashtags, comillas, \
+punto final
 
-Ejemplos:
-- contexto: brief "Clase de Hyrox del jueves" -> "El jueves de Hyrox"
-- contexto: sin brief, tema training -> "Entreno de fuerza funcional"
-- afirmacion: wall ball en el resumen -> "El wall ball se hace con piernas"
-- afirmacion: sesión con varias estaciones -> "Cada estación cuenta el doble"
-- adelanto: resumen con 5 clips de desarrollo -> "Cinco estaciones sin descanso"
-- adelanto: deadlift, barra despegando del suelo -> "la barra despega del suelo"
+Ejemplos (con su dispositivo):
+- contraste: sprint al inicio, resto en sala -> "De la calle a la sala"
+- contraste: pico explosivo, resto controlado -> "Del empuje explosivo al front squat"
+- detalle: 8 clips distintos de material variado -> "Suelo, pesas, máquinas: \
+todo en un reel"
+- afirmacion: varios clips en grupo -> "No entrenas solo aquí"
+- pregunta: gancho de sled push -> "¿Quién empuja el trineo solo con brazos?"
+- tu: reel con progresión clara -> "Aquí empiezas donde puedes seguir"
 
 Tono (matiz, nunca eslogan): {hook_line}.
 
@@ -82,12 +98,14 @@ velocidad={speed:.2f} tema={theme} audiencia={audience}
 
 brief={brief}
 
-resumen de la selección:
+reel en orden:
 {context}
 
-Los 3 fotogramas (antes, pico, después) preceden a este mensaje.
+Los fotogramas preceden a este mensaje: primero los 3 del clip gancho \
+(id={candidate_id}), después 1 fotograma por cada uno de los demás clips, \
+cada uno etiquetado con su id.
 
-Describe la evidencia y escribe las 3 frases gancho."""
+Describe la evidencia y escribe las frases gancho."""
 
 
 def hook_copy_schema() -> dict:
@@ -95,7 +113,8 @@ def hook_copy_schema() -> dict:
 
     Returns:
         JSON schema dict requiring `candidate_id`, `evidence` (0-3 strings)
-        and `hooks` (3 items, each `{angle, hook_line}`).
+        and `hooks` (3-5 items, each `{angle, hook_line}`, `angle` holding
+        one of `DEVICES`).
     """
     return {
         "type": "object",
@@ -116,15 +135,15 @@ def hook_copy_schema() -> dict:
             "hooks": {
                 "type": "array",
                 "minItems": 3,
-                "maxItems": 3,
+                "maxItems": 5,
                 "items": {
                     "type": "object",
                     "properties": {
-                        "angle": {"type": "string", "enum": list(ANGLES)},
+                        "angle": {"type": "string", "enum": list(DEVICES)},
                         "hook_line": {
                             "type": "string",
                             "description": (
-                                "3-6 palabras ancladas en el brief, el resumen "
+                                "3-8 palabras ancladas en el brief, el reel "
                                 "o los fotogramas; cadena vacía si no se puede "
                                 "anclar."
                             ),
@@ -180,8 +199,9 @@ def generate_hook_copy(
     brief: str = "",
     audience: str = "prospects",
     context: str = "",
+    others: list[dict] | None = None,
 ) -> dict:
-    """Generate 3 angle-anchored hook lines for `candidate`, per #5.7.
+    """Generate 3-5 device-tagged hook lines for `candidate`, per #5.7.
 
     Args:
         candidate: The hook-role candidate dict (see
@@ -196,11 +216,16 @@ def generate_hook_copy(
         hook_line_override: Operator-typed text; if non-empty, skips the LLM
             call entirely.
         brief: Operator-typed session brief (e.g. "Hyrox class, Thursday, 12
-            people, partner WOD"); grounds `contexto` and allows its numbers.
+            people, partner WOD"); grounds the lines and allows its numbers.
         audience: `"prospects"` or `"members"`; only changes the system
             prompt's tone paragraph.
-        context: Selection summary text (see
-            `session.hooks.selection_context`), grounding all 3 angles.
+        context: Reel summary text (see `session.hooks.reel_context`),
+            grounding all lines in the clips the viewer will actually see.
+        others: Every other clip's candidate dict (see
+            `candidates.build_video_candidates`), reads `id`, `kind`,
+            `src`, `multi_subject`, `kp_speed_abs`, `peak_frames` (only the
+            middle/peak frame is sent per candidate, to bound request
+            size). `None`/`[]` if the hook candidate is the only clip.
 
     Returns:
         `{"candidate_id", "hook_line", "hooks", "dropped", "evidence",
@@ -239,7 +264,11 @@ def generate_hook_copy(
     user_prompt = build_hook_user_prompt(
         candidate["id"], exercise, speed, theme, brief, audience, context
     )
-    parts = build_parts([candidate], user_prompt)
+    others_one_frame = [
+        c | {"peak_frames": [c["peak_frames"][len(c["peak_frames"]) // 2]]}
+        for c in (others or [])
+    ]
+    parts = build_parts([candidate, *others_one_frame], user_prompt)
     system_prompt = build_hook_system_prompt(theme, audience)
 
     usage = None
@@ -256,7 +285,7 @@ def generate_hook_copy(
                     "mime_type": "application/json",
                     "schema": hook_copy_schema(),
                 },
-                generation_config={"temperature": 0.7, "max_output_tokens": 512},
+                generation_config={"temperature": 0.7, "max_output_tokens": 768},
             )
             usage = _usage_dict(getattr(interaction, "usage", None))
             cost += _cost_usd(usage, model)
@@ -271,7 +300,14 @@ def generate_hook_copy(
 
     evidence = [str(e) for e in raw.get("evidence", []) if str(e).strip()]
     raw_hooks = raw.get("hooks", [])
-    allowed_numbers = numbers_in(brief)
+    # `context` (session.hooks.reel_context) states the reel's real clip/
+    # develop counts, e.g. "clips: 9 (develop: 7)"; those digits are true of
+    # the reel, so a line naming them isn't an invented number.
+    # ponytail: this also allows durations/speeds embedded in `context`
+    # (e.g. "1.5s", "2.02") as a side effect of reusing numbers_in() on the
+    # whole string; tighten with a dedicated regex over the counts line only
+    # if a model starts citing invented-looking durations as hook numbers.
+    allowed_numbers = numbers_in(brief) | numbers_in(context)
     hooks: list[dict] = []
     dropped: list[dict] = []
     rejected: str | None = None

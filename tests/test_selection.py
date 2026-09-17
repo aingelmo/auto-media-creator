@@ -447,13 +447,35 @@ def test_fallback_hook_no_warning_when_pool_is_single_source() -> None:
 
 
 def test_clean_hook_line_strict_rejects_out_of_range_word_count() -> None:
-    assert clean_hook_line(" ".join(["palabra"] * 7), strict=True) == ""
+    assert clean_hook_line(" ".join(["palabra"] * 9), strict=True) == ""
     assert clean_hook_line("una palabra", strict=True) == ""
+
+
+def test_clean_hook_line_strict_accepts_seven_and_eight_word_lines() -> None:
+    line7 = " ".join(["hoy"] * 7)
+    line8 = " ".join(["hoy"] * 8)
+    assert clean_hook_line(line7, strict=True) == line7
+    assert clean_hook_line(line8, strict=True) == line8
+
+
+def test_clean_hook_line_strict_keeps_trailing_question_mark() -> None:
+    assert clean_hook_line("¿Quién empuja el trineo?", strict=True) == (
+        "¿Quién empuja el trineo?"
+    )
+
+
+def test_clean_hook_line_rejects_rather_than_truncates_overlong_line() -> None:
+    line = "Balones medicinales al fondo, kettlebells al lado"  # 49 chars, 7 words
+    assert len(line) > 48
+    assert clean_hook_line(line, strict=True) == ""
+    assert clean_hook_line(line, strict=False) == ""
 
 
 def test_clean_hook_line_strict_rejects_generic_phrases() -> None:
     assert clean_hook_line("hoy toca sin excusas ya", strict=True) == ""
     assert clean_hook_line("modo bestia total hoy", strict=True) == ""
+    assert clean_hook_line("hoy transforma tu cuerpo ya", strict=True) == ""
+    assert clean_hook_line("aquí se quema grasa hoy", strict=True) == ""
 
 
 def test_clean_hook_line_strict_rejects_digits_hash_and_emoji() -> None:

@@ -5,54 +5,64 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from edl_agent.selection import build_selected
 from edl_agent.selector import generate_hook_copy
 
 
-def selection_context(
-    selected: list[dict],
+def reel_context(
+    edl: dict,
     candidates_by_id: dict,
-    slots_json: dict,
     selection: dict | None,
 ) -> str:
-    """Build a plain-text summary of the whole selection, for the hook-copy prompt.
+    """Build a plain-text summary of the final, ordered reel, for the hook-copy prompt.
+
+    Unlike the selector's ranked candidate list, this reads the EDL the
+    planner actually built, so every clip it names is a clip the viewer
+    will actually see, in the order they'll see it.
 
     Args:
-        selected: Selection entries (see `selection.build_selected`), each
-            reading `role`, `candidate_id`, `exercise`, and `reason` (if
-            LLM-derived).
+        edl: EDL dict, as returned by `edl.build_edl` (or `planner.run_planner`).
+            Reads `clips`, each `{slot, role, candidate_id, out_s, in_s}`;
+            a synthetic slot (e.g. `end_card`, from `planner._split_end_card`)
+            carries its role name as a placeholder `candidate_id` that isn't
+            a real key of `candidates_by_id`, and is skipped here.
         candidates_by_id: Mapping `candidate_id -> candidate dict`. Reads
-            `kind`, `kp_speed_abs`, `multi_subject`.
-        slots_json: Parsed `slots.json`; reads `duration_f` (at 30fps).
+            `kp_speed_abs`.
         selection: Parsed LLM selection output (see
-            `selector.selection_schema`), or `None`; reads `notes` if
-            present.
+            `selector.selection_schema`), or `None`; reads `selected`
+            (for each clip's `exercise`/`reason`) and `notes` if present.
 
     Returns:
-        Plain-text summary: one `role: exercise (kind, velocidad)` line per
-        selected clip in `selected` order, then a "grupo" line if any clip
-        is `multi_subject`, the reel duration, and the selector's `notes`.
+        Plain-text summary: one numbered `role: exercise, duration,
+        velocidad -- reason` line per clip in timeline order (skipping
+        clips with no `candidate_id`, e.g. the end card), then the total
+        clip/develop counts and the selector's `notes`.
     """
+    by_id = {e["candidate_id"]: e for e in (selection or {}).get("selected", [])}
     lines = []
-    for entry in selected:
-        candidate = candidates_by_id.get(entry["candidate_id"], {})
+    n_clips = 0
+    n_develop = 0
+    for clip in edl.get("clips", []):
+        cid = clip.get("candidate_id")
+        if not cid or cid not in candidates_by_id:
+            continue
+        n_clips += 1
+        if clip["role"] == "develop":
+            n_develop += 1
+        entry = by_id.get(cid, {})
+        candidate = candidates_by_id.get(cid, {})
         speed = candidate.get("kp_speed_abs", 0.0)
-        kind = candidate.get("kind", "?")
+        duration = clip["out_s"] - clip["in_s"]
         exercise = entry.get("exercise", "other")
-        line = f"{entry['role']}: {exercise} ({kind}, velocidad {speed:.2f})"
+        line = (
+            f"{n_clips}. {clip['role']}: {exercise}, {duration:.1f}s, "
+            f"velocidad {speed:.2f}"
+        )
         reason = entry.get("reason")
         if reason:
             line += f" -- {reason}"
         lines.append(line)
 
-    if any(
-        candidates_by_id.get(e["candidate_id"], {}).get("multi_subject")
-        for e in selected
-    ):
-        lines.append("grupo: sí, algún clip con varios atletas")
-
-    duration_s = slots_json.get("duration_f", 0) / 30
-    lines.append(f"duración del reel: {duration_s:.1f}s")
+    lines.append(f"clips: {n_clips} (develop: {n_develop})")
 
     notes = (selection or {}).get("notes")
     if notes:
@@ -64,7 +74,7 @@ def selection_context(
 def run_hooks(
     session_dir: Path,
     candidates_json: dict,
-    slots_json: dict,
+    edl: dict,
     selection: dict | None,
     theme: str,
     client: Any,  # noqa: ANN401 (duck-typed: google-genai Client or OllamaClient)
@@ -73,15 +83,16 @@ def run_hooks(
     brief: str = "",
     audience: str = "prospects",
 ) -> dict:
-    """Find the hook candidate the same way the planner will, then generate its copy.
+    """Find the hook clip in the final EDL, then generate its copy.
 
     Args:
         session_dir: Session directory to write `hooks.json` to.
         candidates_json: Parsed `candidates.json`, with a `candidates` key.
-        slots_json: Parsed `slots.json`, with a `slots` key.
+        edl: EDL dict already built by the planner (e.g. with a placeholder
+            hook line), so hooks are generated from the reel the viewer
+            will actually see, in order.
         selection: LLM selection dict (see `selector.selection_schema`), or
-            `None` to rely on the rules fallback to find the hook
-            candidate.
+            `None` if the fallback selected everything.
         theme: Selector prompt theme, a key of `selector.prompts.THEMES`.
         client: LLM client, as built by `edl_agent.llm.get_client`.
         model: Model name to call.
@@ -95,14 +106,20 @@ def run_hooks(
     Returns:
         `hooks.json` dict, as returned by `selector.generate_hook_copy`.
     """
-    selected, _warnings, _fallback_roles = build_selected(
-        candidates_json, slots_json, selection
-    )
     candidates_by_id = {c["id"]: c for c in candidates_json["candidates"]}
-    hook_entry = next(e for e in selected if e["role"] == "hook")
-    candidate = candidates_by_id[hook_entry["candidate_id"]]
-    exercise = hook_entry.get("exercise", "other")
-    context = selection_context(selected, candidates_by_id, slots_json, selection)
+    clips = [
+        c for c in edl["clips"] if c.get("candidate_id") in candidates_by_id
+    ]
+    hook_clip = next(c for c in clips if c["role"] == "hook")
+    candidate = candidates_by_id[hook_clip["candidate_id"]]
+    by_id = {e["candidate_id"]: e for e in (selection or {}).get("selected", [])}
+    exercise = by_id.get(hook_clip["candidate_id"], {}).get("exercise", "other")
+    others = [
+        candidates_by_id[c["candidate_id"]]
+        for c in clips
+        if c["candidate_id"] != hook_clip["candidate_id"]
+    ]
+    context = reel_context(edl, candidates_by_id, selection)
     return generate_hook_copy(
         candidate,
         exercise,
@@ -114,4 +131,5 @@ def run_hooks(
         brief=brief,
         audience=audience,
         context=context,
+        others=others,
     )

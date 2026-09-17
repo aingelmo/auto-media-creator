@@ -19,9 +19,11 @@ def render_hook_previews(
 ) -> dict[str, Path]:
     """Render the hook clip once per candidate line (plus a text-less one), per #5.7.
 
-    The EDL's hook clip must already carry text params (the planner having
-    run with line #1) for its `font` to be known; `font_size` is
-    recomputed per line so each one fits the text box.
+    `edl` is the hookless preview build (`hook_line_override=""`), so the
+    hook clip's `effect_params` carries no text params at all; defaults come
+    from `DEFAULT_CONFIG` here instead, mirroring `planner.effects`'s own
+    `hook_text` branch. `font_size` is recomputed per line so each one fits
+    the text box.
 
     Args:
         edl: EDL dict, as returned by `edl.build_edl`. Reads `clips`
@@ -50,12 +52,22 @@ def render_hook_previews(
     paths: dict[str, Path] = {}
     for key, text in variants.items():
         params = dict(hook_clip["effect_params"])
-        if text is None:
-            params.pop("text", None)
-        else:
-            params["text"] = text
-            params["font_size"] = fit_font_size(
-                text, font, int(DEFAULT_CONFIG["hook_text_size"])
+        params.pop("text", None)
+        if text is not None:
+            params.update(
+                {
+                    "text": text,
+                    "font": font,
+                    "font_size": fit_font_size(
+                        text, font, int(DEFAULT_CONFIG["hook_text_size"])
+                    ),
+                    "text_y": DEFAULT_CONFIG["hook_text_y"],
+                    "text_frames": min(
+                        int(DEFAULT_CONFIG["hook_text_max_frames"]),
+                        hook_clip["n_frames"],
+                    ),
+                    "fade_frames": DEFAULT_CONFIG["hook_text_fade_frames"],
+                }
             )
         clip = {**hook_clip, "effect_params": params}
         paths[key] = render_segment(
