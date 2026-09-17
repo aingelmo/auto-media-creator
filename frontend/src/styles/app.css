@@ -427,7 +427,21 @@ button.primary {
 
 .session-result > .session-result-video {
   flex: 0 1 auto;
-  max-width: 640px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+/* One column per reel variant, so A/B renders sit side by side instead of stacked.
+   Capped narrower than a single reel would be (480px, comfortably wider than any
+   portrait 9:16 render at normal viewport heights) so two variants plus the
+   regenerate sidebar still fit on one line instead of the sidebar wrapping below. */
+.reel-variant {
+  flex: 0 1 auto;
+  max-width: 480px;
   min-width: 0;
   min-height: 0;
   height: 100%;

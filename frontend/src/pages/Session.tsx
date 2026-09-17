@@ -136,26 +136,28 @@ export default function Session() {
       {!job?.awaiting_confirmation && (job === null || (job.done && !job.error)) && !allPending && (
         <div className="session-result">
           <div className="session-result-video">
-            {session.reel_exists ? (
-              <>
-                <video className="reel-player" controls src={reelUrl(name)} />
-                <p>
-                  <a href={reelUrl(name)} download>
-                    Download reel.mp4
-                  </a>
-                </p>
-              </>
-            ) : (
-              <p>Server restarted mid-run. Pick the next stage below to resume.</p>
-            )}
-            {job?.check_results && job.check_results.length > 0 && (
-              <>
-                <h3>Render checks</h3>
-                <pre>{job.check_results.join("\n")}</pre>
-              </>
-            )}
+            <div className="reel-variant">
+              {session.reel_exists ? (
+                <>
+                  <video className="reel-player" controls src={reelUrl(name)} />
+                  <p>
+                    <a href={reelUrl(name)} download>
+                      Download reel.mp4
+                    </a>
+                  </p>
+                </>
+              ) : (
+                <p>Server restarted mid-run. Pick the next stage below to resume.</p>
+              )}
+              {job?.check_results && job.check_results.length > 0 && (
+                <>
+                  <h3>Render checks</h3>
+                  <pre>{job.check_results.join("\n")}</pre>
+                </>
+              )}
+            </div>
             {session.reel_b_exists && (
-              <>
+              <div className="reel-variant">
                 <h3>Variant B</h3>
                 <video className="reel-player" controls src={fileUrl(name, "reel_b.mp4")} />
                 <p>
@@ -169,7 +171,7 @@ export default function Session() {
                     <pre>{job.check_results_b.join("\n")}</pre>
                   </>
                 )}
-              </>
+              </div>
             )}
           </div>
           <div className="session-result-regen">
