@@ -19,7 +19,7 @@ export default function HookPicker({
   hookSlot: number;
   onDone: () => void;
 }) {
-  const [flash, setFlash] = useState(true);
+  const [flash, setFlash] = useState(false);
   const [selected, setSelected] = useState(
     hooks.hooks.length === 0 ? "" : hooks.hooks[0]!.hook_line,
   );
