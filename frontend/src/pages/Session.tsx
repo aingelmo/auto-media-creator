@@ -89,7 +89,7 @@ export default function Session() {
   const allPending = Object.values(session.stage_statuses).every((s) => s === "pending");
 
   return (
-    <>
+    <div className="session-page">
       <h2>{name}</h2>
       <StageRail
         stages={session.stages}
@@ -205,6 +205,6 @@ export default function Session() {
       {!job?.awaiting_confirmation && job && !job.done && !job.error && (
         <p className="status-running">Running&hellip;</p>
       )}
-    </>
+    </div>
   );
 }

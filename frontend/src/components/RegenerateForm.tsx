@@ -57,27 +57,31 @@ export default function RegenerateForm({
             ))}
           </select>
         </label>
-        <div className="form-grid" hidden={!LLM_STAGES.has(fromStage)}>
-          <ProviderModelFields
-            providers={config.providers}
-            defaultModels={config.default_models}
-            idPrefix="regen"
-          />
-          <ThemeAudienceFields idPrefix="regen" />
-          <label htmlFor="regen-hook">
-            Hook text (manual, skips the LLM)
-            <input
-              id="regen-hook"
-              type="text"
-              name="hook_line"
-              maxLength={40}
-              placeholder="La barra despega del suelo"
+        <details hidden={!LLM_STAGES.has(fromStage)}>
+          <summary>Model, theme, hook&hellip;</summary>
+          <div className="form-grid">
+            <ProviderModelFields
+              providers={config.providers}
+              defaultModels={config.default_models}
+              idPrefix="regen"
             />
-          </label>
-        </div>
+            <ThemeAudienceFields idPrefix="regen" />
+            <label htmlFor="regen-hook">
+              Hook text (manual, skips the LLM)
+              <input
+                id="regen-hook"
+                type="text"
+                name="hook_line"
+                maxLength={40}
+                placeholder="La barra despega del suelo"
+              />
+            </label>
+          </div>
+        </details>
         <BrandFieldset
           idPrefix="regen"
           legend="Brand (optional; new logo replaces the session's, applies from planner on)"
+          collapsible
         />
         <button type="submit" className="primary" disabled={busy}>
           Regenerate from this stage

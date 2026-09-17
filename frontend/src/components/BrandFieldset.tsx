@@ -10,7 +10,15 @@ import {
 import { getFormMemory } from "../formMemory";
 
 /** Optional brand fieldset (logo/handle/second line) shared by new/regenerate forms. */
-export default function BrandFieldset({ idPrefix, legend }: { idPrefix: string; legend: string }) {
+export default function BrandFieldset({
+  idPrefix,
+  legend,
+  collapsible,
+}: {
+  idPrefix: string;
+  legend: string;
+  collapsible?: boolean;
+}) {
   const logoRef = useRef<HTMLInputElement>(null);
   const handleRef = useRef<HTMLInputElement>(null);
   const lineRef = useRef<HTMLInputElement>(null);
@@ -57,9 +65,8 @@ export default function BrandFieldset({ idPrefix, legend }: { idPrefix: string; 
     setSelected("");
   }
 
-  return (
-    <fieldset>
-      <legend>{legend}</legend>
+  const fields = (
+    <>
       {presets.length > 0 && (
         <label htmlFor={`${idPrefix}-brand-preset`}>
           Saved brand
@@ -115,6 +122,22 @@ export default function BrandFieldset({ idPrefix, legend }: { idPrefix: string; 
           </button>
         )}
       </p>
+    </>
+  );
+
+  if (collapsible) {
+    return (
+      <details>
+        <summary>{legend}</summary>
+        <div className="form-grid">{fields}</div>
+      </details>
+    );
+  }
+
+  return (
+    <fieldset>
+      <legend>{legend}</legend>
+      {fields}
     </fieldset>
   );
 }

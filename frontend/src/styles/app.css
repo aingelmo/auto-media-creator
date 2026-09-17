@@ -127,7 +127,7 @@ select {
    span both columns; labels pair up two-per-row via grid auto-flow. */
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   column-gap: var(--space-6);
 }
 
@@ -190,7 +190,7 @@ button.primary {
 
 .app-shell {
   display: flex;
-  min-height: 100%;
+  height: 100%;
 }
 
 .app-header {
@@ -213,7 +213,11 @@ button.primary {
 
 .app-body {
   padding: var(--space-6);
-  max-width: 1100px;
+  max-width: 1600px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .status-pending {
@@ -403,7 +407,9 @@ button.primary {
 .reel-player {
   width: auto;
   max-width: 100%;
-  max-height: calc(100vh - 160px);
+  flex: 1;
+  min-height: 0;
+  object-fit: contain;
   background: #000;
   border-radius: 4px;
 }
@@ -414,12 +420,20 @@ button.primary {
   display: flex;
   gap: var(--space-6);
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
 }
 
 .session-result > .session-result-video {
-  flex: 0 1 640px;
+  flex: 0 1 auto;
+  max-width: 640px;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .session-result > .session-result-regen {
@@ -431,6 +445,13 @@ button.primary {
   .session-result {
     display: block;
   }
+}
+
+.session-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .link-button {
