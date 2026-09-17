@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
+import { saveFormMemory } from "../formMemory";
 import type { Config } from "../types";
 import ProviderModelFields from "./ProviderModelFields";
 import ThemeAudienceFields from "./ThemeAudienceFields";
@@ -19,14 +20,16 @@ export default function StartForm({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
-    await api.startSession(name, new FormData(e.currentTarget));
+    const formData = new FormData(e.currentTarget);
+    saveFormMemory(formData);
+    await api.startSession(name, formData);
     onStarted();
   }
 
   return (
     <>
       <p>No run found for this session (server restarted before any stage finished).</p>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="form-grid">
         <ProviderModelFields
           providers={config.providers}
           defaultModels={config.default_models}

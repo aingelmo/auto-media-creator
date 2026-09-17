@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
+import { saveFormMemory } from "../formMemory";
 import type { Config } from "../types";
 import BrandFieldset from "./BrandFieldset";
 import ProviderModelFields from "./ProviderModelFields";
@@ -23,14 +24,16 @@ export default function RegenerateForm({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
-    await api.regenerateSession(name, new FormData(e.currentTarget));
+    const formData = new FormData(e.currentTarget);
+    saveFormMemory(formData);
+    await api.regenerateSession(name, formData);
     onStarted();
   }
 
   return (
     <>
       <h3>Regenerate</h3>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="form-grid">
         <label htmlFor="regen-from-stage">
           From stage
           <select id="regen-from-stage" name="from_stage" defaultValue={defaultFromStage}>

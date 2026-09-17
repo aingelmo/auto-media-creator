@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getFormMemory } from "../formMemory";
 import type { Provider } from "../types";
 
 /**
@@ -15,8 +16,15 @@ export default function ProviderModelFields({
   defaultModels: Record<string, string>;
   idPrefix: string;
 }) {
-  const [provider, setProvider] = useState<string>(providers[0] ?? "");
-  const [model, setModel] = useState(defaultModels[providers[0] ?? ""] ?? "");
+  const rememberedProvider = getFormMemory("provider");
+  const initialProvider =
+    rememberedProvider && providers.includes(rememberedProvider as Provider)
+      ? rememberedProvider
+      : (providers[0] ?? "");
+  const [provider, setProvider] = useState<string>(initialProvider);
+  const [model, setModel] = useState(
+    getFormMemory("model") || defaultModels[initialProvider] || "",
+  );
 
   return (
     <>

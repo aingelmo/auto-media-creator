@@ -5,6 +5,7 @@ import { api } from "../api";
 import BrandFieldset from "../components/BrandFieldset";
 import ProviderModelFields from "../components/ProviderModelFields";
 import ThemeAudienceFields from "../components/ThemeAudienceFields";
+import { saveFormMemory } from "../formMemory";
 import type { Config } from "../types";
 
 function formatMb(bytes: number) {
@@ -30,6 +31,7 @@ export default function New() {
     setError(null);
     setStatus("Uploading...");
     const formData = new FormData(formRef.current);
+    saveFormMemory(formData);
     try {
       const { name } = await createSessionWithProgress(formData, (loaded, total) => {
         const pct = Math.round((loaded / total) * 100);
@@ -56,7 +58,7 @@ export default function New() {
     <>
       <h2>New session</h2>
       {error && <p className="status-failed">{error}</p>}
-      <form ref={formRef} onSubmit={handleSubmit}>
+      <form ref={formRef} onSubmit={handleSubmit} className="form-grid">
         <label htmlFor="new-name">
           Session name
           <input id="new-name" type="text" name="name" required pattern="[A-Za-z0-9_-]+" />
@@ -75,16 +77,19 @@ export default function New() {
             required
           />
         </label>
-        <ProviderModelFields
-          providers={config.providers}
-          defaultModels={config.default_models}
-          idPrefix="new"
-        />
         <ThemeAudienceFields idPrefix="new" />
-        <BrandFieldset
-          idPrefix="new"
-          legend="Brand (optional; no logo = no watermark / end card)"
-        />
+        <details>
+          <summary>Provider, model &amp; brand (remembered from last run)</summary>
+          <ProviderModelFields
+            providers={config.providers}
+            defaultModels={config.default_models}
+            idPrefix="new"
+          />
+          <BrandFieldset
+            idPrefix="new"
+            legend="Brand (optional; no logo = no watermark / end card)"
+          />
+        </details>
         <p>
           <button type="submit" disabled={uploading}>
             Start run

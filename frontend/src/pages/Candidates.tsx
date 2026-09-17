@@ -23,9 +23,13 @@ export default function Candidates() {
           <h3>
             {c.id} &mdash; {c.kind}
           </h3>
-          <p>
-            src={c.src} score_cv={c.score_cv} admits_slots={JSON.stringify(c.admits_slots)}
-          </p>
+          <p>score_cv={c.score_cv}</p>
+          <details>
+            <summary>raw</summary>
+            <p>
+              src={c.src} admits_slots={JSON.stringify(c.admits_slots)}
+            </p>
+          </details>
           {c.peak_urls.map((url) => (
             <img key={url} src={url} alt={`${c.id} peak frame`} height={160} />
           ))}

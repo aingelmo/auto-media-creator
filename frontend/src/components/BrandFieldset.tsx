@@ -1,3 +1,5 @@
+import { getFormMemory } from "../formMemory";
+
 /** Optional brand fieldset (logo/handle/second line) shared by new/regenerate forms. */
 export default function BrandFieldset({ idPrefix, legend }: { idPrefix: string; legend: string }) {
   return (
@@ -15,6 +17,7 @@ export default function BrandFieldset({ idPrefix, legend }: { idPrefix: string; 
           name="handle"
           maxLength={40}
           placeholder="@migimnasio"
+          defaultValue={getFormMemory("handle")}
         />
       </label>
       <label htmlFor={`${idPrefix}-line`}>
@@ -25,6 +28,7 @@ export default function BrandFieldset({ idPrefix, legend }: { idPrefix: string; 
           name="line"
           maxLength={60}
           placeholder="C/ Toro 12 · Salamanca"
+          defaultValue={getFormMemory("line")}
         />
       </label>
     </fieldset>

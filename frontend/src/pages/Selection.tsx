@@ -35,10 +35,10 @@ export default function Selection() {
             <pre>{a.user_prompt}</pre>
           </details>
           {a.output !== undefined && (
-            <>
-              <h4>Output</h4>
+            <details>
+              <summary>Output</summary>
               <pre>{JSON.stringify(a.output, null, 2)}</pre>
-            </>
+            </details>
           )}
         </div>
       ))}

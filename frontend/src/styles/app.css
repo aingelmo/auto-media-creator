@@ -118,6 +118,27 @@ select {
   padding: var(--space-2) var(--space-3);
 }
 
+/* Two-column form layout: cuts vertical scroll on forms with many fields
+   (New/Start/Regenerate). Full-width elements (fieldset/details/p/button)
+   span both columns; labels pair up two-per-row via grid auto-flow. */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--space-6);
+}
+
+.form-grid > fieldset,
+.form-grid > details,
+.form-grid > p {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 fieldset {
   border: 1px solid var(--rule);
   border-radius: 4px;

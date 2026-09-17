@@ -1,17 +1,27 @@
+import { getFormMemory } from "../formMemory";
+
 /** Theme/audience/brief/hook-line fields shared by the new/start/regenerate forms. */
 export default function ThemeAudienceFields({ idPrefix }: { idPrefix: string }) {
   return (
     <>
       <label htmlFor={`${idPrefix}-theme`}>
         Theme
-        <select id={`${idPrefix}-theme`} name="theme" defaultValue="training">
+        <select
+          id={`${idPrefix}-theme`}
+          name="theme"
+          defaultValue={getFormMemory("theme") || "training"}
+        >
           <option value="training">training (CrossFit / Hyrox / funcional)</option>
           <option value="yoga">yoga</option>
         </select>
       </label>
       <label htmlFor={`${idPrefix}-audience`}>
         Audience
-        <select id={`${idPrefix}-audience`} name="audience" defaultValue="prospects">
+        <select
+          id={`${idPrefix}-audience`}
+          name="audience"
+          defaultValue={getFormMemory("audience") || "prospects"}
+        >
           <option value="prospects">prospects (sell the gym/class)</option>
           <option value="members">members (recognise the session)</option>
         </select>
