@@ -226,3 +226,6 @@ __marimo__/
 
 # WSL/Windows NTFS zone-identifier marker
 *:Zone.Identifier
+# Playwright CLI output and local machine config
+.playwright-cli/
+.playwright/
