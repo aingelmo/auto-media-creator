@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, fileUrl, reelUrl } from "../api";
+import EffectsPreview from "../components/EffectsPreview";
 import HookPicker from "../components/HookPicker";
 import LowCandidatesPause from "../components/LowCandidatesPause";
 import Modal from "../components/Modal";
 import MusicPicker from "../components/MusicPicker";
-import PunchPreview from "../components/PunchPreview";
 import RegenerateForm from "../components/RegenerateForm";
 import RegenHistory from "../components/RegenHistory";
 import StageRail from "../components/StageRail";
@@ -132,8 +132,13 @@ export default function Session() {
         <HookPicker name={name} hooks={job.hooks} hookSlot={job.hook_slot} onDone={refresh} />
       )}
 
-      {job && job.awaiting_confirmation && job.pause_kind === "punch_preview" && (
-        <PunchPreview name={name} punchIn={job.punch_in} onDone={refresh} />
+      {job && job.awaiting_confirmation && job.pause_kind === "effects_preview" && (
+        <EffectsPreview
+          name={name}
+          punchIn={job.punch_in}
+          hookFlash={job.hook_flash}
+          onDone={refresh}
+        />
       )}
 
       {!job?.awaiting_confirmation && job === null && allPending && (

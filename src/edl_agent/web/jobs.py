@@ -57,7 +57,7 @@ class JobState:
             non-empty) or after `candidates` (`low_candidates` non-empty).
         pause_kind: Which pause `awaiting_confirmation` refers to:
             `"music_choice"`, `"verification"`, `"low_candidates"`,
-            `"hook_choice"`, or `"punch_preview"`.
+            `"hook_choice"`, or `"effects_preview"`.
         confirm_event: Set (via `/sessions/{name}/confirm`) to unblock a
             job paused on `awaiting_confirmation`.
         cancelled: `True` if the user chose not to proceed past the
@@ -93,16 +93,20 @@ class JobState:
             B), set via `/sessions/{name}/confirm` during a `"hook_choice"`
             pause (idea #7).
         hook_flash: Whether the hook clip gets its white flash on the peak
-            beat, set via `/sessions/{name}/confirm` during a
-            `"hook_choice"` pause; defaults to `True`.
+            beat, set via `/sessions/{name}/confirm` during an
+            `"effects_preview"` pause; defaults to `False` so the effect is
+            only enabled after the operator has watched a preview without
+            it. Combined with `punch_in`, picks which cached
+            `reel_preview{suffix}.mp4` (see `stages.render._combo_suffix`)
+            the pause shows.
         punch_in: Whether develop clips get the punch-in zoom snap on cuts,
-            set via `/sessions/{name}/confirm` during a `"punch_preview"`
+            set via `/sessions/{name}/confirm` during an `"effects_preview"`
             pause; defaults to `False` so the effect is only enabled after
-            the operator has watched `reel_preview.mp4` without it.
-        punch_preview_again: `True` (set via `/sessions/{name}/confirm`
-            during a `"punch_preview"` pause) to rebuild the EDL with the
-            new `punch_in` value and preview again, instead of proceeding
-            to the full-resolution render.
+            the operator has watched a preview without it.
+        effects_preview_again: `True` (set via `/sessions/{name}/confirm`
+            during an `"effects_preview"` pause) to rebuild the EDL with the
+            new `hook_flash`/`punch_in` values and preview again, instead of
+            proceeding to the full-resolution render.
         more_hooks: `True` (set via `/sessions/{name}/confirm`) to
             generate a fresh batch of 3 lines instead of proceeding to the
             final render.
@@ -146,9 +150,9 @@ class JobState:
     hook_slot: int = 0
     hook_choice: str = ""
     hook_choice_b: str = ""
-    hook_flash: bool = True
+    hook_flash: bool = False
     punch_in: bool = False
-    punch_preview_again: bool = False
+    effects_preview_again: bool = False
     more_hooks: bool = False
     check_results_b: list[str] = field(default_factory=list)
     music_candidates: list[dict] = field(default_factory=list)

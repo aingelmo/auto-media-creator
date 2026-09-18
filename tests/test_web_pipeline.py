@@ -17,13 +17,13 @@ def _fake_ollama_response(json_data):
     return resp
 
 
-def _confirm_punch_preview(job: JobState) -> None:
-    """Wait for, then answer, the render stage's punch-in preview pause."""
+def _confirm_effects_preview(job: JobState) -> None:
+    """Wait for, then answer, the render stage's hook-flash/punch-in preview pause."""
     deadline = time.monotonic() + 5
-    while job.pause_kind != "punch_preview" and time.monotonic() < deadline:
+    while job.pause_kind != "effects_preview" and time.monotonic() < deadline:
         time.sleep(0.01)
-    assert job.pause_kind == "punch_preview"
-    job.punch_preview_again = False
+    assert job.pause_kind == "effects_preview"
+    job.effects_preview_again = False
     job.cancelled = False
     job.confirm_event.set()
 
@@ -129,7 +129,7 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
         job.more_hooks = False
         job.cancelled = False
         job.confirm_event.set()
-        _confirm_punch_preview(job)
+        _confirm_effects_preview(job)
         thread.join(timeout=10)
 
     assert not thread.is_alive()
@@ -269,7 +269,7 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
         job.more_hooks = False
         job.cancelled = False
         job.confirm_event.set()
-        _confirm_punch_preview(job)
+        _confirm_effects_preview(job)
         thread.join(timeout=10)
 
     assert not thread.is_alive()
@@ -402,7 +402,7 @@ def _run_job_to_hook_choice(
         job.more_hooks = False
         job.cancelled = False
         job.confirm_event.set()
-        _confirm_punch_preview(job)
+        _confirm_effects_preview(job)
         thread.join(timeout=10)
 
     assert not thread.is_alive()
@@ -526,3 +526,85 @@ def test_clear_stage_artifacts_does_not_touch_cost_ledger(tmp_path) -> None:
 
     assert not (tmp_path / "selection.json").exists()
     assert (tmp_path / "costs.jsonl").exists()
+
+
+def test_render_stage_caches_effects_preview_combos_and_reuses_clips(tmp_path) -> None:
+    """Revisiting an already-rendered hook_flash/punch_in combo skips
+    re-encoding; a fresh combo hardlinks the clips the toggle didn't touch."""
+    from edl_agent.web.stages.render import _run_render_stage
+
+    session_dir = tmp_path
+    manifest = {"sources": []}
+
+    def fake_build_final_edl(
+        session_dir, manifest, candidates, slots, selection, meta, job
+    ):
+        return {
+            "clips": [
+                {"slot": 0, "role": "hook", "effect_params": {}},
+                {
+                    "slot": 1,
+                    "role": "develop",
+                    "effect_params": {"punch_zoom": 1.06} if job.punch_in else {},
+                },
+            ]
+        }
+
+    render_calls: list[tuple[str, dict | None]] = []
+
+    def fake_render_preview_segments(
+        edl, manifest, session_dir, suffix="", reuse=None, **kw
+    ):
+        render_calls.append((suffix, reuse))
+        for c in edl["clips"]:
+            out = session_dir / f"preview_segments{suffix}" / f"seg_{c['slot']:02d}.mp4"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(b"x")
+
+    def fake_concat_and_audio(edl, session_dir, threads, preview=False, suffix=""):
+        name = f"reel_preview{suffix}.mp4" if preview else f"reel{suffix}.mp4"
+        (session_dir / name).write_bytes(b"x")
+
+    job = JobState()
+    edl = fake_build_final_edl(session_dir, manifest, {}, {}, None, {}, job)
+    with (
+        patch(
+            "edl_agent.web.stages.render.render_preview_segments",
+            fake_render_preview_segments,
+        ),
+        patch("edl_agent.web.stages.render.concat_and_audio", fake_concat_and_audio),
+        patch("edl_agent.web.stages.render.render_segments"),
+        patch("edl_agent.web.stages.render.run_render_checks", return_value=[]),
+        patch("edl_agent.web.stages.render._build_final_edl", fake_build_final_edl),
+    ):
+        thread = threading.Thread(
+            target=_run_render_stage,
+            args=(session_dir, job, False, edl, manifest, {}, {}, None, {}, ""),
+        )
+        thread.start()
+
+        def _confirm(again: bool, punch_in: bool) -> None:
+            deadline = time.monotonic() + 5
+            while job.pause_kind != "effects_preview" and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert job.pause_kind == "effects_preview"
+            # Reset so the next _confirm()'s wait loop doesn't see this same
+            # (not-yet-cleared) pause and fire before the next pause happens.
+            job.pause_kind = ""
+            job.punch_in = punch_in
+            job.effects_preview_again = again
+            job.cancelled = False
+            job.confirm_event.set()
+
+        _confirm(True, True)  # new combo: punch_in on
+        _confirm(True, False)  # back to the original combo: cached, no render
+        _confirm(False, False)  # proceed to the final render
+        thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert [suffix for suffix, _ in render_calls] == ["_h0p0", "_h0p1"]
+    # The second render (new combo) reuses the unaffected hook clip (slot 0)
+    # from the first combo's segments, and only re-renders the develop clip.
+    _, second_reuse = render_calls[1]
+    assert second_reuse is not None
+    assert set(second_reuse) == {0}

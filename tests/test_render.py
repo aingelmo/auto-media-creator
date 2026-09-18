@@ -430,9 +430,7 @@ def test_render_hook_previews_builds_one_variant_per_line_plus_none(
         edl, manifest, session_dir, ["primera linea", "segunda linea"], 4, ""
     )
 
-    assert set(paths) == {
-        "none", "0", "1", "none_noflash", "0_noflash", "1_noflash"
-    }
+    assert set(paths) == {"none", "0", "1"}
     by_key = {out_dir.name: clip for clip, out_dir in (
         (c["clip"], c["out_dir"]) for c in calls
     )}
@@ -440,8 +438,8 @@ def test_render_hook_previews_builds_one_variant_per_line_plus_none(
     assert by_key["0"]["effect_params"]["text"] == "primera linea"
     assert by_key["1"]["effect_params"]["text"] == "segunda linea"
     for key in ("none", "0", "1"):
-        assert "flash_frame" in by_key[key]["effect_params"]
-        noflash = by_key[f"{key}_noflash"]["effect_params"]
-        assert "flash_frame" not in noflash
-        assert "flash_frames" not in noflash
+        # Flash is a separate decision made later, at the effects_preview
+        # pause -- these hook-line comparison previews never carry it.
+        assert "flash_frame" not in by_key[key]["effect_params"]
+        assert "flash_frames" not in by_key[key]["effect_params"]
     assert all(c["clip"]["slot"] == 0 for c in calls)  # only the hook clip is rendered

@@ -19,7 +19,7 @@ export type PauseKind =
   | "verification"
   | "low_candidates"
   | "hook_choice"
-  | "punch_preview";
+  | "effects_preview";
 
 export type Provider = "deepseek" | "ollama";
 
@@ -86,6 +86,7 @@ export interface JobPayload {
   hook_slot: number;
   music_candidates: MusicCandidate[];
   punch_in: boolean;
+  hook_flash: boolean;
 }
 
 export interface HistoryEntry {

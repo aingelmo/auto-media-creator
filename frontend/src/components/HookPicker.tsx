@@ -2,10 +2,9 @@ import { useState } from "react";
 import { api, fileUrl } from "../api";
 import type { Hooks } from "../types";
 
-function previewUrl(name: string, key: string, flash: boolean, hookSlot: number): string {
-  const dir = flash ? key : `${key}_noflash`;
+function previewUrl(name: string, key: string, hookSlot: number): string {
   const seg = String(hookSlot).padStart(2, "0");
-  return fileUrl(name, `hook_previews/${dir}/seg_${seg}.mp4`);
+  return fileUrl(name, `hook_previews/${key}/seg_${seg}.mp4`);
 }
 
 export default function HookPicker({
@@ -19,7 +18,6 @@ export default function HookPicker({
   hookSlot: number;
   onDone: () => void;
 }) {
-  const [flash, setFlash] = useState(false);
   const [selected, setSelected] = useState(
     hooks.hooks.length === 0 ? "" : hooks.hooks[0]!.hook_line,
   );
@@ -31,7 +29,6 @@ export default function HookPicker({
     setBusy(true);
     const form = new FormData();
     form.set("proceed", String(proceed));
-    form.set("hook_flash", String(flash));
     form.set("hook_line", selected);
     form.set("hook_custom", custom);
     form.set("hook_line_b", variantB);
@@ -45,13 +42,9 @@ export default function HookPicker({
       <p>
         <strong>Pick the hook line</strong> (or none, or write your own).
       </p>
-      <label>
-        <input type="checkbox" checked={flash} onChange={(e) => setFlash(e.target.checked)} /> white
-        flash on the hook beat
-      </label>
       <div className="contact-sheet">
         <figure>
-          <video autoPlay loop muted playsInline src={previewUrl(name, "none", flash, hookSlot)} />
+          <video autoPlay loop muted playsInline src={previewUrl(name, "none", hookSlot)} />
           <figcaption>
             <label>
               <input
@@ -66,13 +59,7 @@ export default function HookPicker({
         </figure>
         {hooks.hooks.map((h, i) => (
           <figure key={i}>
-            <video
-              autoPlay
-              loop
-              muted
-              playsInline
-              src={previewUrl(name, String(i), flash, hookSlot)}
-            />
+            <video autoPlay loop muted playsInline src={previewUrl(name, String(i), hookSlot)} />
             <figcaption>
               <label>
                 <input

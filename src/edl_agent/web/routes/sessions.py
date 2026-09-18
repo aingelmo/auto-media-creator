@@ -247,8 +247,8 @@ def regenerate_session(
     A new logo replaces the session brand; it only takes effect from `planner`
     on, so the stage is pulled back to `planner` if a later one was chosen.
     Any regenerate that reaches the `render` stage re-pauses on
-    `"punch_preview"` (see `session_confirm`), so `punch_in` isn't a
-    regenerate-form field -- it's picked there instead.
+    `"effects_preview"` (see `session_confirm`), so `hook_flash`/`punch_in`
+    aren't regenerate-form fields -- they're picked there instead.
     """
     session_dir = SESSIONS_DIR / name
     if not session_dir.is_dir():
@@ -358,7 +358,7 @@ def session_confirm(
     music_offset: float = Form(0.0),
     more_music: bool = Form(default=False),
     punch_in: bool = Form(default=False),
-    punch_preview_again: bool = Form(default=False),
+    effects_preview_again: bool = Form(default=False),
 ) -> JSONResponse:
     """Unblock a job paused on `awaiting_confirmation` (see `JobState`).
 
@@ -371,13 +371,13 @@ def session_confirm(
     suggested shorter duration instead of keeping the original one. For a
     `"hook_choice"` pause, `hook_custom` (if non-empty) wins over the
     selected `hook_line` radio value, `hook_line_b` (idea #7) picks the
-    hook line for a second variant reel (`""` = no variant B), `hook_flash`
-    (checked by default in the frontend) toggles the hook's white flash,
-    and `more=True` regenerates a fresh batch of 3 lines instead of
-    proceeding to the final render. For a `"punch_preview"` pause,
-    `punch_in` toggles the develop-clip punch-in zoom and
-    `punch_preview_again=True` rebuilds the EDL and re-renders the preview
-    instead of proceeding to the full-resolution render.
+    hook line for a second variant reel (`""` = no variant B), and
+    `more=True` regenerates a fresh batch of 3 lines instead of proceeding
+    to the final render. For an `"effects_preview"` pause, `hook_flash`
+    toggles the hook's white flash, `punch_in` toggles the develop-clip
+    punch-in zoom, and `effects_preview_again=True` rebuilds the EDL and
+    re-renders the preview instead of proceeding to the full-resolution
+    render.
     """
     job = jobs.get(name)
     if job is None or not job.awaiting_confirmation:
@@ -391,7 +391,7 @@ def session_confirm(
     job.more_hooks = more
     job.music_choice_offset = music_offset
     job.punch_in = punch_in
-    job.punch_preview_again = punch_preview_again
+    job.effects_preview_again = effects_preview_again
     job.more_music = more_music
     job.confirm_event.set()
     return JSONResponse({"name": name})

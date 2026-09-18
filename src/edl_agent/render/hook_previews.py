@@ -23,7 +23,10 @@ def render_hook_previews(
     hook clip's `effect_params` carries no text params at all; defaults come
     from `DEFAULT_CONFIG` here instead, mirroring `planner.effects`'s own
     `hook_text` branch. `font_size` is recomputed per line so each one fits
-    the text box.
+    the text box. The white flash is stripped here regardless of
+    `DEFAULT_CONFIG["hook_flash"]`: it's a separate on/off decision made
+    later at the render stage's `"effects_preview"` pause, not part of this
+    hook-line comparison.
 
     Args:
         edl: EDL dict, as returned by `edl.build_edl`. Reads `clips`
@@ -37,8 +40,7 @@ def render_hook_previews(
     Returns:
         Mapping `key -> rendered segment path` under
         `session_dir/"hook_previews"/key/`, with `key == "none"` for the
-        text-less variant, `key == str(i)` (0-based) for `lines[i]`, and a
-        flash-less twin of each under `f"{key}_noflash"`.
+        text-less variant and `key == str(i)` (0-based) for `lines[i]`.
     """
     session_dir = Path(session_dir)
     sources_by_src = {s["src"]: s for s in manifest["sources"]}
@@ -53,6 +55,8 @@ def render_hook_previews(
     for key, text in variants.items():
         params = dict(hook_clip["effect_params"])
         params.pop("text", None)
+        params.pop("flash_frame", None)
+        params.pop("flash_frames", None)
         if text is not None:
             params.update(
                 {
@@ -75,22 +79,6 @@ def render_hook_previews(
             sources_by_src,
             session_dir,
             out_dir_base / key,
-            threads,
-            tonemap_chain,
-            preview=True,
-            brand=edl.get("brand"),
-        )
-
-        noflash_params = dict(params)
-        noflash_params.pop("flash_frame", None)
-        noflash_params.pop("flash_frames", None)
-        noflash_clip = {**hook_clip, "effect_params": noflash_params}
-        noflash_key = f"{key}_noflash"
-        paths[noflash_key] = render_segment(
-            noflash_clip,
-            sources_by_src,
-            session_dir,
-            out_dir_base / noflash_key,
             threads,
             tonemap_chain,
             preview=True,
