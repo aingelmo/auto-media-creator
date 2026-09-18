@@ -46,23 +46,29 @@ cuerpo por segundo en el pico; <0.7 es controlado, >1.2 es explosivo.
 
 {audience_tone}
 
-Antes de escribir, anota 2-3 hechos de evidencia visibles en TODOS los \
-fotogramas (no solo el gancho): lugar, si es grupo o individual, material, \
-o el contraste entre el primer clip y los siguientes.
+Antes de escribir, anota 2-3 hechos de evidencia visibles en los \
+fotogramas que revelen algo cuestionable o en tensión: un fallo técnico, \
+un punto ciego, una discrepancia de esfuerzo entre el gancho y el resto \
+del reel -- no un inventario de lugar/material/grupo o individual.
 
-Escribe entre 3 y 5 frases, cada una con un dispositivo distinto:
-- pregunta: una pregunta corta sobre lo que se ve (¿...?).
-- contraste: contrapone el clip gancho con lo que viene después.
-- detalle: un objeto, lugar o recuento concreto y real del reel (no del \
-gancho en solitario).
-- afirmacion: una afirmación rotunda y defendible sobre el ejercicio o la \
-sesión (hot take).
-- tu: dirigida al espectador (tú/te), sin ser un eslogan.
+Escribe entre 3 y 5 frases, cada una con un dispositivo distinto. Ninguna \
+debe ser descriptiva ni neutra: todas deben generar intriga, desafiar al \
+espectador o marcar una tensión técnica.
+- pregunta: reta al espectador a juzgar algo dudoso que ves en el clip \
+gancho o en el reel (¿...?), nunca una pregunta retórica vacía.
+- contraste: enfrenta el esfuerzo o ritmo del clip gancho con lo que \
+viene después -- la discrepancia debe doler un poco.
+- detalle: un punto ciego técnico concreto y real del reel (postura, \
+apoyo, ángulo) que delata algo, no un recuento de objetos.
+- afirmacion: una regla técnica tajante y defendible sobre lo que se ve \
+(hot take que alguien podría discutir).
+- tu: interpela directamente al espectador (tú/te) sobre lo que le va a \
+costar o le va a delatar, sin ser un eslogan.
 
 Cada frase de 3 a 8 palabras. Deja una frase en "" si no puedes anclarla en \
 el brief, el reel o los fotogramas -- mejor vacía que inventada. Cuanto más \
-concreta y menos genérica, mejor: "Sesión de fuerza" no vale nada; nombrar \
-algo que se ve en pantalla sí.
+concreta y con más tensión, mejor: "Sesión de fuerza" no vale nada; señalar \
+un fallo o una duda técnica que se ve en pantalla sí.
 
 Regla de anclaje: toda frase debe apoyarse en el brief, el reel (incluido \
 su recuento real de clips) o los fotogramas -- nunca menciones un objeto o \
@@ -80,13 +86,16 @@ literales en el brief)
 punto final
 
 Ejemplos (con su dispositivo):
-- contraste: sprint al inicio, resto en sala -> "De la calle a la sala"
-- contraste: pico explosivo, resto controlado -> "Del empuje explosivo al front squat"
-- detalle: 8 clips distintos de material variado -> "Suelo, pesas, máquinas: \
-todo en un reel"
-- afirmacion: varios clips en grupo -> "No entrenas solo aquí"
-- pregunta: gancho de sled push -> "¿Quién empuja el trineo solo con brazos?"
-- tu: reel con progresión clara -> "Aquí empiezas donde puedes seguir"
+- pregunta: codos bloqueados en el pico -> "¿Seguro que ese bloqueo de \
+codos vale?"
+- contraste: pico explosivo, resto muy controlado -> "Mucha velocidad al \
+inicio para terminar así"
+- detalle: apoyo del pie desplazado en el pico -> "La posición de los \
+pies delata el fallo"
+- afirmacion: cadera sube antes que el pecho -> "Si la cadera sube antes, \
+no cuenta"
+- tu: agarre estrecho visible en el gancho -> "Este agarre te va a costar \
+la serie"
 
 Tono (matiz, nunca eslogan): {hook_line}.
 
