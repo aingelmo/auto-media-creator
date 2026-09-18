@@ -58,10 +58,22 @@ def _link_ref(ref: str, dest_dir: Path, dest_name: str) -> None:
         raise HTTPException(status_code=400, detail=f"malformed media ref {ref!r}")
     src_dir = (SESSIONS_DIR / ref_session).resolve()
     src_path = (src_dir / ref_path).resolve()
-    if src_dir not in src_path.parents or not src_path.is_file():
+    sessions_root = SESSIONS_DIR.resolve()
+    # Resolves through any chained symlinks (a ref picked from a session that
+    # itself picked it from an earlier one), so containment is checked against
+    # SESSIONS_DIR as a whole, not the single ref_session subtree.
+    if sessions_root not in src_path.parents or not src_path.is_file():
         raise HTTPException(status_code=404, detail=f"no such media {ref!r}")
     dest_dir.mkdir(parents=True, exist_ok=True)
-    (dest_dir / dest_name).symlink_to(src_path)
+    dest = dest_dir / dest_name
+    if dest.is_symlink() and dest.resolve() == src_path:
+        return
+    stem, suffix = Path(dest_name).stem, Path(dest_name).suffix
+    n = 1
+    while dest.exists():
+        dest = dest_dir / f"{stem}_{n}{suffix}"
+        n += 1
+    dest.symlink_to(src_path)
 
 
 @router.post("/api/sessions")
