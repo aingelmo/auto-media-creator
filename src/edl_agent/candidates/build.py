@@ -78,7 +78,8 @@ def build_video_candidates(
           that sample.
         - `score_cv` (float): see `scoring.score_cv`.
         - `admits_slots` (list[int]): see `scoring.admits_slots`.
-        - `peak_frames` (list[str]): paths to the 3 extracted JPEGs.
+        - `peak_frames` (list[str]): paths to the extracted JPEGs (see
+          `frames.PEAK_FRAME_OFFSETS_S` for the count).
         - `peak_frames_sha256` (list[str]): their SHA-256 hex digests.
     """
     peak_windows = suppress_peak_windows(

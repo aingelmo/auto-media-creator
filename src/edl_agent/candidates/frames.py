@@ -20,8 +20,8 @@ def extract_peak_frames(
 ) -> tuple[list[str], list[str]]:
     """Extract the `peak_frames` JPEGs for a candidate, per #4.3.
 
-    Extracts 3 frames at `t_peak + PEAK_FRAME_OFFSETS_S` (before/at/after the
-    peak), each timestamp clamped to `window`, via ffmpeg.
+    Extracts `len(PEAK_FRAME_OFFSETS_S)` frames at `t_peak +
+    PEAK_FRAME_OFFSETS_S`, each timestamp clamped to `window`, via ffmpeg.
 
     Args:
         proxy_path: Path to the proxy video to extract frames from.

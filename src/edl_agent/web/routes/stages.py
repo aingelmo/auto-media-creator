@@ -22,13 +22,15 @@ def ingest_page(name: str) -> dict:
 @router.get("/api/sessions/{name}/candidates")
 def candidates_page(name: str) -> dict:
     """`candidates.json` with thumbnail URLs for debugging selection input."""
-    session_dir = SESSIONS_DIR / name
     payload = load_json(name, "candidates.json")
     candidates = payload["candidates"]
     for c in candidates:
+        # peak_frames always live flat under session_dir/peaks/ (see
+        # candidates/frames.py); use the filename rather than the stored
+        # absolute path, which may be stale if SESSIONS_DIR has moved since
+        # the candidate was built.
         c["peak_urls"] = [
-            f"/sessions/{name}/files/{Path(jpg).resolve().relative_to(session_dir.resolve())}"
-            for jpg in c["peak_frames"]
+            f"/sessions/{name}/files/peaks/{Path(jpg).name}" for jpg in c["peak_frames"]
         ]
     return {"candidates": candidates}
 

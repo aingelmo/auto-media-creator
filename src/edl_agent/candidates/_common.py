@@ -35,7 +35,13 @@ CALM_GAP_TOLERANCE = 3  # samples of a dropped condition tolerated mid-run,
 # mirroring PEAK_WINDOW_SHARPNESS_TOLERANCE's motion-blur-transient idiom
 CALM_MAX_PER_CLIP = 3
 
-PEAK_FRAME_OFFSETS_S = (-0.3, 0.0, 0.3)
+PEAK_FRAME_OFFSETS_S = (-1.0, -0.4, 0.0, 0.5)
+# Widened from (-0.3, 0.0, 0.3): a 0.6s span can't distinguish barbell/
+# gymnastics movements that share the same peak posture (clean vs snatch vs
+# thruster vs front squat) -- the disambiguating evidence is the bar path
+# over more of the rep. Kept within PEAK_WINDOW_MIN_HALF_S so frames.py's
+# window clamp doesn't collapse offsets into duplicate timestamps on short
+# windows.
 PEAK_FRAME_SIDE_PX = 512
 
 MIN_SUBJECT_AREA = 0.02  # frame fraction; below this the subject reads as

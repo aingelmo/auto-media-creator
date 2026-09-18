@@ -5,19 +5,20 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
-from edl_agent.selector._common import EXERCISES
+from edl_agent.selector._common import EXERCISES, EXERCISES_BY_THEME
 
 SYSTEM_PROMPT_TEMPLATE = """Eres un editor de vídeo profesional especializado en Reels \
 verticales (9:16) de gimnasio.
 
 Recibes una lista de MOMENTOS CANDIDATOS. Cada candidato tiene un id, un tipo \
-(peak = momento de acción, calm = momento estable, image = foto) y uno o tres \
-fotogramas: justo antes del pico, el pico y justo después. Cada candidato \
-lleva además velocidad=N: velocidad real del sujeto en el pico (alturas de \
-cuerpo por segundo, comparable entre candidatos). Los fotogramas no distinguen \
-un movimiento lento de uno explosivo; fíate de velocidad para eso: <0.7 es \
-lento o controlado, >1.2 es explosivo (salto, sprint, burpee). Recibes también \
-los SLOTS del montaje con su rol narrativo y una LISTA CANÓNICA DE EJERCICIOS.
+(peak = momento de acción, calm = momento estable, image = foto) y varios \
+fotogramas repartidos a lo largo del movimiento, no solo en el pico. Cada \
+candidato lleva además velocidad=N: velocidad real del sujeto en el pico \
+(alturas de cuerpo por segundo, comparable entre candidatos). Los fotogramas \
+no distinguen un movimiento lento de uno explosivo; fíate de velocidad para \
+eso: <0.7 es lento o controlado, >1.2 es explosivo (salto, sprint, burpee). \
+Recibes también los SLOTS del montaje con su rol narrativo y una LISTA \
+CANÓNICA DE EJERCICIOS.
 
 Tu tarea es juzgar contenido, no calcular tiempos, coordenadas ni orden temporal.
 
@@ -31,8 +32,29 @@ idéntico a otro candidato mejor del mismo clip.
 bien la técnica.
 3. Asigna rank dentro de cada rol: 1 = mejor calidad. Sin huecos (1, 2, 3, …). \
 El orden en el montaje lo decide otro sistema.
-4. exercise: usa exactamente un nombre de la lista canónica; si no encaja, "other".
-5. Si hay menos de 3 candidatos válidos para develop o ninguno para hook o close, \
+4. exercise: usa exactamente un nombre de la lista canónica; si no encaja o no \
+estás seguro, "other". Movimientos que se confunden fácilmente en pocos \
+fotogramas -- mira la trayectoria completa antes de decidir:
+   - barra del suelo a los hombros y se queda ahí = clean; sigue hasta \
+encima de la cabeza en un solo tiempo = snatch; sale del rack y sube a los \
+hombros o encima de la cabeza = jerk.
+   - sentadilla frontal que termina en press por encima de la cabeza = \
+thruster, no front squat.
+   - press con balón medicinal por encima de la cabeza tras sentadilla = \
+wall ball, no thruster (mira el objeto: balón blando vs barra).
+   - kettlebell que sube en arco desde entre las piernas = swing; kettlebell \
+que termina apoyada en el hombro = clean.
+   - dominadas con barbilla sobre la barra = pull-up; piernas/pies tocando \
+la barra = toes-to-bar; transición por encima de la barra con el torso = \
+muscle-up.
+   - tirón de barra desde el suelo que se detiene a la altura de la cadera, \
+sin seguir hacia arriba = fase de clean/deadlift, no un ejercicio propio.
+5. exercise_confidence: "alta" si la secuencia de fotogramas deja claro cuál \
+de los ejercicios de la lista es (o que ninguno encaja, "other"); "baja" si \
+dudas entre dos o el encuadre/fotogramas no bastan para decidir. Ante la duda, \
+usa "other" + "baja" en vez de forzar un nombre concreto: un nombre \
+equivocado es peor que ninguno.
+6. Si hay menos de 3 candidatos válidos para develop o ninguno para hook o close, \
 explícalo en notes. No inventes candidatos ni fuerces rechazos para cumplir cuotas.
 
 Reglas:
@@ -83,19 +105,24 @@ mensaje, etiquetados con su id.
 Genera la selección."""
 
 
-def selection_schema() -> dict:
+def selection_schema(theme: str = "training") -> dict:
     """Build the output schema for Gemini's structured output, per #5.3.
 
     The `description` strings inside the schema are sent to the model
     verbatim (they are instructions, not documentation) and are kept in
     Spanish to match the rest of the prompt.
 
+    Args:
+        theme: Key of `selector._common.EXERCISES_BY_THEME`; scopes the
+            `exercise` enum to movements that actually occur in that theme.
+
     Returns:
         JSON schema dict (draft-agnostic subset understood by Gemini's
         structured-output feature) requiring `selected` (list of
-        `{candidate_id, role, rank, exercise, reason}`), `rejected` (list
-        of `{candidate_id, reason}`), and `notes` (string).
+        `{candidate_id, role, rank, exercise, exercise_confidence, reason}`),
+        `rejected` (list of `{candidate_id, reason}`), and `notes` (string).
     """
+    exercises = EXERCISES_BY_THEME.get(theme, EXERCISES)
     return {
         "type": "object",
         "properties": {
@@ -117,13 +144,28 @@ def selection_schema() -> dict:
                                 "No es orden temporal."
                             ),
                         },
-                        "exercise": {"type": "string", "enum": EXERCISES},
+                        "exercise": {"type": "string", "enum": exercises},
+                        "exercise_confidence": {
+                            "type": "string",
+                            "enum": ["alta", "baja"],
+                            "description": (
+                                'Usa "baja" si dudas entre dos ejercicios o '
+                                "los fotogramas no bastan para decidir."
+                            ),
+                        },
                         "reason": {
                             "type": "string",
                             "description": "Máximo 12 palabras.",
                         },
                     },
-                    "required": ["candidate_id", "role", "rank", "exercise", "reason"],
+                    "required": [
+                        "candidate_id",
+                        "role",
+                        "rank",
+                        "exercise",
+                        "exercise_confidence",
+                        "reason",
+                    ],
                 },
             },
             "rejected": {
@@ -214,7 +256,7 @@ def build_user_prompt(
         tematica=THEMES[theme]["tematica"],
         n_slots=len(slots),
         n_develop=n_develop,
-        exercises=", ".join(EXERCISES),
+        exercises=", ".join(EXERCISES_BY_THEME.get(theme, EXERCISES)),
         n_cand=len(candidates),
         ids=", ".join(c["id"] for c in candidates),
     )
@@ -223,9 +265,10 @@ def build_user_prompt(
 def build_parts(candidates: list[dict], user_prompt: str) -> list[dict]:
     """Build the text+image request parts, one set per candidate plus the prompt.
 
-    Per #5.1: a low-resolution base64 image is sent per peak frame, so
-    interactions stay within reasonable token/latency limits for `qwen3-vl`-
-    class vision models.
+    Per #5.1/#5.5: a medium-resolution base64 image is sent per peak frame --
+    bumped up from low so equipment (kettlebell vs dumbbell, bar vs rings,
+    bar loading) survives, since that's often what separates two exercise
+    enum entries that look identical at low detail.
 
     Args:
         candidates: Admissible candidates (see `admissible_candidates`).
@@ -238,7 +281,7 @@ def build_parts(candidates: list[dict], user_prompt: str) -> list[dict]:
     Returns:
         List of part dicts, each either `{"type": "text", "text": ...}` or
         `{"type": "image", "data": <base64 str>, "mime_type": "image/jpeg",
-        "resolution": "low"}`, in order: for each candidate, one text part
+        "resolution": "medium"}`, in order: for each candidate, one text part
         with its metadata followed by one image part per peak frame; then
         the user prompt text part last.
     """
@@ -259,7 +302,7 @@ def build_parts(candidates: list[dict], user_prompt: str) -> list[dict]:
                 "type": "image",
                 "data": base64.b64encode(Path(jpg).read_bytes()).decode("ascii"),
                 "mime_type": "image/jpeg",
-                "resolution": "low",
+                "resolution": "medium",
             }
             for jpg in c["peak_frames"]
         )

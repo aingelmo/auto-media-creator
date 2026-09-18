@@ -7,6 +7,23 @@ from typing import Any
 
 from edl_agent.selector import generate_hook_copy
 
+_UNNAMED = "(sin identificar)"
+
+
+def _named_exercise(entry: dict) -> str:
+    """`entry["exercise"]`, or `_UNNAMED` if the selector flagged low confidence.
+
+    A wrong exercise name in the hook-copy prompt is worse than none: the
+    hook-copy system prompt only allows naming a movement that appears in
+    some clip's `exercise` field (#5.7), so masking it here at the source
+    keeps every downstream consumer (reel context, the hook candidate's own
+    label) from ever seeing an unreliable guess.
+    """
+    exercise = entry.get("exercise", "other")
+    if entry.get("exercise_confidence") == "baja":
+        return _UNNAMED
+    return exercise
+
 
 def reel_context(
     edl: dict,
@@ -52,7 +69,7 @@ def reel_context(
         candidate = candidates_by_id.get(cid, {})
         speed = candidate.get("kp_speed_abs", 0.0)
         duration = clip["out_s"] - clip["in_s"]
-        exercise = entry.get("exercise", "other")
+        exercise = _named_exercise(entry)
         line = (
             f"{n_clips}. {clip['role']}: {exercise}, {duration:.1f}s, "
             f"velocidad {speed:.2f}"
@@ -113,7 +130,7 @@ def run_hooks(
     hook_clip = next(c for c in clips if c["role"] == "hook")
     candidate = candidates_by_id[hook_clip["candidate_id"]]
     by_id = {e["candidate_id"]: e for e in (selection or {}).get("selected", [])}
-    exercise = by_id.get(hook_clip["candidate_id"], {}).get("exercise", "other")
+    exercise = _named_exercise(by_id.get(hook_clip["candidate_id"], {}))
     others = [
         candidates_by_id[c["candidate_id"]]
         for c in clips

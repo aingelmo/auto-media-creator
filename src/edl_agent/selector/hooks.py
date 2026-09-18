@@ -39,10 +39,11 @@ da. La frase debe preparar el reel entero, no solo describir el clip 1.
 
 Recibes: un brief opcional del operador, la audiencia, el reel completo en \
 su orden final (rol/ejercicio/duración/velocidad/motivo de cada clip, y el \
-recuento real de clips), los 3 fotogramas del clip gancho (antes, pico, \
-después), y 1 fotograma de cada uno de los demás clips, cada fotograma \
-etiquetado con el id del clip al que pertenece. Velocidad = alturas de \
-cuerpo por segundo en el pico; <0.7 es controlado, >1.2 es explosivo.
+recuento real de clips), varios fotogramas del clip gancho repartidos a lo \
+largo del movimiento, y 1 fotograma de cada uno de los demás clips, cada \
+fotograma etiquetado con el id del clip al que pertenece. Velocidad = \
+alturas de cuerpo por segundo en el pico; <0.7 es controlado, >1.2 es \
+explosivo.
 
 {audience_tone}
 

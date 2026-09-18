@@ -84,7 +84,7 @@ def select(
                 response_format={
                     "type": "text",
                     "mime_type": "application/json",
-                    "schema": selection_schema(),
+                    "schema": selection_schema(config["theme"]),
                 },
                 generation_config={
                     "thinking_level": thinking_level,

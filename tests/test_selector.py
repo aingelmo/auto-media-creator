@@ -104,7 +104,7 @@ def test_build_parts_embeds_id_line_and_base64_image(tmp_path) -> None:
         "text": "id=c1 kind=peak src=a.mov multi_subject=False velocidad=0.00",
     }
     assert parts[1]["type"] == "image"
-    assert parts[1]["resolution"] == "low"
+    assert parts[1]["resolution"] == "medium"
     assert parts[-1] == {"type": "text", "text": "USER_PROMPT"}
 
 

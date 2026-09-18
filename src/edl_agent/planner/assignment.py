@@ -114,15 +114,19 @@ def _take_develop_pool(
         if not admissible_slots:
             continue
         exercise = _norm_exercise(s["exercise"])
-        # "unknown" (rules-fallback, #8.6) and "other" (selector's own
-        # catch-all, selector/prompts.py) both mean "no real exercise
-        # label"; treating repeats of either as a clash would collapse
-        # the unlabeled pool down to a single entry.
+        # "unknown" (rules-fallback, #8.6), "other" (selector's own
+        # catch-all, selector/prompts.py), and a "baja"-confidence label
+        # (selector unsure which of two movements it is, #5.5) all mean "no
+        # reliable exercise label"; treating repeats of any of these as a
+        # clash would collapse the unlabeled pool down to a single entry.
+        unreliable = exercise in ("unknown", "other") or s.get(
+            "exercise_confidence"
+        ) == "baja"
         if (
             not allow_exercise_repeat
             and prev_exercise is not None
             and exercise == prev_exercise
-            and exercise not in ("unknown", "other")
+            and not unreliable
         ):
             continue
         if not allow_src_repeat and prev_src is not None and cand["src"] == prev_src:
