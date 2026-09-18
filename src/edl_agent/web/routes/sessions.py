@@ -385,8 +385,9 @@ def session_confirm(
     job.cancelled = not proceed
     job.excluded_sources = exclude
     job.shorten = shorten
-    job.hook_choice = hook_custom.strip() or hook_line
-    job.hook_choice_b = hook_line_b
+    if job.pause_kind == "hook_choice":
+        job.hook_choice = hook_custom.strip() or hook_line
+        job.hook_choice_b = hook_line_b
     job.hook_flash = hook_flash
     job.more_hooks = more
     job.music_choice_offset = music_offset
