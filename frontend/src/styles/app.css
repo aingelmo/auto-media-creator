@@ -412,6 +412,77 @@ button.primary {
   object-fit: contain;
   background: #000;
   border-radius: 4px;
+  transition:
+    opacity 150ms,
+    filter 150ms;
+}
+
+/* Effects preview: video capped to a fraction of the viewport height with
+   controls beside it, so a tall portrait reel never pushes the checkboxes
+   and buttons below the fold. */
+.effects-preview-body {
+  display: flex;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.effects-preview-body .reel-player {
+  flex: 0 0 auto;
+  max-height: 60vh;
+  width: auto;
+  max-width: 100%;
+}
+
+.reel-preview-frame {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.reel-preview-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.6);
+  border-radius: 4px;
+}
+
+.reel-preview-overlay span {
+  background: var(--panel);
+  border: 1px solid var(--signal);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-4);
+  border-radius: 4px;
+  animation: reel-preview-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes reel-preview-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.effects-preview-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 240px;
+}
+
+.effects-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
 }
 
 /* Session result: video (+ checks) beside the regenerate form, instead of
@@ -514,6 +585,14 @@ button.primary {
   background: var(--panel);
   border: 1px solid var(--rule);
   color: var(--ink);
+}
+
+/* Sized to its content (video + controls) instead of the fixed stage-modal
+   width, so it doesn't leave a slab of empty background beside a narrow
+   portrait reel. */
+.effects-preview-modal {
+  width: fit-content;
+  max-width: 92vw;
 }
 
 .stage-modal::backdrop {
