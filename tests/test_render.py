@@ -477,8 +477,8 @@ def test_render_hook_previews_builds_one_variant_per_line_plus_none(
         (c["clip"], c["out_dir"]) for c in calls
     )}
     assert "text" not in by_key["none"]["effect_params"]
-    assert by_key["0"]["effect_params"]["text"] == "PRIMERA LINEA"
-    assert by_key["1"]["effect_params"]["text"] == "SEGUNDA LINEA"
+    assert by_key["0"]["effect_params"]["text"] == "PRIMERA\\NLINEA"
+    assert by_key["1"]["effect_params"]["text"] == "SEGUNDA\\NLINEA"
     for key in ("none", "0", "1"):
         # Flash is a separate decision made later, at the effects_preview
         # pause -- these hook-line comparison previews never carry it.

@@ -174,7 +174,7 @@ def test_hook_line_override_is_used() -> None:
         sources_by_src,
         {"hook_line_override": "Del operador"},
     )
-    assert clips[0]["effect_params"]["text"] == "DEL OPERADOR"
+    assert clips[0]["effect_params"]["text"] == "DEL\\NOPERADOR"
 
 
 def test_hook_copy_propagates_to_effect_params() -> None:
@@ -654,16 +654,16 @@ def test_effect_for_hook_text_params() -> None:
         cand, "crop", DEFAULT_CONFIG, None, ("Sube el peso", 45)
     )
     assert effect == "none"
-    assert params["text"] == "SUBE EL PESO"  # upper-cased
+    assert params["text"] == "SUBE EL\\NPESO"  # upper-cased, wraps at full size
     assert params["font_size"] == DEFAULT_CONFIG["hook_text_size"]
     assert params["text_frames"] == 45
 
-    # A line that doesn't fit one line but wraps to two at full size.
+    # A line that doesn't fit one line and needs shrinking to wrap to two.
     _, params = effect_for(
         cand, "crop", DEFAULT_CONFIG, None, ("Último rep, sin excusas", 45)
     )
     assert params["text"] == "ÚLTIMO REP,\\NSIN EXCUSAS"
-    assert params["font_size"] == DEFAULT_CONFIG["hook_text_size"]
+    assert 56 <= params["font_size"] < DEFAULT_CONFIG["hook_text_size"]
     assert params["fade_frames"] == DEFAULT_CONFIG["hook_text_fade_frames"]
 
     # A line that still doesn't fit as two lines shrinks below full size.
