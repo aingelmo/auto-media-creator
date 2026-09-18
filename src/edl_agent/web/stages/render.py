@@ -137,6 +137,11 @@ def _run_render_stage(
 
     with job.running("checks"):
         job.detail["checks"] = "verifying rendered reel"
-        job.check_results = [str(r) for r in run_render_checks(edl, session_dir)]
+        job.check_results = [
+            str(r)
+            for r in run_render_checks(
+                edl, session_dir, preview_suffix=_combo_suffix(job)
+            )
+        ]
 
     return edl

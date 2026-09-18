@@ -301,6 +301,7 @@ def run_render_checks(
     allow_dynamic_loudnorm: bool = False,
     run_r2: bool = True,
     suffix: str = "",
+    preview_suffix: str | None = None,
 ) -> list[CheckResult]:
     """Run checks R1-R6 over already-rendered segments, per #9.
 
@@ -309,18 +310,24 @@ def run_render_checks(
             `target.duration_f`, and `audio` (for R5).
         session_dir: Session root directory; final segments are expected
             under `session_dir / f"segments{suffix}"`, preview segments
-            under `session_dir / f"preview_segments{suffix}"`, and the reel
-            at `session_dir / f"reel{suffix}.mp4"`.
+            under `session_dir / f"preview_segments{preview_suffix}"`, and
+            the reel at `session_dir / f"reel{suffix}.mp4"`.
         allow_dynamic_loudnorm: Passed through to `check_r5_loudnorm_linear`.
         run_r2: If `False`, skips the R2 pHash comparison (e.g. when no
             preview segments were rendered). Defaults to `True`.
-        suffix: Appended to the segments/preview_segments/reel names, for
-            checking an A/B variant alongside the default output.
+        suffix: Appended to the segments/reel names, for checking an A/B
+            variant alongside the default output.
+        preview_suffix: Appended to the preview_segments dir name; defaults
+            to `suffix` when `None` (e.g. the hook_flash/punch_in combo
+            suffix, which may differ from `suffix` since final segments are
+            unsuffixed).
 
     Returns:
         Flat list of `CheckResult`s: R1 (and R2, R4) per clip, then R3, R4,
         R5, R6 for the reel as a whole.
     """
+    if preview_suffix is None:
+        preview_suffix = suffix
     results: list[CheckResult] = []
     for clip in edl["clips"]:
         final_seg = session_dir / f"segments{suffix}" / f"seg_{clip['slot']:02d}.mp4"
@@ -328,7 +335,7 @@ def run_render_checks(
         if run_r2:
             preview_seg = (
                 session_dir
-                / f"preview_segments{suffix}"
+                / f"preview_segments{preview_suffix}"
                 / f"seg_{clip['slot']:02d}.mp4"
             )
             results.append(check_r2_phash(final_seg, preview_seg, clip["n_frames"]))
