@@ -34,6 +34,7 @@ GENERIC_PHRASES: tuple[str, ...] = (
     "quema grasa",
     "sin dolor",
     "dolor",
+    "doler",
     "lesión",
 )
 
@@ -62,9 +63,10 @@ def clean_hook_line(
 
     `strict=True` (LLM output, #5.7) additionally rejects: fewer than
     `HOOK_LINE_MIN_WORDS` or more than `HOOK_LINE_STRICT_MAX_WORDS` words,
-    any digit not in `allowed_numbers` (invented reps/kg/times, unless it
-    appeared verbatim in the operator's brief or the reel context, see
-    `numbers_in`), or a substring from `GENERIC_PHRASES` (invented slogan).
+    any digit not in `allowed_numbers` (invented reps/kg/times, or the
+    reel's own internal metrics, unless it appeared verbatim in the
+    operator's brief, see `numbers_in`), or a substring from
+    `GENERIC_PHRASES` (invented slogan).
 
     `strict=False` (operator-typed text, `hook_custom` in the web form)
     keeps the looser 1-`HOOK_LINE_MAX_WORDS`-word check only.

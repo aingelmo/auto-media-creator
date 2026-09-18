@@ -46,36 +46,92 @@ cuerpo por segundo en el pico; <0.7 es controlado, >1.2 es explosivo.
 
 {audience_tone}
 
-Antes de escribir, anota 2-3 hechos de evidencia visibles en los \
-fotogramas que revelen algo cuestionable o en tensión: un fallo técnico, \
-un punto ciego, una discrepancia de esfuerzo entre el gancho y el resto \
-del reel -- no un inventario de lugar/material/grupo o individual.
+Antes de escribir, anota 2-3 hechos de evidencia que se vean sin lugar a \
+dudas en los fotogramas: qué hace el cuerpo, en qué fase del movimiento \
+está, diferencia de ritmo entre el gancho y el resto. Describe solo lo que \
+se ve; si no distingues bien algo, no lo anotes. No fuerces un fallo \
+técnico: la mayoría de los clips son de gente entrenando correctamente y \
+no hay nada que juzgar.
+
+Los fotogramas sirven para confirmar CÓMO se mueve el cuerpo, nunca para \
+bautizar un objeto o un ejercicio nuevo. Solo puedes nombrar un objeto o \
+un ejercicio si aparece en el campo `ejercicio` de algún clip o en el \
+brief: si crees ver una kettlebell, una banda, una cuña o una sentadilla \
+frontal y no está en los datos del reel, para ti no existe y no puede \
+aparecer ni en la evidencia ni en las frases.
 
 Escribe entre 3 y 5 frases, cada una con un dispositivo distinto. Ninguna \
-debe ser descriptiva ni neutra: todas deben generar intriga, desafiar al \
-espectador o marcar una tensión técnica.
-- pregunta: reta al espectador a juzgar algo dudoso que ves en el clip \
-gancho o en el reel (¿...?), nunca una pregunta retórica vacía.
-- contraste: enfrenta el esfuerzo o ritmo del clip gancho con lo que \
-viene después -- la discrepancia debe doler un poco.
-- detalle: un punto ciego técnico concreto y real del reel (postura, \
-apoyo, ángulo) que delata algo, no un recuento de objetos.
-- afirmacion: una regla técnica tajante y defendible sobre lo que se ve \
-(hot take que alguien podría discutir).
-- tu: interpela directamente al espectador (tú/te) sobre lo que le va a \
-costar o le va a delatar, sin ser un eslogan.
+debe ser un eslogan ni una descripción plana.
 
-Cada frase de 3 a 8 palabras. Deja una frase en "" si no puedes anclarla en \
-el brief, el reel o los fotogramas -- mejor vacía que inventada. Cuanto más \
-concreta y con más tensión, mejor: "Sesión de fuerza" no vale nada; señalar \
-un fallo o una duda técnica que se ve en pantalla sí.
+Regla que vale para todas: el sujeto de la frase es siempre una persona o \
+lo que hace. El suelo, la colchoneta, el cajón, la acera, la sala, el \
+apoyo o el material nunca son el protagonista ni pueden regir el verbo \
+("La colchoneta te va a durar", "El suelo no perdona", "A ti el suelo te \
+va a pesar", "Te toca aguantar el cajón" son frases inválidas: el mobiliario \
+no hace nada). Habla de gente entrenando, no del decorado.
+- pregunta: solo si en el fotograma se ve un fallo técnico inequívoco y \
+verificable (algo que cualquiera señalaría al mirar la imagen). Si no lo \
+hay, deja "" -- nunca inventes una duda del tipo "¿eso cuenta?" sobre un \
+gesto correcto o que no distingues. Que un movimiento aparezca a medias o \
+sin terminar en el fotograma NO es un fallo técnico: el clip dura un \
+segundo y corta donde corta. Nunca preguntes si algo "cuenta", "vale" o \
+"es trampa" por estar incompleto en imagen -- en ese caso deja "".
+- contraste: enfrenta los dos momentos más distintos del reel. NO tienes \
+que usar el clip `close`: el close es casi siempre el clip más tranquilo \
+del reel, y rematar ahí deja la frase sin fuerza ("acabas subido al \
+cajón", "acaba apoyado en la columna", "acabas sentado"). Elige el clip \
+del reel que de verdad se oponga al gancho -- el más duro, el más lento o \
+el más cargado. Las dos mitades tienen que nombrar algo que hace una \
+persona (correr, remar, empujar, colgarse, saltar): un sitio o una postura \
+("del suelo", "empiezas tumbado", "en la sala") no vale como mitad. Si las \
+dos mitades se parecen ("del suelo al suelo") o no sabes qué pasa en el \
+otro clip, deja "". Prohibido el molde "Empieza(s) X y acaba(s) Y" y sus \
+variantes con "arranca"/"sales": si tu frase encaja en él, reescríbela con \
+otra forma.
+- detalle: un detalle visible y lo que delata, las dos cosas en la misma \
+frase. Si la frase se puede leer como pie de foto del fotograma ("Manos al \
+suelo junto a la mancuerna", "Cadera hacia atrás, rodillas flexionadas", \
+"Brazos y piernas levantados a la vez", "Todo el grupo tumbado en el \
+suelo"), no vale: falta lo que ese detalle significa para el que entrena.
+- afirmacion: una regla que un entrenador diría de verdad en voz alta \
+durante ese ejercicio, y que seguiría siendo cierta fuera de este vídeo. \
+Si suena a aforismo fabricado a medida para el fotograma ("Sin zancada no \
+hay carrera que valga", "Si el torso se despega, pierde", "El suelo se \
+entrena desde abajo"), no vale: deja "". Sin juzgar si un gesto "vale" o \
+"cuenta" salvo que el fallo sea evidente.
+- tu: interpela directamente al espectador (tú/te) sobre lo que tendría \
+que hacer, o sobre lo que notaría, si se metiera en ese momento del reel. \
+No prometas sufrimiento ni anuncies qué músculo le va a arder o vaciar \
+salvo que el movimiento lo cargue de forma evidente (un trineo cargado, \
+colgarse de la barra); si el gesto es suave o no sabes cómo se ejecuta, \
+deja "". Nunca señales "el último", "la última", "el final" o "el último \
+tramo" como la parte dura: el reel termina en el clip más tranquilo, así \
+que esa promesa siempre sale falsa.
 
-Regla de anclaje: toda frase debe apoyarse en el brief, el reel (incluido \
-su recuento real de clips) o los fotogramas -- nunca menciones un objeto o \
-ejercicio que no esté en el reel. Números solo si aparecen tal cual en el \
-brief o coinciden con el recuento real de clips.
+Cada frase de 3 a 8 palabras, y cuanto más corta mejor: si la primera \
+mitad se sostiene sola, borra la segunda ("Correr se entrena" es mejor que \
+"Correr se entrena, no se sale a trotar"). Prefiere la palabra evocadora a \
+la literal: "al aire libre" antes que "en la acera" o "en la calle". Deja \
+una frase en "" si no puedes anclarla en el brief, el reel o los \
+fotogramas -- mejor vacía que inventada; es normal devolver solo 3 frases \
+útiles.
+
+Regla de anclaje: toda frase debe apoyarse en el brief, el reel o los \
+fotogramas -- nunca menciones un objeto o ejercicio que no esté en el reel.
+
+Nombres de ejercicio: usa exclusivamente el nombre que se te da en el \
+campo `ejercicio` de cada clip (tradúcelo al español si hace falta: run = \
+carrera, push-up = flexión, sled push = empuje de trineo). Si el ejercicio \
+es `other` o no se te da, no bautices el movimiento: habla de lo que hace \
+el cuerpo (tira, empuja, sostiene, se levanta) sin ponerle nombre, o deja \
+la frase en "". Nunca inventes \
+un nombre de ejercicio ni describas un gesto como si fuera un ejercicio \
+("cadera en flexión", "zancada del gancho", "pico de espalda" no existen).
 
 Prohibido en cualquier frase:
+- cualquier cifra interna del reel: velocidad, duraciones, número de \
+clips, ids de clip. Esas cifras son evidencia para ti, el espectador no \
+las ve ni las entiende. Números solo si aparecen tal cual en el brief
 - repeticiones, kilos, récords, tiempos, resultados (salvo que vengan \
 literales en el brief)
 - emociones, dolor, lesión, competición
@@ -85,17 +141,34 @@ literales en el brief)
 - comentarios sobre el cuerpo de los sujetos, emojis, hashtags, comillas, \
 punto final
 
-Ejemplos (con su dispositivo):
-- pregunta: codos bloqueados en el pico -> "¿Seguro que ese bloqueo de \
-codos vale?"
-- contraste: pico explosivo, resto muy controlado -> "Mucha velocidad al \
-inicio para terminar así"
-- detalle: apoyo del pie desplazado en el pico -> "La posición de los \
-pies delata el fallo"
-- afirmacion: cadera sube antes que el pecho -> "Si la cadera sube antes, \
-no cuenta"
-- tu: agarre estrecho visible en el gancho -> "Este agarre te va a costar \
-la serie"
+Los ejemplos de abajo son de otros reels: cada uno usa una estructura de \
+frase distinta a propósito. Copia esa variedad, nunca el texto ni la \
+evidencia -- una frase de los ejemplos repetida tal cual en tu respuesta \
+es un error, aunque encaje. Si la frase se pudiera rellenar con dos huecos \
+para cualquier otro reel, no es lo bastante punzante: reescríbela con las \
+palabras propias de estos clips.
+
+Ejemplos de formato (evidencia -> frase).
+- pregunta: rodilla claramente hundida hacia dentro en el pico -> "¿Ves \
+hacia dónde va esa rodilla?"
+- contraste: gancho corriendo fuera, otro clip remando -> "Corriendo al \
+aire libre, remando al final"
+- contraste: gancho con trineo, otro clip colgado de la barra -> "Del \
+trineo a la barra sin respirar"
+- contraste: gancho saltando al cajón, otro clip empujando disco -> \
+"Saltas al cajón, luego arrastras el disco"
+- detalle: nadie apoya los talones en la sentadilla -> "Ni un talón toca \
+el suelo"
+- afirmacion: remo en máquina con tirón claro de piernas -> "El remo se \
+tira con las piernas"
+- tu: dominadas estrictas en el reel -> "Tú te descuelgas en la tercera"
+
+Ejemplos de frases inválidas (no las imites ni por forma ni por fondo).
+- "Esa colchoneta te va a durar" -> el decorado no es el protagonista
+- "Cadera hacia atrás, rodillas flexionadas" -> pie de foto, no dice nada
+- "Te va a costar llegar a la última" -> el reel acaba en el clip más suave
+- "Del suelo al suelo, sin despegar la mancuerna" -> no hay contraste
+- "Corren con la kettlebell pegada al pecho" -> objeto que no está en el reel
 
 Tono (matiz, nunca eslogan): {hook_line}.
 
@@ -153,8 +226,9 @@ def hook_copy_schema() -> dict:
                             "type": "string",
                             "description": (
                                 "3-8 palabras ancladas en el brief, el reel "
-                                "o los fotogramas; cadena vacía si no se puede "
-                                "anclar."
+                                "o los fotogramas, sin cifras internas del reel "
+                                "(velocidad, duración, número de clips); cadena "
+                                "vacía si no se puede anclar."
                             ),
                         },
                     },
@@ -311,14 +385,11 @@ def generate_hook_copy(
 
     evidence = [str(e) for e in raw.get("evidence", []) if str(e).strip()]
     raw_hooks = raw.get("hooks", [])
-    # `context` (session.hooks.reel_context) states the reel's real clip/
-    # develop counts, e.g. "clips: 9 (develop: 7)"; those digits are true of
-    # the reel, so a line naming them isn't an invented number.
-    # ponytail: this also allows durations/speeds embedded in `context`
-    # (e.g. "1.5s", "2.02") as a side effect of reusing numbers_in() on the
-    # whole string; tighten with a dedicated regex over the counts line only
-    # if a model starts citing invented-looking durations as hook numbers.
-    allowed_numbers = numbers_in(brief) | numbers_in(context)
+    # Only the operator's brief licenses a number. `context` digits (speeds,
+    # durations, clip counts) are internal metrics the viewer never sees --
+    # allowing them let lines like "Arranca a 1.60" or "¿Cuántos de los 9
+    # clips aguantas?" through review.
+    allowed_numbers = numbers_in(brief)
     hooks: list[dict] = []
     dropped: list[dict] = []
     rejected: str | None = None
