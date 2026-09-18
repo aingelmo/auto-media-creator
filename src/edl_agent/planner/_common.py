@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 FPS = 30
+
+# Bundled hook-text font (OFL, ships in src/edl_agent/assets/fonts).
+FONTS_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 
 
 class PlannerError(RuntimeError):
@@ -18,11 +23,11 @@ DEFAULT_CONFIG = {
     "ramp_frames": 12,  # output frames in the slow window, centred on the beat
     "hook_text": True,  # #6.6: burn the selector's `hook_line` into the hook
     "hook_line_override": "",  # operator-typed line; "" => use the selector's
-    "hook_text_font": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "hook_text_size": 88,  # px at 1080 wide
-    "hook_text_y": 0.28,  # fraction of height, top of the text box (Reels safe zone)
-    "hook_text_max_frames": 60,
-    "hook_text_fade_frames": 8,
+    "hook_text_font": str(FONTS_DIR / "Montserrat-ExtraBold.ttf"),
+    "hook_text_size": 92,  # px at 1080 wide, before wrap/shrink
+    "hook_text_y": 0.40,  # fraction of height, CENTRE of the text block (safe zone)
+    "hook_text_max_frames": 90,  # 3s hold when the hook slot is long enough
+    "hook_text_fade_frames": 6,  # exit-only fade (~200ms); entrance is a pop
     "peak_beat_index": 1,  # #6.3: peak lands on the slot's 2nd beat by default
     "allow_blur_pad": True,  # #6.4
     "upscale_threshold": 1.3,

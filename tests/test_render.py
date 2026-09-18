@@ -13,6 +13,7 @@ import pytest
 from PIL import Image
 
 from edl_agent.ingest import build_proxy, probe_video_source, sha256_file
+from edl_agent.planner._common import DEFAULT_CONFIG
 from edl_agent.render import crop_to_px, is_916, render_segments, run_render
 
 if TYPE_CHECKING:
@@ -194,10 +195,10 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
                     "ramp_frames": 12,
                     "ramp_start_f": 9,
                     # hook text (#6.6) rides on top of the ramp
-                    "text": "Prueba: 100% real",
-                    "font": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                    "text": "PRUEBA: 100% REAL",
+                    "font": DEFAULT_CONFIG["hook_text_font"],
                     "font_size": 88,
-                    "text_y": 0.28,
+                    "text_y": 0.40,
                     "text_frames": 45,
                     "fade_frames": 8,
                     # hook flash (#6.6) on the peak beat
@@ -399,6 +400,47 @@ def test_drawtext_escape_survives_both_ffmpeg_parsers() -> None:
     assert _drawtext_escape("Sube el peso") == "Sube el peso"
 
 
+def test_hook_text_filter_writes_ass_script(tmp_path) -> None:
+    from edl_agent.planner._common import DEFAULT_CONFIG
+    from edl_agent.render._common import hook_text_filter
+
+    clip = {
+        "effect_params": {
+            "text": "ÚLTIMO REP,\\NSIN {EXCUSAS}",
+            "font": DEFAULT_CONFIG["hook_text_font"],
+            "font_size": 92,
+            "text_y": 0.40,
+            "text_frames": 45,  # 1.50s at 30fps
+            "fade_frames": 6,
+        }
+    }
+    out_path = tmp_path / "seg_00.mp4"
+
+    filt = hook_text_filter(clip, out_path)
+
+    ass_path = tmp_path / "seg_00.ass"
+    assert ass_path.exists()
+    content = ass_path.read_text()
+    assert "PlayResX: 1080" in content
+    assert "PlayResY: 1920" in content
+    assert "Style: Hook,Montserrat," in content
+    # Stray braces are stripped, not escaped -- they'd otherwise open a
+    # second (bogus) ASS override block.
+    assert "SIN EXCUSAS" in content
+    assert "{EXCUSAS}" not in content
+    assert "Dialogue: 0,0:00:00.00,0:00:01.50,Hook" in content
+    assert r"\N" in content
+    assert "filename=" in filt and "fontsdir=" in filt
+    assert filt.endswith(",")
+
+
+def test_hook_text_filter_empty_text_is_noop(tmp_path) -> None:
+    from edl_agent.render._common import hook_text_filter
+
+    assert hook_text_filter({"effect_params": {}}, tmp_path / "seg_00.mp4") == ""
+    assert not (tmp_path / "seg_00.ass").exists()
+
+
 def test_render_hook_previews_builds_one_variant_per_line_plus_none(
     session_dir, monkeypatch
 ) -> None:
@@ -435,8 +477,8 @@ def test_render_hook_previews_builds_one_variant_per_line_plus_none(
         (c["clip"], c["out_dir"]) for c in calls
     )}
     assert "text" not in by_key["none"]["effect_params"]
-    assert by_key["0"]["effect_params"]["text"] == "primera linea"
-    assert by_key["1"]["effect_params"]["text"] == "segunda linea"
+    assert by_key["0"]["effect_params"]["text"] == "PRIMERA LINEA"
+    assert by_key["1"]["effect_params"]["text"] == "SEGUNDA LINEA"
     for key in ("none", "0", "1"):
         # Flash is a separate decision made later, at the effects_preview
         # pause -- these hook-line comparison previews never carry it.

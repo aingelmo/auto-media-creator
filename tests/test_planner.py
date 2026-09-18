@@ -174,7 +174,7 @@ def test_hook_line_override_is_used() -> None:
         sources_by_src,
         {"hook_line_override": "Del operador"},
     )
-    assert clips[0]["effect_params"]["text"] == "Del operador"
+    assert clips[0]["effect_params"]["text"] == "DEL OPERADOR"
 
 
 def test_hook_copy_propagates_to_effect_params() -> None:
@@ -189,7 +189,7 @@ def test_hook_copy_propagates_to_effect_params() -> None:
         {"hook_line_override": "La barra despega del suelo"},
     )
     hook_clip = clips[0]
-    assert hook_clip["effect_params"]["text"] == "La barra despega del suelo"
+    assert hook_clip["effect_params"]["text"] == "LA BARRA DESPEGA\\NDEL SUELO"
     assert "text_frames" in hook_clip["effect_params"]
     assert "fade_frames" in hook_clip["effect_params"]
 
@@ -654,15 +654,28 @@ def test_effect_for_hook_text_params() -> None:
         cand, "crop", DEFAULT_CONFIG, None, ("Sube el peso", 45)
     )
     assert effect == "none"
-    assert params["text"] == "Sube el peso"
+    assert params["text"] == "SUBE EL PESO"  # upper-cased
     assert params["font_size"] == DEFAULT_CONFIG["hook_text_size"]
     assert params["text_frames"] == 45
 
+    # A line that doesn't fit one line but wraps to two at full size.
     _, params = effect_for(
         cand, "crop", DEFAULT_CONFIG, None, ("Último rep, sin excusas", 45)
     )
-    assert 40 <= params["font_size"] < DEFAULT_CONFIG["hook_text_size"]
+    assert params["text"] == "ÚLTIMO REP,\\NSIN EXCUSAS"
+    assert params["font_size"] == DEFAULT_CONFIG["hook_text_size"]
     assert params["fade_frames"] == DEFAULT_CONFIG["hook_text_fade_frames"]
+
+    # A line that still doesn't fit as two lines shrinks below full size.
+    _, params = effect_for(
+        cand,
+        "crop",
+        DEFAULT_CONFIG,
+        None,
+        ("Supercalifragilisticoespialidoso total", 45),
+    )
+    assert "\\N" in params["text"]
+    assert 56 <= params["font_size"] < DEFAULT_CONFIG["hook_text_size"]
 
     _, params = effect_for(cand, "crop", DEFAULT_CONFIG, None, ("", 45))
     assert "text" not in params

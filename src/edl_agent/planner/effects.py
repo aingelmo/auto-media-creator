@@ -4,16 +4,54 @@ from __future__ import annotations
 
 from PIL import ImageFont
 
-HOOK_TEXT_MAX_W = 1000  # px at 1080 wide; drawtext doesn't wrap or auto-fit
+HOOK_TEXT_MAX_W = 900  # px at 1080 wide; the safe-zone text block width
+HOOK_TEXT_MIN_SIZE = 56
 
 
-def fit_font_size(text: str, font: str, size: int, max_w: int = HOOK_TEXT_MAX_W) -> int:
-    """Largest size <= `size` whose rendered `text` width fits `max_w` (min 40)."""
-    # ponytail: no wrapping; the prompt caps the line at 6 words, this only
-    # guards long words. Add manual "\n" insertion if lines still overflow.
-    while size > 40 and ImageFont.truetype(font, size).getlength(text) > max_w:
+def _wrap_two_lines(text: str, font: str, size: int, max_w: int) -> list[str] | None:
+    """Best (narrowest-max-line) 2-line split of `text` at a space.
+
+    `None` if `text` is a single word (nothing to split on) or no split
+    keeps both lines under `max_w`.
+    """
+    words = text.split(" ")
+    if len(words) < 2:
+        return None
+    f = ImageFont.truetype(font, size)
+    best: list[str] | None = None
+    best_width: float | None = None
+    for i in range(1, len(words)):
+        line1, line2 = " ".join(words[:i]), " ".join(words[i:])
+        width = max(f.getlength(line1), f.getlength(line2))
+        if width <= max_w and (best_width is None or width < best_width):
+            best, best_width = [line1, line2], width
+    return best
+
+
+def layout_hook_line(
+    text: str, font: str, size: int, max_w: int = HOOK_TEXT_MAX_W
+) -> tuple[str, int]:
+    r"""Upper-case `text`, wrap to <= 2 lines, shrinking `size` if needed.
+
+    Returns `(text, font_size)`; `text` joins wrapped lines with a literal
+    `\N` (an ASS line break, see `render._common.hook_text_filter`), or is
+    a single line if it already fits `max_w`.
+    """
+    # ponytail: 2 lines max, no 3-line wrap. The prompt caps hook lines at
+    # ~48 chars, so a single long unsplittable word is the only case that
+    # still clips at HOOK_TEXT_MIN_SIZE; add 3-line wrap if that happens.
+    text = text.upper()
+    while True:
+        f = ImageFont.truetype(font, size)
+        if f.getlength(text) <= max_w:
+            return text, size
+        split = _wrap_two_lines(text, font, size, max_w)
+        if split:
+            return "\\N".join(split), size
+        if size <= HOOK_TEXT_MIN_SIZE:
+            split = _wrap_two_lines(text, font, size, max_w=10**9) or [text]
+            return "\\N".join(split), size
         size -= 4
-    return size
 
 
 def effect_for(
@@ -25,7 +63,7 @@ def effect_for(
     role: str | None = None,
     peak_f: int | None = None,
 ) -> tuple[str, dict]:
-    """Pick the effect and its parameters for a clip, per #6.6.
+    r"""Pick the effect and its parameters for a clip, per #6.6.
 
     Args:
         candidate: Candidate dict; reads `kind`.
@@ -53,10 +91,12 @@ def effect_for(
         - With `ramp`, `effect` is `"ramp"` and `effect_params` also has
           `ramp_speed`, `ramp_frames`, `ramp_start_f` (merged over the
           `blur_pad` params if any). Ramps never apply to images.
-        - With `hook_text`, `effect_params` also has `text`, `font`,
-          `font_size` (shrunk by `fit_font_size` so the line fits 1000 px
-          at 1080 wide), `text_y`, `text_frames`, `fade_frames`; `effect`
-          is unchanged (presence of `text` is the render's switch).
+        - With `hook_text`, `effect_params` also has `text` (upper-cased,
+          wrapped to <= 2 lines by `layout_hook_line`, joined with a literal
+          `\\N`), `font`, `font_size` (shrunk to fit `HOOK_TEXT_MAX_W` if
+          even 2 lines don't), `text_y` (fraction of height, centre of the
+          text block), `text_frames`, `fade_frames`; `effect` is unchanged
+          (presence of `text` is the render's switch).
         - For `role == "develop"` video clips with `config["punch_in"]`,
           `effect_params` also has `punch_frames`, `punch_zoom`.
         - For `role == "hook"` video clips with `peak_f is not None` and
@@ -85,12 +125,13 @@ def effect_for(
         }
     if hook_text and hook_text[0] and config.get("hook_text", True):
         line, d_f = hook_text
+        text, font_size = layout_hook_line(
+            line, config["hook_text_font"], config["hook_text_size"]
+        )
         params |= {
-            "text": line,
+            "text": text,
             "font": config["hook_text_font"],
-            "font_size": fit_font_size(
-                line, config["hook_text_font"], config["hook_text_size"]
-            ),
+            "font_size": font_size,
             "text_y": config["hook_text_y"],
             "text_frames": min(config["hook_text_max_frames"], d_f),
             "fade_frames": config["hook_text_fade_frames"],

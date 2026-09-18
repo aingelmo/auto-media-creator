@@ -12,7 +12,7 @@ from edl_agent.render._common import (
     END_CARD_FILTER_TEMPLATE,
     END_CARD_TEXT_TEMPLATE,
     FLASH_FILTER_TEMPLATE,
-    HOOK_TEXT_FILTER_TEMPLATE,
+    HOOK_ASS_TEMPLATE,
     LOGO_FILTER_TEMPLATE,
     PUNCH_FILTER_TEMPLATE,
     RAMP_SETPTS_TEMPLATE,
@@ -89,8 +89,9 @@ def get_render_profile(
         string with `{...}` placeholders filled in per-clip;
         `color_fix_filter_template` fills `{color_fix}`, #6.7;
         `ramp_setpts_template` fills `{setpts}` for `effect == "ramp"`;
-        `hook_text_filter_template` fills `{text}` for the hook, with
-        `hook_text_font`/`hook_text_font_sha256`; `punch_filter_template`
+        `hook_ass_template` is the ASS script skeleton used for the hook
+        text overlay, with `hook_text_font`/`hook_text_font_sha256`;
+        `punch_filter_template`
         and `flash_filter_template` fill `{fx}` for the cut effects
         (#6.6); `logo_filter_template` and `end_card_filter_template` for
         the brand layer, with `brand_sha256`),
@@ -121,7 +122,7 @@ def get_render_profile(
         ),
         "color_fix_filter_template": COLOR_FIX_FILTER_TEMPLATE,
         "ramp_setpts_template": RAMP_SETPTS_TEMPLATE,
-        "hook_text_filter_template": HOOK_TEXT_FILTER_TEMPLATE,
+        "hook_ass_template": HOOK_ASS_TEMPLATE,
         "hook_text_font": hook_text_font,
         "hook_text_font_sha256": _file_sha256(hook_text_font),
         "punch_filter_template": PUNCH_FILTER_TEMPLATE,

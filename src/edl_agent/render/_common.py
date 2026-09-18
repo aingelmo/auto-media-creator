@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
+
+from PIL import ImageFont
 
 FINAL_TARGET = {"w": 1080, "h": 1920}
 PREVIEW_TARGET = {"w": 540, "h": 960}
@@ -79,17 +82,58 @@ def setpts_expr(clip: dict) -> str:
     return RAMP_SETPTS_TEMPLATE.format(t_a=t_a, t_b=t_b, s=s, n=n)
 
 
-# Hook text (#6.6): white, black-bordered, centred, fades in over `fade`
-# frames at 0 and out over `fade` frames ending at `end`. `n` is the frame
-# counter after `fps=30`, i.e. the segment frame index. `expansion=none`
-# makes `%` literal. Applied after `color_fix` so the white isn't tinted.
-HOOK_TEXT_FILTER_TEMPLATE = (
-    "drawtext=fontfile='{font}':expansion=none:text={text}:fontsize={size}:"
-    "fontcolor=white:borderw={border}:bordercolor=black@0.6:"
-    "x=(w-text_w)/2:y={y}:"
-    "alpha='if(lt(n,{fade}),n/{fade},if(lt(n,{end}-{fade}),1,"
-    "if(lt(n,{end}),({end}-n)/{fade},0)))',"
+# Hook text (#6.6): a libass `ass=` overlay rather than `drawtext`, so we get
+# a thick outline + soft blurred shadow, a pop-in scale animation and native
+# multi-line centring, none of which `drawtext` supports. The script's
+# PlayRes is fixed at 1080x1920 regardless of the segment's actual render
+# target (540x960 preview or 1080x1920 final); libass scales every Style
+# value (font size, outline, shadow, position) to the real frame size on its
+# own (`ScaledBorderAndShadow: yes`), so preview and final stay proportional
+# without any manual scale math here. Applied after `color_fix` so the white
+# isn't tinted.
+HOOK_ASS_TEMPLATE = (
+    "[Script Info]\n"
+    "ScriptType: v4.00+\n"
+    "PlayResX: 1080\n"
+    "PlayResY: 1920\n"
+    "WrapStyle: 2\n"
+    "ScaledBorderAndShadow: yes\n"
+    "\n"
+    "[V4+ Styles]\n"
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+    "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, "
+    "ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, "
+    "MarginL, MarginR, MarginV, Encoding\n"
+    "Style: Hook,{family},{size},&H00FFFFFF,&H00FFFFFF,&H00000000,"
+    "&H80000000,0,0,0,0,100,100,-1,0,1,{outline},{shadow},5,0,0,0,1\n"
+    "\n"
+    "[Events]\n"
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
+    "Effect, Text\n"
+    "Dialogue: 0,0:00:00.00,{end},Hook,,0,0,0,,{event_text}\n"
 )
+
+HOOK_POP_MS = 300  # entrance pop duration; text itself is visible from frame 0
+
+
+def _ass_escape(text: str) -> str:
+    """Strip ASS override-block delimiters (`{`, `}`) and literal backslashes.
+
+    `clean_hook_line` already restricts the line to es-ES text/punctuation,
+    so these shouldn't occur in practice; this is a defensive strip, not a
+    real escape (unlike `_drawtext_escape`, ASS has no in-text escape for a
+    literal brace).
+    """
+    return re.sub(r"[{}\\]", "", text)
+
+
+def _ass_timestamp(frames: int) -> str:
+    """`H:MM:SS.CC` ASS timestamp for `frames` at 30 fps."""
+    cs = round(frames * 100 / 30)
+    s, cs = divmod(cs, 100)
+    m, s = divmod(s, 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
 def _drawtext_escape(text: str) -> str:
@@ -114,20 +158,44 @@ SFX_FILTER_TEMPLATE = (
 )
 
 
-def hook_text_filter(clip: dict, target: dict) -> str:
-    """Hook-text `drawtext` filter (#6.6), trailing comma included; "" if absent."""
+def hook_text_filter(clip: dict, out_path: Path) -> str:
+    r"""Hook-text `ass` filter (#6.6), trailing comma included; "" if absent.
+
+    Writes the sidecar script to `out_path.with_suffix(".ass")`. `p["text"]`
+    already carries a literal `\N` between wrapped lines (see
+    `planner.effects.layout_hook_line`) and is already upper-cased.
+    """
     p = clip.get("effect_params", {})
     if not p.get("text"):
         return ""
-    scale = target["w"] / 1080
-    return HOOK_TEXT_FILTER_TEMPLATE.format(
-        font=p["font"],
-        text=_drawtext_escape(p["text"]),
-        size=round(p["font_size"] * scale),
-        border=max(2, round(4 * scale)),
-        y=round(p["text_y"] * target["h"]),
-        fade=p["fade_frames"],
-        end=p["text_frames"],
+    size = p["font_size"]
+    outline = max(3, round(size * 0.065))
+    shadow = max(2, round(outline * 0.5))
+    family = ImageFont.truetype(p["font"], 10).getname()[0]
+    fontsdir = str(Path(p["font"]).parent)
+    cy = round(p["text_y"] * 1920)
+    fade_ms = round(p["fade_frames"] * 1000 / 30)
+    text = r"\N".join(_ass_escape(part) for part in p["text"].split(r"\N"))
+    tags = (
+        f"\\an5\\pos(540,{cy})\\blur2\\fscx82\\fscy82"
+        f"\\t(0,{HOOK_POP_MS},0.5,\\fscx100\\fscy100)\\fad(0,{fade_ms})"
+    )
+    ass = HOOK_ASS_TEMPLATE.format(
+        family=family,
+        size=size,
+        outline=outline,
+        shadow=shadow,
+        end=_ass_timestamp(p["text_frames"]),
+        event_text="{" + tags + "}" + text,
+    )
+    ass_path = out_path.with_suffix(".ass")
+    ass_path.parent.mkdir(parents=True, exist_ok=True)
+    ass_path.write_text(ass, encoding="utf-8")
+    # Same double-parser escaping `drawtext` needs (see `_drawtext_escape`):
+    # `ass=`'s `filename=`/`fontsdir=` are colon-delimited option values too.
+    return (
+        f"ass=filename='{_drawtext_escape(str(ass_path))}':"
+        f"fontsdir='{_drawtext_escape(fontsdir)}',"
     )
 
 

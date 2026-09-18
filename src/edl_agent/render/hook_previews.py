@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from edl_agent.planner._common import DEFAULT_CONFIG
-from edl_agent.planner.effects import fit_font_size
+from edl_agent.planner.effects import layout_hook_line
 from edl_agent.render.segments import render_segment
 
 
@@ -58,13 +58,14 @@ def render_hook_previews(
         params.pop("flash_frame", None)
         params.pop("flash_frames", None)
         if text is not None:
+            line_text, font_size = layout_hook_line(
+                text, font, int(DEFAULT_CONFIG["hook_text_size"])
+            )
             params.update(
                 {
-                    "text": text,
+                    "text": line_text,
                     "font": font,
-                    "font_size": fit_font_size(
-                        text, font, int(DEFAULT_CONFIG["hook_text_size"])
-                    ),
+                    "font_size": font_size,
                     "text_y": DEFAULT_CONFIG["hook_text_y"],
                     "text_frames": min(
                         int(DEFAULT_CONFIG["hook_text_max_frames"]),

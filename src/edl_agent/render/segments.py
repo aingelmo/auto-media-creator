@@ -106,7 +106,7 @@ def render_video_segment(
     # preview.
     hdr_prefix = "" if preview else _hdr_prefix(clip["hdr"], tonemap_chain)
     color_fix = color_fix_filter(clip)
-    text = hook_text_filter(clip, target)
+    text = hook_text_filter(clip, out_path)
     fx = cut_fx_filter(clip, target)
 
     if clip["layout"] == "crop":
