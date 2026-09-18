@@ -213,7 +213,11 @@ def test_punch_every_skips_develop_cuts() -> None:
         4, (1920, 1080), seed=2
     )
     clips, _ = build_clips(
-        slots, selected, candidates_by_id, sources_by_src, {"punch_every": 2}
+        slots,
+        selected,
+        candidates_by_id,
+        sources_by_src,
+        {"punch_every": 2, "punch_in": True},
     )
     develop_clips = [c for c in clips if c["role"] == "develop"]
     for i, c in enumerate(develop_clips):
@@ -674,9 +678,14 @@ def test_effect_for_cut_fx() -> None:
 
     cand = {"kind": "peak"}
     _, params = effect_for(cand, "crop", DEFAULT_CONFIG, role="develop", peak_f=15)
+    assert "punch_frames" not in params
+    assert "flash_frame" not in params
+
+    _, params = effect_for(
+        cand, "crop", {**DEFAULT_CONFIG, "punch_in": True}, role="develop", peak_f=15
+    )
     assert params["punch_frames"] == DEFAULT_CONFIG["punch_frames"]
     assert params["punch_zoom"] == DEFAULT_CONFIG["punch_zoom"]
-    assert "flash_frame" not in params
 
     _, params = effect_for(cand, "crop", DEFAULT_CONFIG, role="hook", peak_f=15)
     assert params["flash_frame"] == 15

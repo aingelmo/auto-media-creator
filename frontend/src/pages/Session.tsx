@@ -5,6 +5,7 @@ import HookPicker from "../components/HookPicker";
 import LowCandidatesPause from "../components/LowCandidatesPause";
 import Modal from "../components/Modal";
 import MusicPicker from "../components/MusicPicker";
+import PunchPreview from "../components/PunchPreview";
 import RegenerateForm from "../components/RegenerateForm";
 import RegenHistory from "../components/RegenHistory";
 import StageRail from "../components/StageRail";
@@ -129,6 +130,10 @@ export default function Session() {
 
       {job && job.awaiting_confirmation && job.pause_kind === "hook_choice" && (
         <HookPicker name={name} hooks={job.hooks} hookSlot={job.hook_slot} onDone={refresh} />
+      )}
+
+      {job && job.awaiting_confirmation && job.pause_kind === "punch_preview" && (
+        <PunchPreview name={name} punchIn={job.punch_in} onDone={refresh} />
       )}
 
       {!job?.awaiting_confirmation && job === null && allPending && (

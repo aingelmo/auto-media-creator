@@ -17,6 +17,17 @@ def _fake_ollama_response(json_data):
     return resp
 
 
+def _confirm_punch_preview(job: JobState) -> None:
+    """Wait for, then answer, the render stage's punch-in preview pause."""
+    deadline = time.monotonic() + 5
+    while job.pause_kind != "punch_preview" and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert job.pause_kind == "punch_preview"
+    job.punch_preview_again = False
+    job.cancelled = False
+    job.confirm_event.set()
+
+
 def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
     tmp_path,
 ) -> None:
@@ -118,6 +129,7 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
         job.more_hooks = False
         job.cancelled = False
         job.confirm_event.set()
+        _confirm_punch_preview(job)
         thread.join(timeout=10)
 
     assert not thread.is_alive()
@@ -257,6 +269,7 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
         job.more_hooks = False
         job.cancelled = False
         job.confirm_event.set()
+        _confirm_punch_preview(job)
         thread.join(timeout=10)
 
     assert not thread.is_alive()
@@ -389,6 +402,7 @@ def _run_job_to_hook_choice(
         job.more_hooks = False
         job.cancelled = False
         job.confirm_event.set()
+        _confirm_punch_preview(job)
         thread.join(timeout=10)
 
     assert not thread.is_alive()

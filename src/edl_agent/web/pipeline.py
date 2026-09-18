@@ -102,7 +102,18 @@ def run_pipeline_job(
             selection_meta,
             tonemap_chain,
         )
-        _run_render_stage(session_dir, job, resume, edl, manifest, tonemap_chain)
+        edl = _run_render_stage(
+            session_dir,
+            job,
+            resume,
+            edl,
+            manifest,
+            candidates,
+            slots,
+            selection,
+            selection_meta,
+            tonemap_chain,
+        )
         _run_variant_b_stage(
             session_dir,
             job,

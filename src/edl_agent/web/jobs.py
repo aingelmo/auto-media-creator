@@ -56,8 +56,8 @@ class JobState:
             `confirm_event`, either after `ingest` (`unverified_sources`
             non-empty) or after `candidates` (`low_candidates` non-empty).
         pause_kind: Which pause `awaiting_confirmation` refers to:
-            `"music_choice"`, `"verification"`, `"low_candidates"`, or
-            `"hook_choice"`.
+            `"music_choice"`, `"verification"`, `"low_candidates"`,
+            `"hook_choice"`, or `"punch_preview"`.
         confirm_event: Set (via `/sessions/{name}/confirm`) to unblock a
             job paused on `awaiting_confirmation`.
         cancelled: `True` if the user chose not to proceed past the
@@ -95,6 +95,14 @@ class JobState:
         hook_flash: Whether the hook clip gets its white flash on the peak
             beat, set via `/sessions/{name}/confirm` during a
             `"hook_choice"` pause; defaults to `True`.
+        punch_in: Whether develop clips get the punch-in zoom snap on cuts,
+            set via `/sessions/{name}/confirm` during a `"punch_preview"`
+            pause; defaults to `False` so the effect is only enabled after
+            the operator has watched `reel_preview.mp4` without it.
+        punch_preview_again: `True` (set via `/sessions/{name}/confirm`
+            during a `"punch_preview"` pause) to rebuild the EDL with the
+            new `punch_in` value and preview again, instead of proceeding
+            to the full-resolution render.
         more_hooks: `True` (set via `/sessions/{name}/confirm`) to
             generate a fresh batch of 3 lines instead of proceeding to the
             final render.
@@ -139,6 +147,8 @@ class JobState:
     hook_choice: str = ""
     hook_choice_b: str = ""
     hook_flash: bool = True
+    punch_in: bool = False
+    punch_preview_again: bool = False
     more_hooks: bool = False
     check_results_b: list[str] = field(default_factory=list)
     music_candidates: list[dict] = field(default_factory=list)

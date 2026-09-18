@@ -15,6 +15,39 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def _build_final_edl(
+    session_dir: Path,
+    manifest: dict,
+    candidates: dict,
+    slots: dict,
+    selection: dict | None,
+    selection_meta: dict,
+    job: JobState,
+) -> dict:
+    """Build the final EDL for `job`'s current hook/flash/punch-in choices.
+
+    Shared by `_run_hooks_and_planner_stage`'s post-hook-choice build and
+    `_run_render_stage`'s punch-in preview loop (`stages/render.py`), so a
+    `punch_in` toggle rebuilds with exactly the same hook config as the
+    original build.
+    """
+    return run_planner(
+        session_dir,
+        manifest,
+        candidates,
+        slots,
+        selection,
+        selection_meta,
+        threads=THREADS,
+        config={
+            "hook_line_override": clean_hook_line(job.hook_choice),
+            "hook_text": bool(clean_hook_line(job.hook_choice)),
+            "hook_flash": job.hook_flash,
+            "punch_in": job.punch_in,
+        },
+    )
+
+
 def _run_hooks_and_planner_stage(
     session_dir: Path,
     job: JobState,
@@ -110,17 +143,6 @@ def _run_hooks_and_planner_stage(
 
     with job.running("planner"):
         job.detail["planner"] = "building final EDL"
-        return run_planner(
-            session_dir,
-            manifest,
-            candidates,
-            slots,
-            selection,
-            selection_meta,
-            threads=THREADS,
-            config={
-                "hook_line_override": clean_hook_line(job.hook_choice),
-                "hook_text": bool(clean_hook_line(job.hook_choice)),
-                "hook_flash": job.hook_flash,
-            },
+        return _build_final_edl(
+            session_dir, manifest, candidates, slots, selection, selection_meta, job
         )

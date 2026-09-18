@@ -53,6 +53,7 @@ def _run_variant_b_stage(
                 "hook_text": True,
                 "peak_beat_index": 2,
                 "hook_flash": job.hook_flash,
+                "punch_in": job.punch_in,
             },
             out_name="edl_b.json",
         )

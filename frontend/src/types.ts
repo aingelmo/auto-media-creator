@@ -13,7 +13,13 @@ export type StageName =
 
 export type StageStatus = "pending" | "running" | "done" | "failed";
 
-export type PauseKind = "" | "music_choice" | "verification" | "low_candidates" | "hook_choice";
+export type PauseKind =
+  | ""
+  | "music_choice"
+  | "verification"
+  | "low_candidates"
+  | "hook_choice"
+  | "punch_preview";
 
 export type Provider = "deepseek" | "ollama";
 
@@ -79,6 +85,7 @@ export interface JobPayload {
   hooks: Hooks;
   hook_slot: number;
   music_candidates: MusicCandidate[];
+  punch_in: boolean;
 }
 
 export interface HistoryEntry {

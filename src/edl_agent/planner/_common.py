@@ -44,7 +44,9 @@ DEFAULT_CONFIG = {
     "end_card_frames": 45,
     "end_card_logo_w": 480,
     "end_card_text_size": 48,
-    "punch_in": True,  # #6.6: punch_zoom->1.0 over punch_frames on each develop cut
+    "punch_in": False,  # #6.6: punch_zoom->1.0 over punch_frames on develop cut
+    # off by default; enabled from the render-stage preview pause once the
+    # operator has watched the low-res reel
     "punch_frames": 5,
     "punch_zoom": 1.06,
     "punch_every": 2,  # punch only every Nth develop cut (1 = every cut)

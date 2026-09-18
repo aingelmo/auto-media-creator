@@ -71,7 +71,7 @@ def _sfx_chain(entry: dict) -> str:
 
 
 def concat_and_audio(
-    edl: dict, session_dir: Path, threads: int, suffix: str = ""
+    edl: dict, session_dir: Path, threads: int, suffix: str = "", preview: bool = False
 ) -> Path:
     """Concatenate rendered segments and apply loudnorm in two passes, per #10.4.
 
@@ -90,24 +90,30 @@ def concat_and_audio(
         threads: ffmpeg thread count.
         suffix: Appended to the segment list, segments dir, and output reel
             name, for rendering an A/B variant alongside the default output.
+        preview: If `True`, reads from `preview_segments{suffix}` (per
+            `render_preview_segments`) and writes `reel_preview{suffix}.mp4`
+            instead of the final-resolution `segments{suffix}`/`reel{suffix}.mp4`.
 
     Returns:
-        Path to the rendered reel, `session_dir / f"reel{suffix}.mp4"`.
+        Path to the rendered reel: `session_dir / "reel_preview{suffix}.mp4"`
+        if `preview`, else `session_dir / "reel{suffix}.mp4"`.
 
     Raises:
         RenderError: If the render or measurement ffmpeg invocation fails,
             or its stderr does not contain the expected loudnorm JSON
             block.
     """
+    segments_dir = f"{'preview_segments' if preview else 'segments'}{suffix}"
+    reel_name = f"{'reel_preview' if preview else 'reel'}{suffix}"
     audio = edl["audio"]
     duration_s = edl["target"]["duration_f"] / 30
-    segments_txt = session_dir / f"segments{suffix}.txt"
+    segments_txt = session_dir / f"{segments_dir}.txt"
     segments_txt.write_text(
         "".join(
-            f"file 'segments{suffix}/seg_{c['slot']:02d}.mp4'\n" for c in edl["clips"]
+            f"file '{segments_dir}/seg_{c['slot']:02d}.mp4'\n" for c in edl["clips"]
         ),
     )
-    reel_path = session_dir / f"reel{suffix}.mp4"
+    reel_path = session_dir / f"{reel_name}.mp4"
 
     if audio["music_cut_path"] is None:
         cmd = [
