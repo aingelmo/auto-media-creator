@@ -57,7 +57,7 @@ def test_create_maps_tool_call_to_interaction_shape() -> None:
     client = deepseek_client(api_key="test")
     response = _fake_response(tool_arguments={"selected": []})
     with patch.object(
-        client.interactions._client.chat.completions,  # noqa: SLF001
+        client.interactions._client.chat.completions,
         "create",
         return_value=response,
     ) as create:
@@ -91,7 +91,7 @@ def test_create_marks_incomplete_on_length() -> None:
     client = deepseek_client(api_key="test")
     response = _fake_response(finish_reason="length", tool_arguments={"selected": []})
     with patch.object(
-        client.interactions._client.chat.completions,  # noqa: SLF001
+        client.interactions._client.chat.completions,
         "create",
         return_value=response,
     ):
@@ -111,7 +111,7 @@ def test_create_raises_clear_error_when_no_tool_call_returned() -> None:
     response.model_dump_json.return_value = "{}"
     with (
         patch.object(
-            client.interactions._client.chat.completions,  # noqa: SLF001
+            client.interactions._client.chat.completions,
             "create",
             return_value=response,
         ),
@@ -142,7 +142,7 @@ def test_vision_guard_allows_vision_model() -> None:
     client = deepseek_client(api_key="test")
     response = _fake_response(tool_arguments={"selected": []})
     with patch.object(
-        client.interactions._client.chat.completions,  # noqa: SLF001
+        client.interactions._client.chat.completions,
         "create",
         return_value=response,
     ):

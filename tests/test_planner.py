@@ -529,7 +529,8 @@ def test_place_develop_arc_repairs_duration_violation() -> None:
     assert arc_fallback is False
     for entry, slot in zip(placement, develop_slots, strict=True):
         window = candidates_by_id[entry["candidate_id"]]["window"]
-        assert admits(window, slot["end_f"] - slot["start_f"], 1.0)
+        duration_f = slot["end_f"] - slot["start_f"]  # ty: ignore[unsupported-operator]
+        assert admits(window, duration_f, 1.0)
     assert {e["candidate_id"] for e in placement} == {"dev1", "dev2", "dev3"}
 
 

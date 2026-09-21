@@ -48,7 +48,7 @@ def test_create_maps_tool_use_to_interaction_shape() -> None:
     client = anthropic_client(api_key="test")
     message = _fake_message(tool_input={"selected": []})
     with patch.object(
-        client.interactions._client.messages, "create", return_value=message  # noqa: SLF001
+        client.interactions._client.messages, "create", return_value=message
     ) as create:
         interaction = client.interactions.create(
             model="claude-sonnet-5",
@@ -75,7 +75,7 @@ def test_create_marks_incomplete_on_max_tokens() -> None:
     client = anthropic_client(api_key="test")
     message = _fake_message(stop_reason="max_tokens")
     with patch.object(
-        client.interactions._client.messages, "create", return_value=message  # noqa: SLF001
+        client.interactions._client.messages, "create", return_value=message
     ):
         interaction = client.interactions.create(
             model="claude-sonnet-5",

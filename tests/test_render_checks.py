@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from edl_agent.render.checks import CheckResult, run_render_checks
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _edl():
@@ -16,6 +19,12 @@ def _edl():
     }
 
 
+def _ok(check: str, tag: str):
+    return patch(
+        f"edl_agent.render.checks.{check}", return_value=CheckResult(tag, True)
+    )
+
+
 def test_run_render_checks_uses_preview_suffix_for_preview_dir(tmp_path: Path):
     seen_preview_paths = []
 
@@ -24,12 +33,12 @@ def test_run_render_checks_uses_preview_suffix_for_preview_dir(tmp_path: Path):
         return CheckResult("R2", True)
 
     with (
-        patch("edl_agent.render.checks.check_r1_frame_count", return_value=CheckResult("R1", True)),
+        _ok("check_r1_frame_count", "R1"),
         patch("edl_agent.render.checks.check_r2_phash", side_effect=fake_r2),
-        patch("edl_agent.render.checks.check_r3_reel_duration", return_value=CheckResult("R3", True)),
-        patch("edl_agent.render.checks.check_r4_color", return_value=CheckResult("R4", True)),
-        patch("edl_agent.render.checks.check_r5_loudnorm_linear", return_value=CheckResult("R5", True)),
-        patch("edl_agent.render.checks.check_r6_monotonic_dts", return_value=CheckResult("R6", True)),
+        _ok("check_r3_reel_duration", "R3"),
+        _ok("check_r4_color", "R4"),
+        _ok("check_r5_loudnorm_linear", "R5"),
+        _ok("check_r6_monotonic_dts", "R6"),
     ):
         run_render_checks(_edl(), tmp_path, preview_suffix="_h0p1")
 
