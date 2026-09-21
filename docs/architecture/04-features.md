@@ -146,6 +146,6 @@ for k in -2 -1 0 1 2:
   ffmpeg -ss {t + k/30} -i proxies/take_01.mp4 -frames:v 1 -vf "scale=256:-2" /tmp/proxy_{t}_{k}.png
 ```
 
-`d_k = hamming(phash(orig), phash(proxy_k))`. Condiciones por instante: `argmin_k d_k == 0`, `d_0 ≤ 6`, y `d_0 < min(d_-1, d_1)` `[validar margen]`. Si los 5 instantes pasan → `proxy_verified: true`. Si falla en alguno, la sesión se detiene con error: el mapeo temporal no es fiable y nada aguas abajo tiene sentido. Comparar en máximos de movimiento es lo que hace detectable un desfase de un frame; en tramos estáticos el pHash no distingue ni 0.5 s.
+`d_k = hamming(phash(orig), phash(proxy_k))`. Condiciones por instante: `d_0 ≤ 6` y `(d_0 − min_k d_k) ≤ 4` (`verify._instant_ok`: `D0_MAX` + `BEST_MARGIN`). No se exige `argmin_k == 0` estricto: en tramos estáticos el ruido de pHash (y el propio tonemap HDR) puede hacer que un vecino puntúe unos bits por debajo de `d_0` sin desalineación real; una desalineación genuina dispara `d_0` muy por encima de 6 en al menos un instante, así que el margen no enmascara errores reales. Si los 5 instantes pasan → `proxy_verified: true`. Si falla en alguno, la sesión se detiene con error: el mapeo temporal no es fiable y nada aguas abajo tiene sentido. Comparar en máximos de movimiento es lo que hace detectable un desfase de un frame; en tramos estáticos el pHash no distingue ni 0.5 s.
 
 
