@@ -30,7 +30,6 @@ interface ReviewData {
   model: string;
   logo: string;
   handle: string;
-  line: string;
 }
 
 export default function New() {
@@ -78,7 +77,6 @@ export default function New() {
       model: field<HTMLSelectElement>("provider")?.selectedOptions[0]?.textContent ?? "—",
       logo: logoInput?.files?.[0]?.name ?? "none",
       handle: field<HTMLInputElement>("handle")?.value || "—",
-      line: field<HTMLInputElement>("line")?.value || "—",
     });
   }, [step, clipRefs, musicRef]);
 
@@ -226,8 +224,6 @@ export default function New() {
               <dd className={review.logo === "none" ? "is-empty" : undefined}>{review.logo}</dd>
               <dt>Handle</dt>
               <dd className={review.handle === "—" ? "is-empty" : undefined}>{review.handle}</dd>
-              <dt>Second line</dt>
-              <dd className={review.line === "—" ? "is-empty" : undefined}>{review.line}</dd>
             </dl>
           )}
         </div>

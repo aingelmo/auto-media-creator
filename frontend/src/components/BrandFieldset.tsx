@@ -9,7 +9,7 @@ import {
 } from "../brandPresets";
 import { getFormMemory } from "../formMemory";
 
-/** Optional brand fieldset (logo/handle/second line) shared by new/regenerate forms. */
+/** Optional brand fieldset (logo/handle) shared by new/regenerate forms. */
 export default function BrandFieldset({
   idPrefix,
   legend,
@@ -21,7 +21,6 @@ export default function BrandFieldset({
 }) {
   const logoRef = useRef<HTMLInputElement>(null);
   const handleRef = useRef<HTMLInputElement>(null);
-  const lineRef = useRef<HTMLInputElement>(null);
   const [presets, setPresets] = useState<BrandPreset[]>(getBrandPresets);
   const [selected, setSelected] = useState("");
 
@@ -30,7 +29,6 @@ export default function BrandFieldset({
     const preset = presets.find((p) => p.name === name);
     if (!preset) return;
     if (handleRef.current) handleRef.current.value = preset.handle;
-    if (lineRef.current) lineRef.current.value = preset.line;
     if (logoRef.current) {
       if (preset.logoDataUrl) {
         const file = await dataUrlToFile(preset.logoDataUrl, `${preset.name}-logo.png`);
@@ -50,7 +48,6 @@ export default function BrandFieldset({
     const preset: BrandPreset = {
       name,
       handle: handleRef.current?.value ?? "",
-      line: lineRef.current?.value ?? "",
       logoDataUrl: logoFile ? await fileToDataUrl(logoFile) : null,
     };
     saveBrandPreset(preset);
@@ -98,18 +95,6 @@ export default function BrandFieldset({
           placeholder="@migimnasio"
           defaultValue={getFormMemory("handle")}
           ref={handleRef}
-        />
-      </label>
-      <label htmlFor={`${idPrefix}-line`}>
-        Second line
-        <input
-          id={`${idPrefix}-line`}
-          type="text"
-          name="line"
-          maxLength={60}
-          placeholder="C/ Toro 12 · Salamanca"
-          defaultValue={getFormMemory("line")}
-          ref={lineRef}
         />
       </label>
       <p>

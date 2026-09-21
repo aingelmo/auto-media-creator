@@ -23,9 +23,7 @@ def get_config() -> dict:
     return {"providers": UI_PROVIDERS, "default_models": DEFAULT_MODELS}
 
 
-def save_brand(
-    session_dir: Path, logo: UploadFile | None, handle: str, line: str
-) -> None:
+def save_brand(session_dir: Path, logo: UploadFile | None, handle: str) -> None:
     """Write `brand/{logo.png,brand.json}` if a logo was uploaded; else leave as is.
 
     Per-session brand (#6.8): one business per session, nothing repo-level.
@@ -38,7 +36,7 @@ def save_brand(
         shutil.copyfileobj(logo.file, f)
     (brand_dir / "brand.json").write_text(
         json.dumps(
-            {"logo": "brand/logo.png", "handle": handle.strip(), "line": line.strip()},
+            {"logo": "brand/logo.png", "handle": handle.strip()},
             ensure_ascii=False,
             indent=2,
         )

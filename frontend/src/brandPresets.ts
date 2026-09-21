@@ -1,10 +1,9 @@
-/** Saved brand presets (logo/handle/second line) shared by new/regenerate forms. */
+/** Saved brand presets (logo/handle) shared by new/regenerate forms. */
 const KEY = "edl-agent:brand-presets";
 
 export interface BrandPreset {
   name: string;
   handle: string;
-  line: string;
   logoDataUrl: string | null;
 }
 

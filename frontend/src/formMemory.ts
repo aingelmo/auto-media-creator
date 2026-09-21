@@ -2,7 +2,7 @@
  * localStorage so New/Start/Regenerate forms don't need retyping every run.
  */
 const KEY = "edl-agent:form-memory";
-const REMEMBERED_FIELDS = ["provider", "theme", "audience", "handle", "line"] as const;
+const REMEMBERED_FIELDS = ["provider", "theme", "audience", "handle"] as const;
 type RememberedField = (typeof REMEMBERED_FIELDS)[number];
 
 function readAll(): Partial<Record<RememberedField, string>> {

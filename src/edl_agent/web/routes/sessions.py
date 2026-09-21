@@ -88,7 +88,6 @@ async def create_session(
     music_ref: str = Form(""),
     logo: UploadFile | None = None,
     handle: str = Form(""),
-    line: str = Form(""),
     brief: str = Form(""),
     audience: str = Form("prospects"),
 ) -> JSONResponse:
@@ -146,7 +145,7 @@ async def create_session(
     if not have_music:
         raise HTTPException(status_code=400, detail="a music track is required")
 
-    save_brand(session_dir, logo, handle, line)
+    save_brand(session_dir, logo, handle)
 
     job = JobState()
     with lock:
@@ -237,7 +236,6 @@ def regenerate_session(
     theme: str = Form("training"),
     logo: UploadFile | None = None,
     handle: str = Form(""),
-    line: str = Form(""),
     hook_line: str = Form(""),
     brief: str = Form(""),
     audience: str = Form("prospects"),
@@ -258,7 +256,7 @@ def regenerate_session(
 
     brand_updated = logo is not None and bool(logo.filename)
     if brand_updated:
-        save_brand(session_dir, logo, handle, line)
+        save_brand(session_dir, logo, handle)
         if STAGES.index(from_stage) > STAGES.index("planner"):
             from_stage = "planner"
     clear_stage_artifacts(session_dir, from_stage)

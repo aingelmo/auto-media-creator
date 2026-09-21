@@ -246,7 +246,7 @@ def build_edl(
             `planner.DEFAULT_CONFIG` and `DEFAULT_AUDIO_TARGETS`.
         brand: Session brand (see `session.planner.load_brand`: `logo`
             session-relative path, `logo_sha256`, `logo_w`, `logo_h`, and
-            optional `handle`, `line`, `bg`, `fg`, `font`), or `None` for
+            optional `handle`, `bg`, `fg`, `font`), or `None` for
             no brand layer.
 
     Returns:
@@ -275,7 +275,6 @@ def build_edl(
     if brand:
         brand = {
             "handle": "",
-            "line": "",
             "bg": "#111111",
             "fg": "#FFFFFF",
             "font": config["hook_text_font"],

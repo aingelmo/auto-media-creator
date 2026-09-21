@@ -233,7 +233,6 @@ _BRAND = {
     "logo_w": 200,
     "logo_h": 80,
     "handle": "@gym",
-    "line": "",
     "bg": "#111111",
     "fg": "#FFFFFF",
     "font": DEFAULT_CONFIG["hook_text_font"],

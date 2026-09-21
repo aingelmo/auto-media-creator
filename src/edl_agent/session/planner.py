@@ -17,7 +17,7 @@ def load_brand(session_dir: Path) -> dict | None:
     """Read `session_dir/brand/brand.json` + its logo PNG (#6.8), or `None`.
 
     `brand.json` holds `logo` (session-relative, default `brand/logo.png`)
-    and optional `handle`, `line`, `bg`, `fg`, `font`. Returns it with
+    and optional `handle`, `bg`, `fg`, `font`. Returns it with
     `logo_sha256`, `logo_w`, `logo_h` added; `None` if the JSON or the
     logo file is missing (brand layer off, no error).
     """
