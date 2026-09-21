@@ -12,8 +12,10 @@ if TYPE_CHECKING:
 
 # Files/dirs (relative to a session dir) each stage writes, used by
 # `clear_stage_artifacts` to force a stage to redo under `resume=True`.
+# Keyed by `jobs.STAGES` (pipeline order), not `DISPLAY_STAGES`.
 # `ingest` is omitted: forcing it to redo also needs re-running the
 # verification pause flow, which the regenerate form doesn't drive.
+# `costs.jsonl`/`history.jsonl` are append-only ledgers, never cleared.
 STAGE_ARTIFACTS = {
     "candidates": ["candidates.json"],
     "selection": ["selection.json", "selection_meta.json"],
