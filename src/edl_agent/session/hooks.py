@@ -39,9 +39,8 @@ def reel_context(
     Args:
         edl: EDL dict, as returned by `edl.build_edl` (or `planner.run_planner`).
             Reads `clips`, each `{slot, role, candidate_id, out_s, in_s}`;
-            a synthetic slot (e.g. `end_card`, from `planner._split_end_card`)
-            carries its role name as a placeholder `candidate_id` that isn't
-            a real key of `candidates_by_id`, and is skipped here.
+            clips with no `candidate_id` in `candidates_by_id` are
+            skipped here.
         candidates_by_id: Mapping `candidate_id -> candidate dict`. Reads
             `kp_speed_abs`.
         selection: Parsed LLM selection output (see
@@ -51,8 +50,8 @@ def reel_context(
     Returns:
         Plain-text summary: one numbered `role: exercise, duration,
         velocidad -- reason` line per clip in timeline order (skipping
-        clips with no `candidate_id`, e.g. the end card), then the total
-        clip/develop counts and the selector's `notes`.
+        clips with no `candidate_id` in `candidates_by_id`), then the
+        total clip/develop counts and the selector's `notes`.
     """
     by_id = {e["candidate_id"]: e for e in (selection or {}).get("selected", [])}
     lines = []

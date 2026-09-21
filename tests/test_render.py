@@ -19,6 +19,8 @@ from edl_agent.render import crop_to_px, is_916, render_segments, run_render
 if TYPE_CHECKING:
     from pathlib import Path
 
+_DEJAVU_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
 
 def _make_clip(path: Path, *, w=360, h=640, fps=30, duration=3, audio=False) -> None:
     vf = f"life=size={w}x{h}:rate={fps}:ratio=0.5:mold=2:death_color=#000000:seed=42"
@@ -172,7 +174,7 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
     edl: dict[str, Any] = {
         "version": 4,
         "session_id": "sess",
-        "target": {"w": 1080, "h": 1920, "fps": 30, "duration_f": 90},
+        "target": {"w": 1080, "h": 1920, "fps": 30, "duration_f": 75},
         "brand": {
             "logo": "brand/logo.png",
             "logo_sha256": "x",
@@ -206,31 +208,27 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
                     "flash_frames": 2,
                 },
             },
-            # close gives its last 15 frames to the end card
+            # close carries the C0 outro on its tail (24 of its 30 frames)
             {
                 **_clip(
                     1, "close", "inputs/b.mp4", 360, 640, 0.5, 1.5, 30, 1.0, 45, 75
                 ),
                 # punch-in (#6.6), normally develop-only; exercised here
                 # since this EDL is hand-written rather than planner-built
-                "effect_params": {"punch_frames": 5, "punch_zoom": 1.06},
-            },
-            {
-                **_clip(
-                    2, "end_card", "inputs/b.mp4", 360, 640, 1.0, 1.5, 15, 1.0, 75, 90
-                ),
-                "effect": "end_card",
                 "effect_params": {
-                    "fg": "#FFFFFF",
-                    "font": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                    "handle": "@gym",
-                    "logo_src": "brand/logo.png",
-                    "logo_w": 360,
-                    "logo_h": 144,
-                    "text_size": 64,
-                    "blur_radius": 20,
-                    "blur_power": 2,
-                    "dim": -0.3,
+                    "punch_frames": 5,
+                    "punch_zoom": 1.06,
+                    "outro_frames": 24,
+                    "outro_fg": "#FFFFFF",
+                    "outro_font": _DEJAVU_BOLD,
+                    "outro_handle": "@gym",
+                    "outro_logo_src": "brand/logo.png",
+                    "outro_logo_w": 360,
+                    "outro_logo_h": 144,
+                    "outro_text_size": 64,
+                    "outro_blur_radius": 20,
+                    "outro_blur_power": 2,
+                    "outro_dim": -0.3,
                 },
             },
         ],
@@ -303,10 +301,10 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
 
     r, g, b = _pixel("seg_01", 1080 - 48 - 80, 1920 - 340 - 32)
     assert r > g + 40 and r > b + 40
-    # C0 card: blurred tail background with the red logo centred; the
-    # logo interior (540, 860 falls inside the 360x144 overlay) is
-    # red-tinted once the 0.25s fade-in has completed (frame 10).
-    r, g, b = _pixel("seg_02", 540, 860, frame=10)
+    # C0 outro: the close tail (last 24 of 30 frames) carries the red
+    # logo centred (540, 860 falls inside the 360x144 overlay) once its
+    # 0.25s alpha fade has completed (frame 25).
+    r, g, b = _pixel("seg_01", 540, 860, frame=25)
     assert r > g + 40 and r > b + 40
 
     # Hook flash: frame 9 (peak beat) of seg_00 is white, decaying by frame 10.

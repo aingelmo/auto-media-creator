@@ -54,10 +54,6 @@ def _run(
     subprocess.run(cmd, check=True, capture_output=True, text=True)
 
 
-def _logo_input(logo: dict | None) -> list[str]:
-    return ["-i", logo["path"]] if logo else []
-
-
 def render_video_segment(
     clip: dict,
     src_path: str,
@@ -67,6 +63,8 @@ def render_video_segment(
     tonemap_chain: str,
     preview: bool = False,
     logo: dict | None = None,
+    outro: dict | None = None,
+    outro_logo_path: str | None = None,
 ) -> None:
     """Render one video segment (`crop` or `blur_pad` layout) to `out_path`.
 
@@ -78,7 +76,8 @@ def render_video_segment(
             see `_common.setpts_expr`; `text`/`font`/... for the hook text,
             see `_common.hook_text_filter`; `punch_frames`/`punch_zoom` and
             `flash_frame`/`flash_frames` for the cut effects, see
-            `_common.cut_fx_filter`).
+            `_common.cut_fx_filter`; `outro_*` for the close tail
+            sign-off, see `_common.finish_graph`).
         src_path: Path to the source video (proxy if `preview`, original
             otherwise).
         crop_px: Pixel crop rect `{x, y, w, h}`, as returned by
@@ -92,6 +91,10 @@ def render_video_segment(
             otherwise at `FINAL_TARGET`. Defaults to `False`.
         logo: Watermark spec (`edl["brand"]["watermark"]` plus an absolute
             `path`), or `None` for no watermark. See `_common.finish_graph`.
+        outro: Outro params (`clip["effect_params"]` when it carries
+            `outro_frames`), or `None`. See `_common.finish_graph`.
+        outro_logo_path: Logo file for ffmpeg input 1 when `logo` is
+            `None` (same brand PNG); ignored otherwise.
 
     Raises:
         subprocess.CalledProcessError: If the ffmpeg invocation fails.
@@ -130,9 +133,15 @@ def render_video_segment(
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2,{text}{fx}"
         )
     inputs = ["-ss", str(clip["in_s"]), "-t", str(t_safety), "-i", src_path]
+    logo_path = logo["path"] if logo is not None else outro_logo_path
+    if logo_path is not None:
+        # Looped at 30 fps so per-frame filters on the logo branch
+        # (the outro alpha fade) actually advance; output is capped
+        # by `-frames:v` either way.
+        inputs += ["-framerate", "30", "-loop", "1", "-i", logo_path]
     _run(
-        inputs + _logo_input(logo),
-        finish_graph(chain, logo, target),
+        inputs,
+        finish_graph(chain, logo, target, outro=outro, n_frames=clip["n_frames"]),
         clip["n_frames"],
         threads,
         preview,
@@ -148,6 +157,8 @@ def render_image_segment(
     threads: int,
     preview: bool = False,
     logo: dict | None = None,
+    outro: dict | None = None,
+    outro_logo_path: str | None = None,
 ) -> None:
     """Render one image segment (Ken Burns or static crop) to `out_path`.
 
@@ -155,7 +166,8 @@ def render_image_segment(
         clip: Clip dict, as produced by `planner.build_clips`. Reads
             `n_frames`, `effect` (`"kenburns"` or `"none"`), and, for Ken
             Burns, `effect_params` (dict with `zoom_per_frame`,
-            `zoom_max`).
+            `zoom_max`); a close image may also carry `outro_*` keys
+            (see `render_video_segment`).
         image_path: Path to the normalized source image.
         crop_px: Pixel crop rect `{x, y, w, h}`, as returned by
             `crop_to_px`.
@@ -165,6 +177,9 @@ def render_image_segment(
         preview: If `True`, render at `PREVIEW_TARGET` resolution;
             otherwise at `FINAL_TARGET`. Defaults to `False`.
         logo: Watermark spec or `None`; see `render_video_segment`.
+        outro: Outro params or `None`; see `render_video_segment`.
+        outro_logo_path: Logo file for ffmpeg input 1 when `logo` is
+            `None`; ignored otherwise.
 
     Raises:
         subprocess.CalledProcessError: If the ffmpeg invocation fails.
@@ -188,9 +203,15 @@ def render_image_segment(
             f"scale={target['w']}:{target['h']}:flags=lanczos,{color_fix}"
         )
     inputs = ["-framerate", "30", "-loop", "1", "-i", image_path]
+    logo_path = logo["path"] if logo is not None else outro_logo_path
+    if logo_path is not None:
+        # Looped at 30 fps so per-frame filters on the logo branch
+        # (the outro alpha fade) actually advance; output is capped
+        # by `-frames:v` either way.
+        inputs += ["-framerate", "30", "-loop", "1", "-i", logo_path]
     _run(
-        inputs + _logo_input(logo),
-        finish_graph(chain, logo, target),
+        inputs,
+        finish_graph(chain, logo, target, outro=outro, n_frames=clip["n_frames"]),
         clip["n_frames"],
         threads,
         preview,
@@ -199,64 +220,23 @@ def render_image_segment(
 
 
 def render_end_card_segment(
-    clip: dict,
-    sources_by_src: dict,
-    session_dir: Path,
-    out_path: Path,
-    threads: int,
-    preview: bool = False,
-    _brand: dict | None = None,
+    clip: dict, logo_path: str, out_path: Path, threads: int, preview: bool = False
 ) -> None:
-    """Render an `end_card` clip (#6.8): blurred tail + logo + handle.
+    """Render a legacy `end_card` clip (#6.8): solid canvas plus logo.
 
-    C0 micro-outro: `clip["src"]`/`in_s`/`out_s` are the close tail to
-    blur (see `planner._split_end_card`); the logo PNG comes from
-    `effect_params["logo_src"]` (session-relative). Legacy EDLs without
-    `logo_src` (flat `bg` canvas, `clip["src"]` is the logo) use the
-    legacy solid-canvas graph. No watermark is drawn on the card.
+    Only old EDLs still carry `effect == "end_card"`; the planner now
+    burns the C0 sign-off into the close tail instead (outro).
 
-    Args:
-        clip: Clip dict. Reads `type`, `src`, `in_s`, `out_s`,
-            `n_frames` and `effect_params` (`fg`, `font`, `handle`,
-            `logo_src`, `logo_w`, `logo_h`, `text_size`,
-            `blur_radius`, `blur_power`, `dim`, all at 1080 wide;
-            legacy: `bg`, `fg`, `font`, `handle`, `line`, `logo_w`,
-            `logo_h`, `text_size`).
-        sources_by_src: Mapping `src -> source dict` (from
-            `manifest.json["sources"]`), for resolving the tail path
-            (proxy when `preview`, original otherwise).
-        session_dir: Session root directory.
-        out_path: Output segment path (parent directory created if
-            missing).
-        threads: ffmpeg thread count.
-        preview: If `True`, render at `PREVIEW_TARGET` from the proxy;
-            otherwise at `FINAL_TARGET` from the original.
-        _brand: Reserved (logo comes from `effect_params["logo_src"]`);
-            kept so the signature mirrors the other segment renderers.
-
-    Raises:
-        subprocess.CalledProcessError: If the ffmpeg invocation fails.
+    Reads `n_frames` and `effect_params` (`bg`, `fg`, `font`, `handle`,
+    `line`, `logo_w`, `logo_h`, `text_size`, all at 1080 wide). No watermark
+    is drawn on the card.
     """
     target = PREVIEW_TARGET if preview else FINAL_TARGET
     p = clip["effect_params"]
-    if "logo_src" not in p:
-        canvas = f"color=c={p['bg']}:s={target['w']}x{target['h']}:r=30"
-        inputs = ["-f", "lavfi", "-i", canvas, "-i", str(session_dir / clip["src"])]
-        _run(inputs, end_card_graph(p, target), clip["n_frames"], threads, preview,
-             out_path)
-        return
-    src_path, _, _ = _src_path_and_dims(clip, sources_by_src, session_dir, preview)
-    logo_path = str(session_dir / p["logo_src"])
-    if clip["type"] == "image":
-        inputs = ["-framerate", "30", "-loop", "1", "-i", src_path, "-i", logo_path]
-    else:
-        t_safety = clip["out_s"] - clip["in_s"] + 0.5
-        inputs = [
-            "-ss", str(clip["in_s"]), "-t", str(t_safety),
-            "-i", src_path, "-i", logo_path,
-        ]
-    _run(inputs, end_card_graph(p, target), clip["n_frames"], threads, preview,
-         out_path)
+    canvas = f"color=c={p['bg']}:s={target['w']}x{target['h']}:r=30"
+    inputs = ["-f", "lavfi", "-i", canvas, "-i", logo_path]
+    graph = end_card_graph(p, target)
+    _run(inputs, graph, clip["n_frames"], threads, preview, out_path)
 
 
 def _proxy_wh(proxy_path: Path) -> tuple[int, int]:
@@ -308,8 +288,8 @@ def render_segment(
             otherwise render at final resolution using the original
             source. Defaults to `False`.
         brand: `edl["brand"]` (see `edl.build_edl`) or `None`. Its
-            `watermark` block, if any, is overlaid on every non-end-card
-            clip.
+            `watermark` block, if any, is overlaid on every video/image
+            clip (legacy `end_card` clips render without it).
 
     Returns:
         Path to the rendered segment, `out_dir / f"seg_{clip['slot']:02d}.mp4"`.
@@ -321,13 +301,18 @@ def render_segment(
     out_path = out_dir / f"seg_{clip['slot']:02d}.mp4"
     if clip["effect"] == "end_card":
         render_end_card_segment(
-            clip, sources_by_src, session_dir, out_path, threads, preview, brand
+            clip, str(session_dir / clip["src"]), out_path, threads, preview
         )
         return out_path
 
     logo = None
     if brand and brand.get("watermark"):
         logo = {**brand["watermark"], "path": str(session_dir / brand["logo"])}
+    params = clip.get("effect_params", {})
+    outro = params if "outro_frames" in params else None
+    outro_logo_path = None
+    if outro is not None and logo is None:
+        outro_logo_path = str(session_dir / params["outro_logo_src"])
     src_path, w, h = _src_path_and_dims(clip, sources_by_src, session_dir, preview)
     crop_px = (
         crop_to_px(clip["crop"], w, h, clip["layout"]) if preview else clip["crop_px"]
@@ -335,7 +320,15 @@ def render_segment(
 
     if clip["type"] == "image":
         render_image_segment(
-            clip, src_path, crop_px, out_path, threads, preview=preview, logo=logo
+            clip,
+            src_path,
+            crop_px,
+            out_path,
+            threads,
+            preview=preview,
+            logo=logo,
+            outro=outro,
+            outro_logo_path=outro_logo_path,
         )
     else:
         render_video_segment(
@@ -347,6 +340,8 @@ def render_segment(
             tonemap_chain,
             preview=preview,
             logo=logo,
+            outro=outro,
+            outro_logo_path=outro_logo_path,
         )
     return out_path
 

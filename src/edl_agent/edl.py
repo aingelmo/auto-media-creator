@@ -13,7 +13,7 @@ from edl_agent.planner import DEFAULT_CONFIG, build_clips
 from edl_agent.render import get_render_profile
 from edl_agent.selection import build_selected
 
-VERSION = 5
+VERSION = 6
 
 DEFAULT_AUDIO_TARGETS = {
     "target_lufs": -14.0,

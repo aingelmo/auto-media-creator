@@ -35,15 +35,12 @@ def build_clips(
             `manifest.json["sources"]`, keyed by `src`).
         config: Planner config overrides, merged over `DEFAULT_CONFIG`.
         brand: `edl["brand"]` (see `session.planner.load_brand`) or `None`.
-            With `config["end_card"]`, the close clip gives its last
-            `end_card_frames` to a synthetic `role == "end_card"` clip
-            (`_split_end_card`); warns `end_card_skipped` if the close is
-            too short.
+            With `config["end_card"]`, the close clip's tail carries the
+            C0 brand sign-off (`_apply_outro`, never skipped).
 
     Returns:
         `(clips, warnings)`:
-        - `clips`: one dict per slot, in slot order (plus the end card,
-          if any), each with keys `slot`,
+        - `clips`: one dict per slot, in slot order, each with keys `slot`,
           `role`, `candidate_id`, `src`, `src_sha256`, `type`, `src_w`,
           `src_h`, `src_rotation`, `src_color` (dict, see
           `ingest.probe_video_source`'s `color` field), `hdr`, `in_s`,
@@ -153,93 +150,46 @@ def build_clips(
         )
 
     clips.sort(key=lambda c: c["slot"])
-    extra_slots: list[dict] = []
     if brand and config["end_card"]:
-        end_slot = _split_end_card(clips, config, brand)
-        if end_slot is None:
-            warnings.append("end_card_skipped")
-        else:
-            extra_slots.append(end_slot)
-    assert_invariants(clips, slots + extra_slots, candidates_by_id, sources_by_src)
+        _apply_outro(clips[-1], config, brand)
+    assert_invariants(clips, slots, candidates_by_id, sources_by_src)
     return clips, warnings
 
 
-def _split_end_card(clips: list[dict], config: dict, brand: dict) -> dict | None:
-    """Move the last `end_card_frames` of the close clip into an `end_card` clip (#6.8).
+def _apply_outro(close: dict, config: dict, brand: dict) -> None:
+    """Burn the C0 brand sign-off into the close clip's tail (#6.8).
 
-    C0 micro-outro: the card replays the close's own tail frames as a
-    blurred/dimmed background with the logo + handle overlaid, instead of
-    a flat solid canvas. The close keeps >= 30 frames (P9); the card needs
-    >= 15 or it is skipped (returns `None`). Returns the synthetic slot
-    for P1/P6.
+    No timeline is stolen: the close keeps all its frames and its last
+    `k = min(end_card_frames, n_frames)` frames double as the outro
+    (blurred/dimmed background with the logo + handle overlaid, see
+    `render.finish_graph`). P9 guarantees the close holds >= 30 frames,
+    so the full 24-frame tail always fits and the card can never be
+    skipped for lack of room.
+
+    Args:
+        close: Close clip dict, mutated in place (only `effect_params`
+            gains `outro_*` keys).
+        config: Merged planner config; reads `end_card_frames`,
+            `end_card_logo_w`, `end_card_text_size`, `blur_radius`,
+            `blur_power`.
+        brand: `edl["brand"]`; reads `fg`, `font`, `handle`, `logo`
+            (session-relative), `logo_w`, `logo_h`.
     """
-    close = clips[-1]
-    k = min(config["end_card_frames"], close["n_frames"] - 30)
-    if k < 15:
-        return None
-    old_out_s = close["out_s"]
-    close["n_frames"] -= k
-    close["out_s"] = close["in_s"] + close["n_frames"] / FPS  # close is 1.0x
-    close["timeline_end_f"] -= k
-    start_f = close["timeline_end_f"]
-    tail_in_s = old_out_s - k / FPS
-    is_image = close["type"] == "image"
-    clips.append(
+    k = min(config["end_card_frames"], close["n_frames"])
+    close["effect_params"].update(
         {
-            "slot": close["slot"] + 1,
-            "role": "end_card",
-            "candidate_id": "end_card",
-            "src": close["src"],
-            "src_sha256": close["src_sha256"],
-            "type": close["type"],
-            "src_w": close["src_w"],
-            "src_h": close["src_h"],
-            "src_rotation": close.get("src_rotation", 0),
-            "src_color": close.get(
-                "src_color",
-                {
-                    "primaries": "bt709",
-                    "trc": "bt709",
-                    "space": "bt709",
-                    "range": "tv",
-                },
+            "outro_frames": k,
+            "outro_fg": brand["fg"],
+            "outro_font": brand["font"],
+            "outro_handle": brand["handle"],
+            "outro_logo_src": brand["logo"],
+            "outro_logo_w": config["end_card_logo_w"],
+            "outro_logo_h": round(
+                brand["logo_h"] * config["end_card_logo_w"] / brand["logo_w"]
             ),
-            "hdr": close.get("hdr", "none"),
-            "in_s": 0.0 if is_image else tail_in_s,
-            "out_s": k / FPS if is_image else old_out_s,
-            "n_frames": k,
-            "speed": 1.0,
-            "timeline_start_f": start_f,
-            "timeline_end_f": start_f + k,
-            # ponytail: render ignores these for the card (cover-scale
-            # blur), so inherit the close's proven 9:16 values for P8.
-            "layout": close["layout"],
-            "crop": dict(close["crop"]),
-            "crop_px": dict(close["crop_px"]),
-            "subject_cropped": False,
-            "src_fps_nominal": close.get("src_fps_nominal", FPS),
-            "effect": "end_card",
-            "effect_params": {
-                "fg": brand["fg"],
-                "font": brand["font"],
-                "handle": brand["handle"],
-                "logo_src": brand["logo"],
-                "logo_w": config["end_card_logo_w"],
-                "logo_h": round(
-                    brand["logo_h"] * config["end_card_logo_w"] / brand["logo_w"]
-                ),
-                "text_size": config["end_card_text_size"],
-                "blur_radius": config["blur_radius"],
-                "blur_power": config["blur_power"],
-                "dim": -0.3,
-            },
-            "warnings": [],
+            "outro_text_size": config["end_card_text_size"],
+            "outro_blur_radius": config["blur_radius"],
+            "outro_blur_power": config["blur_power"],
+            "outro_dim": -0.3,
         }
     )
-    return {
-        "slot": close["slot"] + 1,
-        "role": "end_card",
-        "start_f": start_f,
-        "end_f": start_f + k,
-        "beats_rel_f": [],
-    }

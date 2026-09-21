@@ -45,7 +45,7 @@ DEFAULT_CONFIG = {
     "logo_opacity": 0.6,
     "logo_inset_x": 48,
     "logo_bottom_frac": 0.177,  # offset as fraction of height (clears Reels UI)
-    "end_card": True,  # #6.8: brand card taking the last frames of the close slot
+    "end_card": True,  # #6.8: C0 sign-off burned into the close tail
     "end_card_frames": 24,  # C0 micro-outro: 0.8s loop-friendly sign-off
     "end_card_logo_w": 360,  # px at 1080 wide (smaller than the old 480)
     "end_card_text_size": 64,  # px at 1080 wide (handle hero, no fine print)

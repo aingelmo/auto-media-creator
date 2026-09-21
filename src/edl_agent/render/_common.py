@@ -241,20 +241,10 @@ LOGO_FILTER_TEMPLATE = (
     "[v0][lg]overlay=W-w-{inset}:H-h-{bottom}:format=auto"
 )
 
-# End card C0 (#6.8): blurred close-tail background, logo centred in
-# the Reels safe core with the handle below. Input 0 is the tail video
-# (or image loop), input 1 is the logo PNG.
+# End card (#6.8, legacy pre-C0): solid `bg` canvas, logo centred above
+# two text lines. Only old EDLs still carry `effect == "end_card"`; the
+# planner now burns the C0 sign-off into the close tail instead (outro).
 END_CARD_FILTER_TEMPLATE = (
-    "[0:v]scale={tw}:{th}:force_original_aspect_ratio=increase,"
-    "crop={tw}:{th},boxblur={blur_radius}:{blur_power},"
-    "eq=brightness={dim},setsar=1[bg];"
-    "[1:v]scale={lw}:-1:flags=lanczos[lg];"
-    "[bg][lg]overlay=(W-w)/2:(H-h)/2-{lift}[v1];"
-    "[v1]{handle}fade=t=in:st=0:d=0.25,setsar=1,format=yuv420p[v]"
-)
-# Legacy end card (pre-C0): solid `bg` canvas, logo centred above two
-# text lines. Kept so old EDLs without `logo_src` still render.
-END_CARD_LEGACY_FILTER_TEMPLATE = (
     "[1:v]scale={lw}:-1:flags=lanczos[lg];"
     "[0:v][lg]overlay=(W-w)/2:(H-h)/2-{lift}[v1];"
     "[v1]{handle}{line}fade=t=in:st=0:d=0.25,setsar=1,format=yuv420p[v]"
@@ -265,54 +255,141 @@ END_CARD_TEXT_TEMPLATE = (
 )
 
 
-def finish_graph(chain: str, logo: dict | None, target: dict) -> str:
-    """`-filter_complex` graph: `[0:v]chain` + optional watermark + `setsar/format`.
+# Outro C0 (#6.8): tail-only brand sign-off. `{cur}` is the label
+# carrying the main picture (with or without watermark), `{src}` the
+# label carrying the logo input. Blur, dim, logo overlay and handle all
+# switch on at output frame `{start}`; the logo fades in on its own
+# alpha while the blur snaps (a deliberate focus-pull read).
+OUTRO_FILTER_TEMPLATE = (
+    "[{src}]scale={lw}:-1:flags=lanczos,format=rgba,"
+    "fade=t=in:st={fade_st}:d=0.25:alpha=1[ol];"
+    "[{cur}]boxblur={blur_radius}:{blur_power}:enable='gte(n,{start})',"
+    "eq=brightness={dim}:eval=frame:enable='gte(n,{start})'[v2];"
+    "[v2][ol]overlay=(W-w)/2:(H-h)/2-{lift}:enable='gte(n,{start})'[v3];"
+    "[v3]{handle}setsar=1,format=yuv420p[v]"
+)
 
-    `logo` is `edl["brand"]["watermark"]` (`w`, `opacity`, `inset_x`,
-    `bottom_frac`, at 1080 wide) or `None`; the logo file must be input 1.
+
+def _centered_y(lh: int, lift: int, ts: int) -> str:
+    """Drawtext `y` expression centring the logo/handle block (#6.8).
+
+    The offset is folded in Python so the expression carries one
+    signed term (`H/2+40`).
     """
-    if not logo:
-        return f"[0:v]{chain}setsar=1,format=yuv420p[v]"
+    return f"H/2{lh // 2 - lift + ts:+d}"
+
+
+def finish_graph(
+    chain: str,
+    logo: dict | None,
+    target: dict,
+    outro: dict | None = None,
+    n_frames: int = 0,
+) -> str:
+    """`-filter_complex` graph: `[0:v]chain` + watermark/outro + `setsar/format`.
+
+    Args:
+        chain: Main video filter chain (trailing comma tolerated).
+        logo: `edl["brand"]["watermark"]` (`w`, `opacity`, `inset_x`,
+            `bottom_frac`, at 1080 wide) plus an absolute `path`, or
+            `None` for no watermark; the logo file must be input 1.
+        target: Render target `{"w", "h"}`; px sizes scale from 1080
+            wide.
+        outro: C0 sign-off params (`outro_*` keys, see
+            `planner._apply_outro`: `outro_frames`, `outro_fg`,
+            `outro_font`, `outro_handle`, `outro_logo_w`/`outro_logo_h`,
+            `outro_text_size`, `outro_blur_radius`/`outro_blur_power`,
+            `outro_dim`, all at 1080 wide), or `None` for no sign-off.
+        n_frames: Segment output frames; the tail starts at
+            `n_frames - outro_frames`. Only read when `outro` is set.
+
+    Returns:
+        Filtergraph string ending in `[v]`. The outro blurs/dims only
+        the tail (`enable='gte(n,N)'`), fades the logo in via its own
+        alpha, and pops the handle; the head of the clip is untouched.
+    """
     scale = target["w"] / 1080
-    overlay = LOGO_FILTER_TEMPLATE.format(
-        lw=round(logo["w"] * scale),
-        opacity=logo["opacity"],
-        inset=round(logo["inset_x"] * scale),
-        bottom=round(logo["bottom_frac"] * target["h"]),
-    )
-    return f"[0:v]{chain.rstrip(',')}[v0];{overlay},setsar=1,format=yuv420p[v]"
+    graph = f"[0:v]{chain.rstrip(',')}[v0]"
+    cur = "v0"
+    if logo and outro is not None:
+        graph += ";[1:v]split=2[lgwm][lgout]"
+        wm_src, out_src = "lgwm", "lgout"
+    else:
+        wm_src = out_src = "1:v"
+    if logo:
+        overlay = LOGO_FILTER_TEMPLATE.format(
+            lw=round(logo["w"] * scale),
+            opacity=logo["opacity"],
+            inset=round(logo["inset_x"] * scale),
+            bottom=round(logo["bottom_frac"] * target["h"]),
+        )
+        # LOGO_FILTER_TEMPLATE hardcodes `[v0]`/`[1:v]`; re-point it at
+        # this clip's labels.
+        overlay = overlay.replace("[v0]", f"[{cur}]", 1).replace(
+            "[1:v]", f"[{wm_src}]", 1
+        )
+        graph += f";{overlay}[v1]"
+        cur = "v1"
+    if outro is not None:
+        start = n_frames - outro["outro_frames"]
+        ts = round(outro["outro_text_size"] * scale)
+        lh = round(outro["outro_logo_h"] * scale)
+        lift = round(ts * 1.5)
+        y0 = _centered_y(lh, lift, ts)
+        handle = ""
+        if outro.get("outro_handle"):
+            handle = END_CARD_TEXT_TEMPLATE.format(
+                font=outro["outro_font"],
+                text=_drawtext_escape(outro["outro_handle"]),
+                size=ts,
+                color=outro["outro_fg"],
+                y=y0,
+            ).rstrip(",")
+            # `enable` is a drawtext *option* (colon), not the next
+            # filter (comma) — `,enable=` would parse as a filter
+            # named `enable` and fail the graph.
+            handle += f":enable='gte(n,{start})',"
+        graph += ";" + OUTRO_FILTER_TEMPLATE.format(
+            src=out_src,
+            cur=cur,
+            lw=round(outro["outro_logo_w"] * scale),
+            fade_st=start / 30,
+            blur_radius=max(2, round(outro["outro_blur_radius"] * scale)),
+            blur_power=outro["outro_blur_power"],
+            dim=outro["outro_dim"],
+            lift=lift,
+            start=start,
+            handle=handle,
+        )
+    else:
+        graph += f";[{cur}]setsar=1,format=yuv420p[v]"
+    return graph
 
 
 def end_card_graph(params: dict, target: dict) -> str:
-    """Build the `-filter_complex` graph for an `end_card` clip (#6.8).
+    """Build the `-filter_complex` graph for a legacy `end_card` clip (#6.8).
 
-    C0 micro-outro: input 0 is the close tail (video chunk or image
-    loop), input 1 is the logo PNG. The tail is cover-scaled to the
-    target, blurred and dimmed, then the logo + handle are centred in
-    the Reels safe core. Legacy EDLs without `logo_src` (flat `bg`
-    canvas as input 0) use the legacy solid-canvas graph instead.
+    Only old EDLs still carry `effect == "end_card"` (flat `bg` canvas
+    as input 0, logo PNG as input 1); the planner now burns the C0
+    sign-off into the close tail instead (see `finish_graph` outro).
 
     Args:
-        params: `clip["effect_params"]`. C0 keys: `fg` (hex text
-            color), `font` (drawtext fontfile path), `handle`
-            (e.g. `@move360salamanca`, may be `""`), `logo_w`/`logo_h`
-            (px at 1080 wide), `text_size` (px at 1080 wide),
-            `blur_radius`/`blur_power` (boxblur, at 1080 wide),
-            `dim` (eq brightness, e.g. `-0.3`). Legacy keys: `bg`,
-            `fg`, `font`, `handle`, `line`, `logo_w`, `text_size`.
+        params: `clip["effect_params"]` with `bg`, `fg`, `font`,
+            `handle`, `line`, `logo_w`, `logo_h`, `text_size` (all at
+            1080 wide).
         target: Render target `{"w", "h"}` (`FINAL_TARGET` 1080x1920
             or `PREVIEW_TARGET` 540x960); all px sizes scale from 1080
             wide.
 
     Returns:
         Filtergraph string ending in `[v]`, with a 0.25s fade-in and
-        no exit fade (hard cut back to the loop).
+        no exit fade.
     """
     scale = target["w"] / 1080
     ts = round(params["text_size"] * scale)
     lh = round(params["logo_h"] * scale)
     lift = round(ts * 1.5)
-    y0 = f"H/2+{lh // 2 - lift}+{ts}"
+    y0 = _centered_y(lh, lift, ts)
 
     def text(key: str, size: int, color: str, y: str) -> str:
         if not params.get(key):
@@ -325,27 +402,11 @@ def end_card_graph(params: dict, target: dict) -> str:
             y=y,
         )
 
-    handle = text("handle", ts, params["fg"], y0)
-    if "logo_src" not in params:
-        return END_CARD_LEGACY_FILTER_TEMPLATE.format(
-            lw=round(params["logo_w"] * scale),
-            lift=lift,
-            handle=handle,
-            line=text(
-                "line",
-                round(ts * 0.7),
-                f"{params['fg']}@0.8",
-                f"{y0}+{round(ts * 1.4)}",
-            ),
-        )
-    blur_radius = max(2, round(params.get("blur_radius", 20) * scale))
     return END_CARD_FILTER_TEMPLATE.format(
-        tw=target["w"],
-        th=target["h"],
-        blur_radius=blur_radius,
-        blur_power=params.get("blur_power", 2),
-        dim=params.get("dim", -0.3),
         lw=round(params["logo_w"] * scale),
         lift=lift,
-        handle=handle,
+        handle=text("handle", ts, params["fg"], y0),
+        line=text(
+            "line", round(ts * 0.7), f"{params['fg']}@0.8", f"{y0}+{round(ts * 1.4)}"
+        ),
     )

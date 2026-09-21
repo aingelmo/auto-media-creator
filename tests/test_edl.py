@@ -128,7 +128,7 @@ def test_build_edl_full_rules_fallback_has_required_top_level_keys() -> None:
         "provenance",
     ):
         assert key in edl
-    assert edl["version"] == 5
+    assert edl["version"] == 6
     assert edl["target"] == {"w": 1080, "h": 1920, "fps": 30, "duration_f": 150}
     assert len(edl["clips"]) == 3
     assert edl["inputs"]["selection_sha256"] is None

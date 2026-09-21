@@ -14,6 +14,7 @@ from edl_agent.render._common import (
     FLASH_FILTER_TEMPLATE,
     HOOK_ASS_TEMPLATE,
     LOGO_FILTER_TEMPLATE,
+    OUTRO_FILTER_TEMPLATE,
     PUNCH_FILTER_TEMPLATE,
     RAMP_SETPTS_TEMPLATE,
     SFX_FILTER_TEMPLATE,
@@ -93,8 +94,10 @@ def get_render_profile(
         text overlay, with `hook_text_font`/`hook_text_font_sha256`;
         `punch_filter_template`
         and `flash_filter_template` fill `{fx}` for the cut effects
-        (#6.6); `logo_filter_template` and `end_card_filter_template` for
-        the brand layer, with `brand_sha256`),
+        (#6.6); `logo_filter_template` for the watermark,
+        `end_card_filter_template` for the legacy solid-canvas card,
+        and `outro_filter_template` for the C0 tail sign-off (brand
+        layer, with `brand_sha256`),
         `audio_codec_args` (str), and `profile_sha256` (str, hash of the
         rest of the dict, for reproducibility checks).
     """
@@ -129,6 +132,7 @@ def get_render_profile(
         "flash_filter_template": FLASH_FILTER_TEMPLATE,
         "logo_filter_template": LOGO_FILTER_TEMPLATE,
         "end_card_filter_template": END_CARD_FILTER_TEMPLATE + END_CARD_TEXT_TEMPLATE,
+        "outro_filter_template": OUTRO_FILTER_TEMPLATE + END_CARD_TEXT_TEMPLATE,
         "brand_sha256": brand_sha256,
         "sfx_filter_template": SFX_FILTER_TEMPLATE,
         "audio_codec_args": "-c:a aac -b:a 192k -ar 48000",

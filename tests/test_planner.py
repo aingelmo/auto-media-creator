@@ -239,11 +239,8 @@ _BRAND = {
 }
 
 
-@pytest.mark.parametrize(
-    ("close_f", "expect_card"),
-    [(60, 24), (90, 24), (40, None)],
-)
-def test_end_card_splits_close_slot(close_f, expect_card) -> None:
+@pytest.mark.parametrize("close_f", [35, 60, 90])
+def test_outro_annotates_close_tail_without_stealing_frames(close_f) -> None:
     slots, selected, candidates_by_id, sources_by_src = _build_scenario(
         2, (1920, 1080), seed=1
     )
@@ -251,23 +248,27 @@ def test_end_card_splits_close_slot(close_f, expect_card) -> None:
     clips, warnings = build_clips(
         slots, selected, candidates_by_id, sources_by_src, brand=_BRAND
     )
+    # No synthetic clip: one clip per slot, timeline untouched, never skipped.
+    assert len(clips) == len(slots)
+    assert "end_card_skipped" not in warnings
     assert sum(c["n_frames"] for c in clips) == slots[-1]["end_f"]
-    if expect_card is None:
-        assert "end_card_skipped" in warnings
-        assert clips[-1]["role"] == "close"
-        return
-    card, close = clips[-1], clips[-2]
-    assert card["role"] == "end_card" and card["n_frames"] == expect_card
-    assert close["n_frames"] == close_f - expect_card
-    assert card["timeline_start_f"] == close["timeline_end_f"]
-    assert card["effect_params"]["logo_h"] == 144  # 360 * 80 / 200
-    # C0: the card replays the close tail, logo comes via effect_params.
-    assert card["src"] == close["src"] and card["type"] == close["type"]
-    assert card["out_s"] == pytest.approx(close["out_s"] + expect_card / FPS)
-    assert card["in_s"] == pytest.approx(close["out_s"])
-    assert card["effect_params"]["logo_src"] == _BRAND["logo"]
-    assert card["effect_params"]["handle"] == _BRAND["handle"]
-    assert "line" not in card["effect_params"]
+    close = clips[-1]
+    assert close["role"] == "close" and close["n_frames"] == close_f
+    p = close["effect_params"]
+    assert p["outro_frames"] == min(DEFAULT_CONFIG["end_card_frames"], close_f)
+    assert p["outro_handle"] == _BRAND["handle"]
+    assert p["outro_logo_src"] == _BRAND["logo"]
+    assert p["outro_logo_w"] == DEFAULT_CONFIG["end_card_logo_w"]
+    assert p["outro_logo_h"] == 144  # 360 * 80 / 200
+    assert p["outro_text_size"] == DEFAULT_CONFIG["end_card_text_size"]
+
+
+def test_no_outro_without_brand() -> None:
+    slots, selected, candidates_by_id, sources_by_src = _build_scenario(
+        2, (1920, 1080), seed=1
+    )
+    clips, _ = build_clips(slots, selected, candidates_by_id, sources_by_src)
+    assert all("outro_frames" not in c["effect_params"] for c in clips)
 
 
 @pytest.mark.parametrize(("aspect_name", "w", "h"), ASPECTS)
