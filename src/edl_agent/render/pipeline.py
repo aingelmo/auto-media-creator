@@ -20,6 +20,7 @@ def run_render(
     threads: int = 4,
     tonemap_chain: str = "",
     allow_dynamic_loudnorm: bool = False,
+    preview: bool = True,
 ) -> list[CheckResult]:
     """Run the full Layer 7 pipeline: render, concat audio, and run checks.
 
@@ -30,6 +31,9 @@ def run_render(
         threads: ffmpeg thread count.
         tonemap_chain: HDR (HLG/DV84) tonemap filter chain.
         allow_dynamic_loudnorm: Passed through to `run_render_checks`.
+        preview: Also render the 540p preview segments (P0 light-device:
+            `False` skips the duplicate encode when no operator review
+            is needed).
 
     Returns:
         The list of `CheckResult`s from `run_render_checks`, only if all of
@@ -42,10 +46,14 @@ def run_render(
             fails.
     """
     render_segments(edl, manifest, session_dir, threads, tonemap_chain)
-    render_preview_segments(edl, manifest, session_dir, threads, tonemap_chain)
+    if preview:
+        render_preview_segments(edl, manifest, session_dir, threads, tonemap_chain)
     concat_and_audio(edl, session_dir, threads)
+    # No preview segments exist when preview=False, so R2 (final↔preview
+    # pHash) has nothing to compare against -- run_render_checks supports
+    # exactly this via run_r2=False.
     results = run_render_checks(
-        edl, session_dir, allow_dynamic_loudnorm=allow_dynamic_loudnorm
+        edl, session_dir, allow_dynamic_loudnorm, run_r2=preview
     )
     failed = [r for r in results if not r.ok]
     if failed:

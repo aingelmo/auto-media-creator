@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from edl_agent.features import yolo_pose_detector
+from edl_agent.features import free_torch_memory, yolo_pose_detector
 from edl_agent.ingest import (
     IngestError,
     VideoSourceInfo,
@@ -179,6 +179,11 @@ def run_one(name: str, seed: int, pool: dict[str, VideoSourceInfo]) -> dict:
                 threads=THREADS,
             )
             tonemap_chain = tonemap_chain_for_manifest(manifest)
+            # P0 light-device: detector unneeded past candidates and
+            # only released on the attempt that reaches render, so
+            # retries keep a live detector.
+            del detector
+            free_torch_memory()
             render_preview_segments(
                 edl, manifest, session, threads=THREADS, tonemap_chain=tonemap_chain
             )

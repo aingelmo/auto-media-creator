@@ -2,11 +2,43 @@
 
 from __future__ import annotations
 
+import ctypes
+import gc
 from typing import Any
 
 import numpy as np
 
 from edl_agent.features._common import Detection, Detector
+
+
+def free_torch_memory() -> int:
+    """Release freed torch/CUDA allocator pages back to the OS.
+
+    Call after `del`-eting the detector built by `yolo_pose_detector`,
+    once no more inference will run in this process (P0 light-device
+    work: candidates hold ~3 GB resident otherwise, inflating every
+    later stage's RSS, e.g. the render peak).
+
+    Runs `gc.collect()` (drops the torch objects), empties the CUDA
+    cache when torch is importable, then `malloc_trim` so glibc
+    actually returns pages to the OS instead of hoarding them.
+
+    Returns:
+        Bytes reclaimed by `malloc_trim` (`1`/`0` truthy fallback when
+        glibc is unavailable, e.g. non-Linux).
+    """
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
+    try:
+        return int(ctypes.CDLL("libc.so.6").malloc_trim(0))
+    except OSError:
+        return 1
 
 
 def yolo_pose_detector(model_path: str = "yolov8n-pose.pt") -> Detector:

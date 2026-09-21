@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from edl_agent.features import yolo_pose_detector
+from edl_agent.features import free_torch_memory, yolo_pose_detector
 from edl_agent.llm import PROVIDERS, get_client
 from edl_agent.paths import CACHE_DIR, MODELS_DIR
 from edl_agent.render import (
@@ -94,6 +94,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-cache", action="store_true", help="Disable the source cache"
     )
+    parser.add_argument(
+        "--no-preview",
+        action="store_true",
+        help="Skip the 540p preview render (P0 light-device)",
+    )
     args = parser.parse_args()
     if args.model is None:
         args.model = DEFAULT_MODELS[args.provider]
@@ -145,6 +150,9 @@ def main() -> None:
             pose_model_path=args.pose_model,
             cache_root=cache_root,
         )
+        # P0 light-device: torch holds ~3 GB resident after inference.
+        del detector
+        free_torch_memory()
 
     selection_path = session / "selection.json"
     selection_meta_path = session / "selection_meta.json"
@@ -217,13 +225,14 @@ def main() -> None:
 
     reel_path = session / "reel.mp4"
     if not (resume and reel_path.exists()):
-        render_preview_segments(
-            edl,
-            manifest,
-            session,
-            threads=args.threads,
-            tonemap_chain=args.tonemap_chain,
-        )
+        if not args.no_preview:
+            render_preview_segments(
+                edl,
+                manifest,
+                session,
+                threads=args.threads,
+                tonemap_chain=args.tonemap_chain,
+            )
         render_segments(
             edl,
             manifest,

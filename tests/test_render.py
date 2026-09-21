@@ -312,6 +312,52 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
     assert sum((r10, g10, b10)) < sum((r, g, b))
 
 
+def test_run_render_no_preview_skips_preview_segments(session_dir) -> None:
+    """P0 light-device: `preview=False` renders the reel without the
+    duplicate 540p preview encode."""
+    clip_a = session_dir / "inputs" / "a.mp4"
+    _make_clip(clip_a, w=360, h=640, fps=30, duration=2)
+    info_a = probe_video_source(clip_a)
+    build_proxy(info_a, session_dir / "proxies" / "a.mp4")
+    _make_sine(session_dir / "music" / "track_cut.wav", duration=2)
+
+    manifest = {
+        "session_id": "sess",
+        "target": {"w": 1080, "h": 1920, "fps": 30},
+        "sources": [
+            {"src": "inputs/a.mp4", "sha256": info_a.sha256, "type": "video"},
+        ],
+    }
+    edl: dict[str, Any] = {
+        "version": 4,
+        "session_id": "sess",
+        "target": {"w": 1080, "h": 1920, "fps": 30, "duration_f": 30},
+        "brand": {},
+        "clips": [
+            _clip(0, "hook", "inputs/a.mp4", 360, 640, 0.0, 1.0, 30, 1.0, 0, 30),
+        ],
+        "audio": {
+            "music_cut_path": "music/track_cut.wav",
+            "music_cut_sha256": None,
+            "music_src_path": None,
+            "music_src_sha256": None,
+            "music_offset_s": 0.0,
+            "target_lufs": -14.0,
+            "target_tp": -1.0,
+            "target_lra": 11.0,
+            "loudnorm_measured": None,
+            "loudnorm_applied": None,
+            "fade_out_s": 0.3,
+            "sfx": [],
+        },
+    }
+
+    results = run_render(edl, manifest, session_dir, threads=2, preview=False)
+    assert all(r.ok for r in results), [r for r in results if not r.ok]
+    assert (session_dir / "reel.mp4").exists()
+    assert not (session_dir / "preview_segments").exists()
+
+
 def test_render_segments_suffix_and_reuse(session_dir) -> None:
     """Variant-B segment reuse (idea #7): identical clips hardlink, changed
     ones re-render."""

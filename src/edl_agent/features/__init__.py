@@ -22,7 +22,7 @@ from edl_agent.features._common import (
     Track,
     features_config_sha256,
 )
-from edl_agent.features.detector import yolo_pose_detector
+from edl_agent.features.detector import free_torch_memory, yolo_pose_detector
 from edl_agent.features.extract import extract_features
 from edl_agent.features.io import load_features, save_features
 from edl_agent.features.scenes import detect_scene_cuts
@@ -39,6 +39,7 @@ __all__ = [
     "detect_scene_cuts",
     "extract_features",
     "features_config_sha256",
+    "free_torch_memory",
     "iou",
     "load_features",
     "save_features",

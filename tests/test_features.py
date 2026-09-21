@@ -12,6 +12,7 @@ from edl_agent.features import (
     Detection,
     _normalize_p5_95,
     extract_features,
+    free_torch_memory,
     iou,
     load_features,
     save_features,
@@ -145,3 +146,7 @@ def test_save_load_features_roundtrip(tmp_path) -> None:
     assert loaded["t_s"] == feats["t_s"]
     assert loaded["subject_bbox"][0] == pytest.approx(feats["subject_bbox"][0])
     assert loaded["subject_bbox"][1] is None
+
+
+def test_free_torch_memory_runs_without_torch_models() -> None:
+    assert free_torch_memory() >= 0

@@ -6,7 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 from edl_agent.candidates import readmit_candidates
-from edl_agent.features import yolo_pose_detector
+from edl_agent.features import free_torch_memory, yolo_pose_detector
 from edl_agent.ingest import cut_music, sha256_file, write_manifest
 from edl_agent.session import DEFAULT_CACHE_DIR, run_candidates
 from edl_agent.slots import slots_from_file
@@ -52,6 +52,10 @@ def _run_candidates_stage(
             pose_model_path=POSE_MODEL,
             cache_root=DEFAULT_CACHE_DIR,
         )
+        # P0 light-device: torch holds ~3 GB resident after inference;
+        # release before the LLM/render stages so their RSS is real.
+        del detector
+        free_torch_memory()
 
     real_sources = len(
         {
