@@ -24,6 +24,10 @@ STAGES = (
     "render",
     "checks",
 )
+# Invariant: STAGES is pipeline order and drives index math in
+# `web/artifacts.py:clear_stage_artifacts` (slicing from `from_stage`).
+# Never reorder without updating STAGE_ARTIFACTS; never slice on
+# DISPLAY_STAGES (UI order only).
 
 # UI-facing order: reel planning actually starts (and finishes) around hook
 # generation, so display it before "hooks" even though STAGES (which drives

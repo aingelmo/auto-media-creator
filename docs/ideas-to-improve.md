@@ -1,8 +1,13 @@
 # Ideas to take the gym reels to the next level
 
+> Status 2026-09-21: 1 (hook text, libass overlay), 2 (brand watermark +
+> end card), 3 (hook speed ramp), 4 (punch-in / hook flash), 7 (variant B)
+> are done. 5 (diegetic sfx) is partial — hook clip only
+> (`edl._sfx_entries`). 6, 8, 9, 10 remain open.
+
 ## Context
 
-The pipeline (ingest → CV features → LLM selector → beat-snapped planner → ffmpeg render) is stable. The output today is: hard cuts on beats, 9:16 crop/blur-pad, per-clip colour match, loudnormed music, optional 0.5x hook. Nothing on top of the footage: no text, no logo, no speed ramps, no diegetic sound, no transitions. Competing gym accounts differentiate on exactly those layers, not on cut accuracy.
+The pipeline (ingest → CV features → LLM selector → beat-snapped planner → ffmpeg render) is stable. The output today is: hard cuts on beats, 9:16 crop/blur-pad, per-clip colour match, loudnormed music, hook speed ramp, libass hook text, brand watermark + end card, optional punch-in / hook flash, hook-only diegetic sfx, and an optional variant-B hook. Remaining differentiators are per-develop captions, full diegetic mix, transitions, and the strategic Tier 3 items below.
 
 Ranked by (impact on "stands out") / (effort given the current code). Everything below needs only ffmpeg filters already in use and the existing EDL/planner, no new dependencies.
 

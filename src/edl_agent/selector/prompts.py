@@ -5,8 +5,6 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
-from edl_agent.selector._common import EXERCISES, EXERCISES_BY_THEME
-
 SYSTEM_PROMPT_TEMPLATE = """Eres un editor de vídeo profesional especializado en Reels \
 verticales (9:16) de gimnasio.
 
@@ -17,8 +15,7 @@ candidato lleva además velocidad=N: velocidad real del sujeto en el pico \
 (alturas de cuerpo por segundo, comparable entre candidatos). Los fotogramas \
 no distinguen un movimiento lento de uno explosivo; fíate de velocidad para \
 eso: <0.7 es lento o controlado, >1.2 es explosivo (salto, sprint, burpee). \
-Recibes también los SLOTS del montaje con su rol narrativo y una LISTA \
-CANÓNICA DE EJERCICIOS.
+Recibes también los SLOTS del montaje con su rol narrativo.
 
 Tu tarea es juzgar contenido, no calcular tiempos, coordenadas ni orden temporal.
 
@@ -32,8 +29,12 @@ idéntico a otro candidato mejor del mismo clip.
 bien la técnica.
 3. Asigna rank dentro de cada rol: 1 = mejor calidad. Sin huecos (1, 2, 3, …). \
 El orden en el montaje lo decide otro sistema.
-4. exercise: usa exactamente un nombre de la lista canónica; si no encaja o no \
-estás seguro, "other". Movimientos que se confunden fácilmente en pocos \
+4. exercise: nombra el movimiento con tus propios conocimientos de gimnasio/ \
+CrossFit (no hay lista cerrada) -- 2-4 palabras en inglés, terminología \
+estándar (ej. "back squat", "box step up", "good morning"). Reutiliza \
+EXACTAMENTE el mismo texto para el mismo movimiento en todo el vídeo -- no \
+varíes mayúsculas, sinónimos ni abreviaturas entre candidatos. Si no lo \
+reconoces, "other". Movimientos que se confunden fácilmente en pocos \
 fotogramas -- mira la trayectoria completa antes de decidir:
    - barra del suelo a los hombros y se queda ahí = clean; sigue hasta \
 encima de la cabeza en un solo tiempo = snatch; sale del rack y sube a los \
@@ -49,11 +50,14 @@ la barra = toes-to-bar; transición por encima de la barra con el torso = \
 muscle-up.
    - tirón de barra desde el suelo que se detiene a la altura de la cadera, \
 sin seguir hacia arriba = fase de clean/deadlift, no un ejercicio propio.
-5. exercise_confidence: "alta" si la secuencia de fotogramas deja claro cuál \
-de los ejercicios de la lista es (o que ninguno encaja, "other"); "baja" si \
-dudas entre dos o el encuadre/fotogramas no bastan para decidir. Ante la duda, \
-usa "other" + "baja" en vez de forzar un nombre concreto: un nombre \
-equivocado es peor que ninguno.
+   - sentadilla que baja hasta tocar o sentarse brevemente en un cajón/banco \
+= box squat, no lunge ni back squat (mira las dos piernas doblando por igual, \
+sin dar un paso).
+{known_confusions}5. exercise_confidence: "alta" si la secuencia de fotogramas deja claro qué \
+movimiento es (o que no lo reconoces, "other"); "baja" si dudas entre dos o \
+el encuadre/fotogramas no bastan para decidir. Ante la duda, usa "other" + \
+"baja" en vez de forzar un nombre concreto: un nombre equivocado es peor \
+que ninguno.
 6. Si hay menos de 3 candidatos válidos para develop o ninguno para hook o close, \
 explícalo en notes. No inventes candidatos ni fuerces rechazos para cumplir cuotas.
 
@@ -96,16 +100,13 @@ USER_PROMPT_TEMPLATE = """OBJETIVO: Reel de {duration_s} s. Temática: {tematica
 
 SLOTS (N_SLOTS = {n_slots}): 1 hook, {n_develop} develop, 1 close.
 
-LISTA CANÓNICA DE EJERCICIOS:
-{exercises}
-
 CANDIDATOS: {n_cand} (ids: {ids}). Los fotogramas de cada uno preceden a este \
 mensaje, etiquetados con su id.
 
 Genera la selección."""
 
 
-def selection_schema(theme: str = "training") -> dict:
+def selection_schema(theme: str = "training") -> dict:  # noqa: ARG001
     """Build the output schema for Gemini's structured output, per #5.3.
 
     The `description` strings inside the schema are sent to the model
@@ -113,8 +114,10 @@ def selection_schema(theme: str = "training") -> dict:
     Spanish to match the rest of the prompt.
 
     Args:
-        theme: Key of `selector._common.EXERCISES_BY_THEME`; scopes the
-            `exercise` enum to movements that actually occur in that theme.
+        theme: Unused; kept so callers don't need to change. `exercise` is
+            open-vocabulary (see `SYSTEM_PROMPT_TEMPLATE` item 4) -- eval
+            showed a fixed enum couldn't keep up with real footage variety
+            and a full model names movements just as accurately without one.
 
     Returns:
         JSON schema dict (draft-agnostic subset understood by Gemini's
@@ -122,7 +125,6 @@ def selection_schema(theme: str = "training") -> dict:
         `{candidate_id, role, rank, exercise, exercise_confidence, reason}`),
         `rejected` (list of `{candidate_id, reason}`), and `notes` (string).
     """
-    exercises = EXERCISES_BY_THEME.get(theme, EXERCISES)
     return {
         "type": "object",
         "properties": {
@@ -144,7 +146,17 @@ def selection_schema(theme: str = "training") -> dict:
                                 "No es orden temporal."
                             ),
                         },
-                        "exercise": {"type": "string", "enum": exercises},
+                        "exercise": {
+                            "type": "string",
+                            "description": (
+                                "Nombre corto (2-4 palabras) en inglés del "
+                                "movimiento, terminología estándar de "
+                                "gimnasio/CrossFit. Reutiliza EXACTAMENTE el "
+                                "mismo texto para el mismo movimiento en "
+                                "todo el vídeo. Si no lo reconoces, "
+                                '"other".'
+                            ),
+                        },
                         "exercise_confidence": {
                             "type": "string",
                             "enum": ["alta", "baja"],
@@ -218,6 +230,23 @@ def admissible_candidates(candidates_json: dict, slots_json: dict) -> list[dict]
     ]
 
 
+KNOWN_CONFUSIONS_PATH = Path(__file__).with_name("known_confusions.txt")
+
+
+def load_known_confusions() -> str:
+    """Extra disambiguation bullets, auto-built from review corrections.
+
+    Generated by `tools/refresh_confusion_rules.py` -- see its docstring.
+    Empty until the file exists/has entries, so this is a no-op until
+    someone runs it; avoids hand-maintaining item 4's bullet list as new
+    footage surfaces new confusion pairs.
+    """
+    if not KNOWN_CONFUSIONS_PATH.exists():
+        return ""
+    text = KNOWN_CONFUSIONS_PATH.read_text().strip()
+    return f"{text}\n" if text else ""
+
+
 def build_system_prompt(theme: str = "training") -> str:
     """Fill in `SYSTEM_PROMPT_TEMPLATE` with the theme's hook/close guidance.
 
@@ -228,7 +257,9 @@ def build_system_prompt(theme: str = "training") -> str:
         System prompt text (in Spanish).
     """
     t = THEMES[theme]
-    return SYSTEM_PROMPT_TEMPLATE.format(hook=t["hook"], close=t["close"])
+    return SYSTEM_PROMPT_TEMPLATE.format(
+        hook=t["hook"], close=t["close"], known_confusions=load_known_confusions()
+    )
 
 
 def build_user_prompt(
@@ -256,7 +287,6 @@ def build_user_prompt(
         tematica=THEMES[theme]["tematica"],
         n_slots=len(slots),
         n_develop=n_develop,
-        exercises=", ".join(EXERCISES_BY_THEME.get(theme, EXERCISES)),
         n_cand=len(candidates),
         ids=", ".join(c["id"] for c in candidates),
     )

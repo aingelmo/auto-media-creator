@@ -15,12 +15,21 @@ DEFAULTS: dict[str, Any] = {
     "theme": "training",  # "training" (CrossFit/Hyrox/funcional) | "yoga"
 }
 
-# Canonical list of exercises, #5.5.
+# Suggested exercise names for the ground-truth labelling UI's dropdown
+# (tools/label_exercises.py) only. The selector itself no longer constrains
+# `exercise` to this list -- see prompts.py's open-vocabulary schema -- since
+# eval showed a full model names movements outside any fixed list just as
+# accurately, and a closed enum can't keep up with real footage variety
+# (box squat, air squat, single leg deadlift, ... all missing at one point).
 EXERCISES = [
     "back squat",
     "front squat",
     "overhead squat",
+    "box squat",
+    "air squat",
     "deadlift",
+    "single leg deadlift",
+    "good morning",
     "clean",
     "snatch",
     "jerk",
@@ -30,8 +39,11 @@ EXERCISES = [
     "push-up",
     "burpee",
     "box jump",
+    "box step up",
     "wall ball",
     "kettlebell swing",
+    "svend press",
+    "v-up",
     "rowing",
     "bike",
     "ski erg",
@@ -55,24 +67,3 @@ EXERCISES = [
     "savasana",
     "other",
 ]
-
-# Theme-scoped subsets, #5.5: offering "sled push" in a yoga session (or
-# "savasana" in a CrossFit one) just wastes enum budget the model could
-# spend disambiguating the movements that actually show up. EXERCISES stays
-# the union, for validation and the labelling/eval tools.
-_TRAINING_EXERCISES = [
-    "back squat", "front squat", "overhead squat", "deadlift", "clean",
-    "snatch", "jerk", "thruster", "pull-up", "muscle-up", "push-up", "burpee",
-    "box jump", "wall ball", "kettlebell swing", "rowing", "bike", "ski erg",
-    "run", "rope climb", "handstand", "double-under", "sled push",
-    "sled pull", "farmers carry", "sandbag lunge", "lunge", "toes-to-bar",
-    "other",
-]
-_YOGA_EXERCISES = [
-    "sun salutation", "warrior pose", "downward dog", "balance pose",
-    "inversion", "backbend", "stretch", "savasana", "handstand", "other",
-]
-EXERCISES_BY_THEME: dict[str, list[str]] = {
-    "training": _TRAINING_EXERCISES,
-    "yoga": _YOGA_EXERCISES,
-}

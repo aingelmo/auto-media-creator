@@ -54,17 +54,33 @@ def list_sessions() -> list[dict]:
 
 
 def upsert_label(
-    ground_truth_path: Path, session_id: str, candidate_id: str, exercise: str
+    ground_truth_path: Path,
+    session_id: str,
+    candidate_id: str,
+    exercise: str,
+    note: str = "",
 ) -> dict:
-    """Load, update, and persist the ground-truth file. Returns the full dict."""
+    """Load, update, and persist the ground-truth file. Returns the full dict.
+
+    `note` is a free-text description of what the movement actually is,
+    kept separate from `exercise` (which must stay a canonical `EXERCISES`
+    value, or blank, so `eval_exercises.py`'s equality check against the
+    selector's output isn't broken by an out-of-taxonomy string) -- useful
+    for "other" candidates where none of the enum entries fit.
+    """
     ground_truth = {}
     if ground_truth_path.exists():
         ground_truth = json.loads(ground_truth_path.read_text())
-    session = ground_truth.setdefault(session_id, {"candidates": {}})
+    session = ground_truth.setdefault(session_id, {"candidates": {}, "notes": {}})
+    session.setdefault("notes", {})
     if exercise:
         session["candidates"][candidate_id] = exercise
     else:
         session["candidates"].pop(candidate_id, None)
+    if note:
+        session["notes"][candidate_id] = note
+    else:
+        session["notes"].pop(candidate_id, None)
     session["labeled_at"] = datetime.now(UTC).isoformat()
     ground_truth_path.write_text(json.dumps(ground_truth, indent=2, ensure_ascii=False))
     return ground_truth
@@ -81,6 +97,8 @@ PAGE = """<!doctype html>
   .row:first-of-type { border-top: none; }
   img { height: 110px; border-radius: 4px; }
   select { flex: 0 0 auto; }
+  input[type=text] { flex: 1 1 auto; min-width: 8em; }
+  input[type=text][hidden] { display: none; }
   .status { font-size: 12px; }
   .status.ok { color: #2a8; }
   .status.err { color: #c33; }
@@ -106,22 +124,30 @@ function renderCard(s) {
   for (const c of s.candidates) {
     const row = document.createElement('div');
     row.className = 'row';
-    const options = ['<option value="">-- sin etiquetar --</option>']
+    const options = [
+        '<option value="">-- sin etiquetar --</option>',
+        `<option value="none" ${c.label === 'none' ? 'selected' : ''}>(ninguno -- no es un ejercicio)</option>`,
+      ]
       .concat(EXERCISES.map(e => `<option value="${esc(e)}" ${e === c.label ? 'selected' : ''}>${esc(e)}</option>`))
       .join('');
     row.innerHTML = `
       <img src="/media/${s.id}/peaks/${c.id}_contact.jpg">
       <span>${esc(c.id)} (${esc(c.kind)})</span>
       <select>${options}</select>
+      <input type="text" placeholder="qué es en realidad..." value="${esc(c.note)}" ${c.label === 'other' ? '' : 'hidden'}>
       <span class="status"></span>
     `;
     const select = row.querySelector('select');
+    const note = row.querySelector('input');
     const status = row.querySelector('.status');
-    select.onchange = async () => {
+    const save = async () => {
       try {
         const res = await fetch('/api/label', {
           method: 'POST',
-          body: JSON.stringify({ session_id: s.id, candidate_id: c.id, exercise: select.value }),
+          body: JSON.stringify({
+            session_id: s.id, candidate_id: c.id,
+            exercise: select.value, note: note.value,
+          }),
         });
         if (!res.ok) throw new Error('status ' + res.status);
         status.textContent = 'saved';
@@ -131,6 +157,11 @@ function renderCard(s) {
         status.className = 'status err';
       }
     };
+    select.onchange = () => {
+      note.hidden = select.value !== 'other';
+      save();
+    };
+    note.onblur = () => { if (!note.hidden) save(); };
     card.appendChild(row);
   }
   return card;
@@ -174,8 +205,10 @@ class Handler(BaseHTTPRequestHandler):
             sessions = list_sessions()
             for s in sessions:
                 labels = ground_truth.get(s["id"], {}).get("candidates", {})
+                notes = ground_truth.get(s["id"], {}).get("notes", {})
                 for c in s["candidates"]:
                     c["label"] = labels.get(c["id"], "")
+                    c["note"] = notes.get(c["id"], "")
             self._json(sessions)
             return
 
@@ -209,6 +242,7 @@ class Handler(BaseHTTPRequestHandler):
                 body["session_id"],
                 body["candidate_id"],
                 body.get("exercise", ""),
+                body.get("note", ""),
             )
             self._json(ground_truth[body["session_id"]])
             return

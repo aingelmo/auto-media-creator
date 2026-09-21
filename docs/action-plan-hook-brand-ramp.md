@@ -1,6 +1,13 @@
 # Action plan: hook text, brand layer, speed ramp
 
-Executable plan for items 1–3 of `ideas-to-imrpove.md`. Written to be handed to an implementer with no prior context on the repo. Read `docs/architecture/06-planner.md`, `07-edl-contract.md`, `10-render.md` first.
+> DONE 2026-09-21: all three steps shipped (`edl.VERSION = 5`; ramp in
+> `planner/timing.py` + `render/_common.py:RAMP_SETPTS_TEMPLATE`; libass
+> hook text in `render/_common.py:HOOK_ASS_TEMPLATE`; brand watermark +
+> end card in `render/_common.py` + `session/planner.py:load_brand`).
+> Kept for history — Step 1's `drawtext`/single-`hook_line` design is
+> superseded (see the banners there and §5.7). Do not extend this file.
+
+Executable plan for items 1–3 of `ideas-to-improve.md`. Written to be handed to an implementer with no prior context on the repo. Read `docs/architecture/06-planner.md`, `07-edl-contract.md`, `10-render.md` first.
 
 ## Ground rules (apply to all three features)
 

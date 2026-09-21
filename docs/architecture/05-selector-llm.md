@@ -4,7 +4,7 @@
 
 ### 5.1 Modo por defecto: imágenes de pico inline
 
-- Entrada: por cada candidato **admisible**, sus `peak_frames` como partes `image` inline (base64) con `resolution: "low"`, precedidas de una parte `text` con `id`, `kind`, `src`, `multi_subject`. Después, el prompt de usuario con slots y la lista canónica de ejercicios.
+- Entrada: por cada candidato **admisible**, sus `peak_frames` como partes `image` inline (base64) con `resolution`, precedidas de una parte `text` con `id`, `kind`, `src`, `multi_subject`. Después, el prompt de usuario con slots (sin lista cerrada de ejercicios: vocabulario abierto, ver §5.4).
 - Coste: 280 tokens/imagen en `low` (560 `medium`, 1120 `high`/default) para modelos Gemini 3 `[verificado: docs media-resolution]`. 30 candidatos × 3 imágenes ≈ 25k tokens. Sin `resolution` explícita serían ≈ 101k.
 - `thinking_level`: `low` por defecto; `medium` si hay ≥ 30 candidatos.
 - `max_output_tokens = 16384`: el límite incluye los tokens de thinking y, si se agota, la interacción termina con `status: "incomplete"` y salida truncada o vacía, facturando el thinking `[verificado: docs thinking]`. 4096 era insuficiente.
@@ -40,7 +40,7 @@ Nota de coste: en vídeo cada frame cuesta 70 tokens en `low`/`medium` `[verific
 
 ### 5.3 Schema de salida — `selection.json`
 
-Compatible con structured output de Gemini (sin `$schema`, sin `const`, sin `default`, sin `exclusiveMinimum`; `enum` admitido en string, number e integer; `minItems/maxItems`, `minimum/maximum` admitidos `[verificado: docs structured-output]`). `EXERCISES` es la lista canónica de §5.5 más `"other"`, y se inyecta como `enum`, lo que garantiza el valor y elimina un check.
+Compatible con structured output de Gemini (sin `$schema`, sin `const`, sin `default`, sin `exclusiveMinimum`; `enum` admitido en string, number e integer; `minItems/maxItems`, `minimum/maximum` admitidos `[verificado: docs structured-output]`). `exercise` es vocabulario abierto (ver §5.4 punto 4 y `selector/prompts.py:selection_schema`): la lista `EXERCISES` de `selector/_common.py` solo alimenta el desplegable de `tools/label_exercises.py` y la evaluación, no el schema.
 
 ```json
 {
@@ -54,10 +54,11 @@ Compatible con structured output de Gemini (sin `$schema`, sin `const`, sin `def
           "candidate_id": { "type": "string" },
           "role": { "type": "string", "enum": ["hook", "develop", "close"] },
           "rank": { "type": "integer", "minimum": 1, "description": "Calidad dentro de su rol. 1 = mejor. Sin huecos. No es orden temporal." },
-          "exercise": { "type": "string", "enum": ["__EXERCISES__"] },
+          "exercise": { "type": "string", "description": "Nombre corto (2-4 palabras) en inglés del movimiento, terminología estándar de gimnasio/CrossFit. Mismo texto para el mismo movimiento en todo el vídeo. Si no lo reconoces, 'other'." },
+          "exercise_confidence": { "type": "string", "enum": ["alta", "baja"] },
           "reason": { "type": "string", "description": "Máximo 12 palabras." }
         },
-        "required": ["candidate_id", "role", "rank", "exercise", "reason"]
+        "required": ["candidate_id", "role", "rank", "exercise", "exercise_confidence", "reason"]
       }
     },
     "rejected": {
@@ -94,7 +95,7 @@ Tu tarea es juzgar contenido, no calcular tiempos, coordenadas ni orden temporal
    - close: sujeto estable, centrado, final limpio. Prioriza tipo calm o image; si no hay ninguno disponible, usa el candidato peak que se vea más quieto (menos movimiento, pose más estática) y dilo en notes.
    - develop: el resto. Prioriza variedad de ejercicios y planos donde se ve bien la técnica.
 3. Asigna rank dentro de cada rol: 1 = mejor calidad. Sin huecos (1, 2, 3, …). El orden en el montaje lo decide otro sistema.
-4. exercise: usa exactamente un nombre de la lista canónica; si no encaja, "other".
+4. exercise: nombra el movimiento con terminología estándar de gimnasio/CrossFit en inglés (2-4 palabras, p. ej. "back squat"); reutiliza exactamente el mismo texto para el mismo movimiento en todo el vídeo; si no lo reconoces, "other". Acompaña con `exercise_confidence` ("alta"/"baja"). La lista `EXERCISES` solo orienta al etiquetado humano (`tools/label_exercises.py`), no constriñe al modelo.
 5. Si hay menos de 3 candidatos válidos para develop o ninguno para hook o close, explícalo en notes. No inventes candidatos ni fuerces rechazos para cumplir cuotas.
 
 Reglas:
@@ -110,7 +111,8 @@ OBJETIVO: Reel de {duration_s} s. Temática: resumen dinámico de entrenamiento 
 
 SLOTS (N_SLOTS = {n}): 1 hook, {n-2} develop, 1 close.
 
-LISTA CANÓNICA DE EJERCICIOS:
+LISTA DE REFERENCIA DE EJERCICIOS (solo orientativa para el etiquetado humano;
+el modelo usa vocabulario abierto, ver §5.4 punto 4):
 back squat, front squat, overhead squat, deadlift, clean, snatch, jerk, thruster, pull-up, muscle-up, push-up, burpee, box jump, wall ball, kettlebell swing, rowing, bike, ski erg, run, rope climb, handstand, double-under, sled push, sled pull, farmers carry, sandbag lunge, lunge, toes-to-bar, sun salutation, warrior pose, downward dog, balance pose, inversion, backbend, stretch, savasana, other
 
 CANDIDATOS: {n_cand} (ids: {ids}). Los fotogramas de cada uno preceden a este mensaje, etiquetados con su id.
