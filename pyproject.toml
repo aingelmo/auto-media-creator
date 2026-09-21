@@ -68,9 +68,11 @@ ignore = [
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S311", "ANN001", "ANN201", "ANN202", "ANN204", "ANN003", "INP001", "PT006", "PT011", "PT018", "ARG001", "ARG005", "ANN401", "D"]
+"tests/**" = ["S101", "S311", "ANN001", "ANN201", "ANN202", "ANN204", "ANN003", "INP001", "PT006", "PT011", "PT018", "ARG001", "ARG005", "ANN401", "D", "SLF001"]
 "scripts/**" = ["T201", "INP001", "S101", "S311", "E402", "D", "BLE001", "E501"]
+"tools/**" = ["T201", "INP001", "S101", "S311", "E402", "D", "BLE001", "E501", "ANN", "SIM105", "S110", "A"]
 "src/edl_agent/web/**" = ["B008"]  # FastAPI's Form(...)/Depends(...) idiom
 
 [tool.ty.environment]
 python-version = "3.14"
+extra-paths = ["tools"]
