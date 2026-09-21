@@ -428,15 +428,6 @@ def test_sfx_chain_ramp_vs_plain() -> None:
     assert "concat=" not in _sfx_chain(plain_entry)
 
 
-def test_duck_expr_ramps_instead_of_stepping() -> None:
-    from edl_agent.render.concat import _duck_expr
-
-    expr = _duck_expr(1.0, 3.0, 0.15, 0.4)
-    assert "if(lt(t,1.000),1," in expr
-    assert "0.5+0.5*(t-2.600)/0.400" in expr
-    assert "0.5" in expr and "1-0.5*(t-1.000)/0.150" in expr
-
-
 def test_drawtext_escape_survives_both_ffmpeg_parsers() -> None:
     from edl_agent.render._common import _drawtext_escape
 

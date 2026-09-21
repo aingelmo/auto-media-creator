@@ -13,9 +13,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _LOUDNORM_JSON_RE = re.compile(r"\{[^{}]*\"input_i\"[^{}]*\}")
-_DUCK_FADE_IN_S = 0.15
-_DUCK_FADE_OUT_S = 0.4
-_DUCK_LEVEL = 0.5
 
 
 def _parse_loudnorm_json(stderr: str) -> dict:
@@ -24,26 +21,6 @@ def _parse_loudnorm_json(stderr: str) -> dict:
         msg = f"no loudnorm JSON found in ffmpeg output:\n{stderr}"
         raise RenderError(msg)
     return json.loads(match.group(0))
-
-
-def _duck_expr(start_s: float, end_s: float, fade_in: float, fade_out: float) -> str:
-    """`volume=` filter ducking music to `_DUCK_LEVEL`.
-
-    Ramped over `[start_s, end_s]` instead of stepping (#audio glitch fix): a
-    fast `fade_in` down and a slower `fade_out` back up, per standard ducking
-    attack/release practice.
-    """
-    drop = 1 - _DUCK_LEVEL
-    down_ramp = f"1-{drop}*(t-{start_s:.3f})/{fade_in:.3f}"
-    up_ramp = f"{_DUCK_LEVEL}+{drop}*(t-{end_s - fade_out:.3f})/{fade_out:.3f}"
-    return (
-        "volume="
-        f"'if(lt(t,{start_s:.3f}),1,"
-        f"if(lt(t,{start_s + fade_in:.3f}),{down_ramp},"
-        f"if(lt(t,{end_s - fade_out:.3f}),{_DUCK_LEVEL},"
-        f"if(lt(t,{end_s:.3f}),{up_ramp},1))))'"
-        ":eval=frame"
-    )
 
 
 def _sfx_chain(entry: dict) -> str:
@@ -162,19 +139,6 @@ def concat_and_audio(
         f"offset={measured['target_offset']}:print_format=json,"
         f"aresample=48000,aformat=channel_layouts=stereo"
     )
-    # Duck the music under each sfx window so the diegetic sound isn't
-    # masked by the (much louder, broadband) music bed. Fast attack down,
-    # slower release back up, not a hard step, so the level change at the
-    # sfx boundary isn't an audible jump.
-    for entry in sfx:
-        start_s = entry["delay_ms"] / 1000
-        end_s = start_s + entry["dur_s"]
-        fade_in, fade_out = _DUCK_FADE_IN_S, _DUCK_FADE_OUT_S
-        total = fade_in + fade_out
-        if total > entry["dur_s"]:
-            scale = entry["dur_s"] / total
-            fade_in, fade_out = fade_in * scale, fade_out * scale
-        music_chain += "," + _duck_expr(start_s, end_s, fade_in, fade_out)
     sfx_inputs = []
     sfx_labels = []
     graph = f"[1:a]{music_chain}[m];"
