@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 def _make_clip(path: Path, *, w=360, h=640, fps=30, duration=3, audio=False) -> None:
-    vf = f"life=size={w}x{h}:rate={fps}:ratio=0.5:mold=2:death_color=#000000"
+    vf = f"life=size={w}x{h}:rate={fps}:ratio=0.5:mold=2:death_color=#000000:seed=42"
     cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", vf]
     if audio:
         cmd += ["-f", "lavfi", "-i", "sine=frequency=1000"]
