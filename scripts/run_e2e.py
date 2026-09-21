@@ -35,7 +35,7 @@ from edl_agent.slots import slots_from_file
 POSE_MODEL = str(MODELS_DIR / "yolov8n-pose.pt")
 
 DEFAULT_MODELS = {
-    "gemini": "gemini-3.8-flash",
+    "gemini": "gemini-3.7-flash",
     "anthropic": "claude-sonnet-5",
     "deepseek": "deepseek-flash",
     "ollama": "qwen3-vl:8b-instruct",

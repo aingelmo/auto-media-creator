@@ -17,7 +17,11 @@ from edl_agent.paths import SESSIONS_DIR
 from edl_agent.web.jobs import STAGES, JobState
 
 # Providers offered in the UI dropdown, deepseek first so it's the default
-# selection; anthropic/gemini stay usable via PROVIDERS for non-UI callers.
+# selection; anthropic/gemini stay usable via PROVIDERS for non-UI callers
+# (CLI/scripts pass --provider directly). Keep in sync with
+# frontend/src/types.ts `Provider` and `web/pipeline.py:DEFAULT_MODELS`:
+# adding a provider here needs the frontend type widened plus
+# `npm run build` recommitted to `web/static/`.
 UI_PROVIDERS = ("deepseek", "ollama")
 
 # Provider -> env var read by edl_agent.llm.get_client; gemini/ollama use
