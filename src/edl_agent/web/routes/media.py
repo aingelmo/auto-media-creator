@@ -42,7 +42,7 @@ def _scan(subdir: str, exts: set[str]) -> list[dict]:
     seen: set[tuple[str, int]] = set()
     deduped = []
     for e in entries:
-        key = (e["filename"], e["size"])
+        key = (str(e["filename"]), int(e["size"]))
         if key in seen:
             continue
         seen.add(key)
