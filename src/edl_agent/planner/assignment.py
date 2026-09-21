@@ -211,7 +211,9 @@ def select_develop(
     def _slot_options(s: dict) -> int:
         window = tuple(candidates_by_id[s["candidate_id"]]["window"])
         return sum(
-            1 for sl in develop_slots if admits(window, sl["end_f"] - sl["start_f"], 1.0)
+            1
+            for sl in develop_slots
+            if admits(window, sl["end_f"] - sl["start_f"], 1.0)
         )
 
     # Most-constrained-first: a candidate whose window fits few slots must be
