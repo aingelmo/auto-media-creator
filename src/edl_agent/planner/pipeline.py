@@ -167,60 +167,71 @@ def build_clips(
 def _split_end_card(clips: list[dict], config: dict, brand: dict) -> dict | None:
     """Move the last `end_card_frames` of the close clip into an `end_card` clip (#6.8).
 
-    The close keeps >= 30 frames (P9); the card needs >= 15 or it is
-    skipped (returns `None`). Returns the synthetic slot for P1/P6.
+    C0 micro-outro: the card replays the close's own tail frames as a
+    blurred/dimmed background with the logo + handle overlaid, instead of
+    a flat solid canvas. The close keeps >= 30 frames (P9); the card needs
+    >= 15 or it is skipped (returns `None`). Returns the synthetic slot
+    for P1/P6.
     """
     close = clips[-1]
     k = min(config["end_card_frames"], close["n_frames"] - 30)
     if k < 15:
         return None
+    old_out_s = close["out_s"]
     close["n_frames"] -= k
     close["out_s"] = close["in_s"] + close["n_frames"] / FPS  # close is 1.0x
     close["timeline_end_f"] -= k
     start_f = close["timeline_end_f"]
-    # ponytail: the card's "source" is the 1080x1920 canvas, so crop is full-frame
-    # and 9:16 by construction; the logo path in `src` is what the render reads.
+    tail_in_s = old_out_s - k / FPS
+    is_image = close["type"] == "image"
     clips.append(
         {
             "slot": close["slot"] + 1,
             "role": "end_card",
             "candidate_id": "end_card",
-            "src": brand["logo"],
-            "src_sha256": brand["logo_sha256"],
-            "type": "image",
-            "src_w": 1080,
-            "src_h": 1920,
-            "src_rotation": 0,
-            "src_color": {
-                "primaries": "bt709",
-                "trc": "bt709",
-                "space": "bt709",
-                "range": "tv",
-            },
-            "hdr": "none",
-            "in_s": 0.0,
-            "out_s": k / FPS,
+            "src": close["src"],
+            "src_sha256": close["src_sha256"],
+            "type": close["type"],
+            "src_w": close["src_w"],
+            "src_h": close["src_h"],
+            "src_rotation": close.get("src_rotation", 0),
+            "src_color": close.get(
+                "src_color",
+                {
+                    "primaries": "bt709",
+                    "trc": "bt709",
+                    "space": "bt709",
+                    "range": "tv",
+                },
+            ),
+            "hdr": close.get("hdr", "none"),
+            "in_s": 0.0 if is_image else tail_in_s,
+            "out_s": k / FPS if is_image else old_out_s,
             "n_frames": k,
             "speed": 1.0,
             "timeline_start_f": start_f,
             "timeline_end_f": start_f + k,
-            "layout": "crop",
-            "crop": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
-            "crop_px": {"x": 0, "y": 0, "w": 1080, "h": 1920},
+            # ponytail: render ignores these for the card (cover-scale
+            # blur), so inherit the close's proven 9:16 values for P8.
+            "layout": close["layout"],
+            "crop": dict(close["crop"]),
+            "crop_px": dict(close["crop_px"]),
             "subject_cropped": False,
-            "src_fps_nominal": FPS,
+            "src_fps_nominal": close.get("src_fps_nominal", FPS),
             "effect": "end_card",
             "effect_params": {
-                "bg": brand["bg"],
                 "fg": brand["fg"],
                 "font": brand["font"],
                 "handle": brand["handle"],
-                "line": brand["line"],
+                "logo_src": brand["logo"],
                 "logo_w": config["end_card_logo_w"],
                 "logo_h": round(
                     brand["logo_h"] * config["end_card_logo_w"] / brand["logo_w"]
                 ),
                 "text_size": config["end_card_text_size"],
+                "blur_radius": config["blur_radius"],
+                "blur_power": config["blur_power"],
+                "dim": -0.3,
             },
             "warnings": [],
         }

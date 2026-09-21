@@ -241,8 +241,20 @@ LOGO_FILTER_TEMPLATE = (
     "[v0][lg]overlay=W-w-{inset}:H-h-{bottom}:format=auto"
 )
 
-# End card (#6.8): solid `bg` canvas, logo centred above two text lines.
+# End card C0 (#6.8): blurred close-tail background, logo centred in
+# the Reels safe core with the handle below. Input 0 is the tail video
+# (or image loop), input 1 is the logo PNG.
 END_CARD_FILTER_TEMPLATE = (
+    "[0:v]scale={tw}:{th}:force_original_aspect_ratio=increase,"
+    "crop={tw}:{th},boxblur={blur_radius}:{blur_power},"
+    "eq=brightness={dim},setsar=1[bg];"
+    "[1:v]scale={lw}:-1:flags=lanczos[lg];"
+    "[bg][lg]overlay=(W-w)/2:(H-h)/2-{lift}[v1];"
+    "[v1]{handle}fade=t=in:st=0:d=0.25,setsar=1,format=yuv420p[v]"
+)
+# Legacy end card (pre-C0): solid `bg` canvas, logo centred above two
+# text lines. Kept so old EDLs without `logo_src` still render.
+END_CARD_LEGACY_FILTER_TEMPLATE = (
     "[1:v]scale={lw}:-1:flags=lanczos[lg];"
     "[0:v][lg]overlay=(W-w)/2:(H-h)/2-{lift}[v1];"
     "[v1]{handle}{line}fade=t=in:st=0:d=0.25,setsar=1,format=yuv420p[v]"
@@ -272,7 +284,30 @@ def finish_graph(chain: str, logo: dict | None, target: dict) -> str:
 
 
 def end_card_graph(params: dict, target: dict) -> str:
-    """`-filter_complex` graph for an `end_card` clip (input 0 canvas, input 1 logo)."""
+    """Build the `-filter_complex` graph for an `end_card` clip (#6.8).
+
+    C0 micro-outro: input 0 is the close tail (video chunk or image
+    loop), input 1 is the logo PNG. The tail is cover-scaled to the
+    target, blurred and dimmed, then the logo + handle are centred in
+    the Reels safe core. Legacy EDLs without `logo_src` (flat `bg`
+    canvas as input 0) use the legacy solid-canvas graph instead.
+
+    Args:
+        params: `clip["effect_params"]`. C0 keys: `fg` (hex text
+            color), `font` (drawtext fontfile path), `handle`
+            (e.g. `@move360salamanca`, may be `""`), `logo_w`/`logo_h`
+            (px at 1080 wide), `text_size` (px at 1080 wide),
+            `blur_radius`/`blur_power` (boxblur, at 1080 wide),
+            `dim` (eq brightness, e.g. `-0.3`). Legacy keys: `bg`,
+            `fg`, `font`, `handle`, `line`, `logo_w`, `text_size`.
+        target: Render target `{"w", "h"}` (`FINAL_TARGET` 1080x1920
+            or `PREVIEW_TARGET` 540x960); all px sizes scale from 1080
+            wide.
+
+    Returns:
+        Filtergraph string ending in `[v]`, with a 0.25s fade-in and
+        no exit fade (hard cut back to the loop).
+    """
     scale = target["w"] / 1080
     ts = round(params["text_size"] * scale)
     lh = round(params["logo_h"] * scale)
@@ -290,11 +325,27 @@ def end_card_graph(params: dict, target: dict) -> str:
             y=y,
         )
 
+    handle = text("handle", ts, params["fg"], y0)
+    if "logo_src" not in params:
+        return END_CARD_LEGACY_FILTER_TEMPLATE.format(
+            lw=round(params["logo_w"] * scale),
+            lift=lift,
+            handle=handle,
+            line=text(
+                "line",
+                round(ts * 0.7),
+                f"{params['fg']}@0.8",
+                f"{y0}+{round(ts * 1.4)}",
+            ),
+        )
+    blur_radius = max(2, round(params.get("blur_radius", 20) * scale))
     return END_CARD_FILTER_TEMPLATE.format(
+        tw=target["w"],
+        th=target["h"],
+        blur_radius=blur_radius,
+        blur_power=params.get("blur_power", 2),
+        dim=params.get("dim", -0.3),
         lw=round(params["logo_w"] * scale),
         lift=lift,
-        handle=text("handle", ts, params["fg"], y0),
-        line=text(
-            "line", round(ts * 0.7), f"{params['fg']}@0.8", f"{y0}+{round(ts * 1.4)}"
-        ),
+        handle=handle,
     )

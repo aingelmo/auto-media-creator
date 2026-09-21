@@ -242,7 +242,7 @@ _BRAND = {
 
 @pytest.mark.parametrize(
     ("close_f", "expect_card"),
-    [(60, 30), (90, 45), (40, None)],
+    [(60, 24), (90, 24), (40, None)],
 )
 def test_end_card_splits_close_slot(close_f, expect_card) -> None:
     slots, selected, candidates_by_id, sources_by_src = _build_scenario(
@@ -261,7 +261,14 @@ def test_end_card_splits_close_slot(close_f, expect_card) -> None:
     assert card["role"] == "end_card" and card["n_frames"] == expect_card
     assert close["n_frames"] == close_f - expect_card
     assert card["timeline_start_f"] == close["timeline_end_f"]
-    assert card["effect_params"]["logo_h"] == 192  # 480 * 80 / 200
+    assert card["effect_params"]["logo_h"] == 144  # 360 * 80 / 200
+    # C0: the card replays the close tail, logo comes via effect_params.
+    assert card["src"] == close["src"] and card["type"] == close["type"]
+    assert card["out_s"] == pytest.approx(close["out_s"] + expect_card / FPS)
+    assert card["in_s"] == pytest.approx(close["out_s"])
+    assert card["effect_params"]["logo_src"] == _BRAND["logo"]
+    assert card["effect_params"]["handle"] == _BRAND["handle"]
+    assert "line" not in card["effect_params"]
 
 
 @pytest.mark.parametrize(("aspect_name", "w", "h"), ASPECTS)

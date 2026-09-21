@@ -104,7 +104,7 @@
             "required": ["x", "y", "w", "h"]
           },
           "effect": { "type": "string", "enum": ["none", "kenburns", "ramp", "end_card"] },
-          "effect_params": { "type": "object", "description": "Con clave `text` (+ font, font_size, text_y, text_frames, fade_frames) el render sobreimprime el hook_line del selector (§6.6). Con `punch_frames`/`punch_zoom` (develop) o `flash_frame`/`flash_frames` (hook) el render aplica el punch-in o el flash blanco del corte (§6.6). Para `end_card`: bg, fg, font, handle, line, logo_w, logo_h, text_size (§6.8)" },
+          "effect_params": { "type": "object", "description": "Con clave `text` (+ font, font_size, text_y, text_frames, fade_frames) el render sobreimprime el hook_line del selector (§6.6). Con `punch_frames`/`punch_zoom` (develop) o `flash_frame`/`flash_frames` (hook) el render aplica el punch-in o el flash blanco del corte (§6.6). Para `end_card` C0: fg, font, handle, logo_src, logo_w, logo_h, text_size, blur_radius, blur_power, dim (§6.8)" },
           "color_fix": {
             "type": "object",
             "description": "Opcional (§6.7). Ausente => sin igualación de color, render idéntico a v4 previo",

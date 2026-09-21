@@ -217,19 +217,20 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
             },
             {
                 **_clip(
-                    2, "end_card", "brand/logo.png", 1080, 1920, 0, 0.5, 15, 1.0, 75, 90
+                    2, "end_card", "inputs/b.mp4", 360, 640, 1.0, 1.5, 15, 1.0, 75, 90
                 ),
-                "type": "image",
                 "effect": "end_card",
                 "effect_params": {
-                    "bg": "#111111",
                     "fg": "#FFFFFF",
                     "font": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                     "handle": "@gym",
-                    "line": "C/ Toro 12 · Salamanca",
-                    "logo_w": 480,
-                    "logo_h": 192,
-                    "text_size": 48,
+                    "logo_src": "brand/logo.png",
+                    "logo_w": 360,
+                    "logo_h": 144,
+                    "text_size": 64,
+                    "blur_radius": 20,
+                    "blur_power": 2,
+                    "dim": -0.3,
                 },
             },
         ],
@@ -302,8 +303,11 @@ def test_render_e2e_hook_slowmo_and_deterministic_rerender(session_dir) -> None:
 
     r, g, b = _pixel("seg_01", 1080 - 48 - 80, 1920 - 340 - 32)
     assert r > g + 40 and r > b + 40
-    r, g, b = _pixel("seg_02", 20, 20)
-    assert max(r, g, b) < 40
+    # C0 card: blurred tail background with the red logo centred; the
+    # logo interior (540, 860 falls inside the 360x144 overlay) is
+    # red-tinted once the 0.25s fade-in has completed (frame 10).
+    r, g, b = _pixel("seg_02", 540, 860, frame=10)
+    assert r > g + 40 and r > b + 40
 
     # Hook flash: frame 9 (peak beat) of seg_00 is white, decaying by frame 10.
     r, g, b = _pixel("seg_00", 180, 320, frame=9)

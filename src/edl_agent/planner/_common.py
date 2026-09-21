@@ -46,9 +46,9 @@ DEFAULT_CONFIG = {
     "logo_inset_x": 48,
     "logo_bottom_frac": 0.177,  # offset as fraction of height (clears Reels UI)
     "end_card": True,  # #6.8: brand card taking the last frames of the close slot
-    "end_card_frames": 45,
-    "end_card_logo_w": 480,
-    "end_card_text_size": 48,
+    "end_card_frames": 24,  # C0 micro-outro: 0.8s loop-friendly sign-off
+    "end_card_logo_w": 360,  # px at 1080 wide (smaller than the old 480)
+    "end_card_text_size": 64,  # px at 1080 wide (handle hero, no fine print)
     "punch_in": False,  # #6.6: punch_zoom->1.0 over punch_frames on develop cut
     # off by default; enabled from the render-stage preview pause once the
     # operator has watched the low-res reel

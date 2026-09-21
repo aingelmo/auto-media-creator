@@ -37,8 +37,10 @@ def assert_invariants(
         raise PlannerError(msg)
 
     for c in clips:
-        if c["type"] != "image":
-            # P3
+        if c["type"] != "image" and c["role"] != "end_card":
+            # P3 (skipped for the end card: its tail inherits the
+            # close's window by construction, and its synthetic
+            # `candidate_id` has no entry in `candidates_by_id`)
             window = candidates_by_id[c["candidate_id"]]["window"]
             if not (window[0] - 1e-6 <= c["in_s"] and c["out_s"] <= window[1] + 1e-6):
                 msg = f"P3: in_s/out_s outside window in slot {c['slot']}"
@@ -107,10 +109,12 @@ def assert_invariants(
         msg = "P6: sum(n_frames) != duration_f"
         raise PlannerError(msg)
 
-    # P7: no overlaps of the same source (0.25s margin)
+    # P7: no overlaps of the same source (0.25s margin). The end card
+    # replays the close's own tail frames contiguously by design, so it
+    # is exempt here.
     by_src: dict[str, list[dict]] = {}
     for c in clips:
-        if c["type"] != "image":
+        if c["type"] != "image" and c["role"] != "end_card":
             by_src.setdefault(c["src"], []).append(c)
     for segs in by_src.values():
         ordered = sorted(segs, key=lambda c: c["in_s"])
