@@ -79,25 +79,53 @@ stays alive holding YOLO weights; those stages add little themselves.
 5. **`.env` is not auto-loaded**: `DEEPSEEK_API_KEY` must be exported
    (`set -a; source .env`) or selection/hooks fail.
 
-## Cloud verdict (free-tier only, Sept 2026)
+## Cloud verdict (free-tier only, re-validated Sept 2026)
 
 Peak RSS ~4.6 GB and ~13 min wall on 8 cores rule out the strict free
-tiers for the full pipeline as-is:
+tiers for the full pipeline as-is. The P0 torch-free does not change
+this: measured 2026-09-22 it reclaims ~20 MB of ~1.5 GB in-process, so
+the 4.6 GB peak stands (see `docs/light-device-optimizations.md`,
+"Measured correction"). Size every option below against 4.6 GB.
 
-- **Render free (512 MB, shared CPU, sleeps):** no — 9x over RAM.
-- **Fly.io / Railway:** no permanent free tier left (trial credit only).
-- **Hugging Face CPU Basic (2 vCPU / 16 GB):** RAM fits, but job length
-  and request timeouts make a 13+ min synchronous run impractical; also
-  by residency, not a backend.
-- **Oracle Always Free (2 OCPU / 12 GB ARM, mid-2026 limits):** the only
-  free shape that fits RAM. Caveats: ARM (torch/ffmpeg fine, verify
-  `yolov8n` weights load), 2 vCPU → ~2-3.5x slower (~30-40 min),
-  200 GB disk is plenty, GPU-less CPU YOLO assumed.
+- **Oracle Always Free A1 (2 OCPU / 12 GB ARM, 200 GB disk): the best
+  free option.** The only perpetual free VM fitting the measured peak
+  with headroom; disk is plenty (~1 GB/session). Confirmed in Oracle's
+  current Always Free docs — but note the June-2026 halving (was
+  4 OCPU / 24 GB, cut without notice; enforcement still inconsistent,
+  so audit the tenancy and set budget alerts). Ranked risks: (1) no A1
+  capacity in-region (known failure mode — have a fallback before
+  building ARM-only artifacts); (2) account approval friction;
+  (3) ARM build work: weights are arch-independent (non-issue), the
+  real work is a custom ffmpeg (stock Oracle Linux builds lack
+  libass/zscale for `render/_common.py` hook text and the
+  `ingest/proxy.py` tonemap) plus `OMP_NUM_THREADS=2` /
+  `TORCH_NUM_THREADS=2` caps (`--threads` does not cap YOLO's torch
+  threads — candidates burns ~430-485% mean with `--threads 4`).
+  Expect ~30-60 min wall on 2 vCPU, not ~30-40. Run batch over SSH
+  (`scripts/run_e2e.py --no-preview`); keep the web UI local.
+- **Hugging Face CPU Basic (2 vCPU / 16 GB / 50 GB ephemeral disk,
+  sleeps after 48 h idle):** RAM fits and a Docker image carries the
+  custom ffmpeg + torch — best free *endpoint* for UI/preview or short
+  jobs, not the batch worker. Caveats: disk is ephemeral (persist
+  sessions to the Hub), outbound restricted to 80/443/8080 (DeepSeek
+  API is 443, fine), 2 vCPU is slow, and current docs say compute
+  Spaces require a paid plan — verify before relying on it.
+- **GitHub Codespaces (120 core-h/mo = 60 h 2-core / 30 h 4-core /
+  15 h 8-core, 15 GB storage):** best free *burst compute*. An 8-core
+  machine (~16 GB) matches the profiled host → ~13 min/run → ~60
+  reels/month free. Not a server (30-min idle stop, monthly quota).
+- **Kaggle (CPU uncapped weekly, 12 h sessions, background commit
+  runs) / Colab free (12-13 GB RAM, ≤12 h wall, ~90-min idle kill,
+  dynamic quota):** last-resort batch runners. Kaggle CPU is the more
+  predictable of the two. Notebook-shaped, ephemeral disk, no serving.
+- **Disqualified:** AWS/GCP/Azure free (1 GB micros — ingest alone
+  peaks at 1.3 GB), Render free (512 MB, 9x over), Fly.io / Railway
+  (no permanent free tier, trial credit only).
 
-Realistic options: split the pipeline (ingest+candidates as an async
-batch job on Oracle/cheap CPU VM, serve selection/preview from a small
-web instance), or keep render local and deploy only the web UI + LLM
-stages.
+Realistic options: batch worker on Oracle via CLI (or Codespaces
+quota / Kaggle CPU when Oracle has no capacity), UI local (or an HF
+Space as public preview endpoint). Cheapest paid fallback per run:
+HF CPU Upgrade 8 vCPU / 32 GB at $0.03/h ≈ ~$0.01/reel.
 
 ## Optimization ideas (from the breakdown)
 
