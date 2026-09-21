@@ -27,7 +27,7 @@ SESSIONS_DIR = ROOT / "var" / "sessions"
 GROUND_TRUTH_PATH = ROOT / "var" / "exercise_ground_truth.json"
 
 sys.path.insert(0, str(ROOT / "src"))
-from edl_agent.selector._common import EXERCISES  # noqa: E402
+from edl_agent.selector._common import EXERCISES
 
 
 def build_session_summary(session_dir: Path) -> dict | None:
@@ -248,13 +248,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_error(404)
 
-    def log_message(self, fmt, *args):
+    def log_message(self, format: str, *args: object) -> None:
         pass  # ponytail: quiet by default, uncomment for debugging
-
-    def handle_error(self, request, client_address):
-        exc = sys.exc_info()[1]
-        if not isinstance(exc, (BrokenPipeError, ConnectionResetError)):
-            super().handle_error(request, client_address)
 
 
 def main():

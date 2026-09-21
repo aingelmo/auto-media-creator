@@ -38,7 +38,7 @@ VERDICTS_PATH = ROOT / "var" / "exercise_openvocab_verdicts.json"
 RUNS_PATH = ROOT / "var" / "exercise_eval_runs.json"
 
 sys.path.insert(0, str(ROOT / "tools"))
-from validate_exercise_labels import predict_session  # noqa: E402
+from validate_exercise_labels import predict_session
 
 
 def ground_truth() -> dict[str, dict[str, str]]:

@@ -13,7 +13,6 @@ writes ratings to var/prompt_calibration_ratings.json.
 from __future__ import annotations
 
 import json
-import sys
 import webbrowser
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -286,15 +285,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_error(404)
 
-    def log_message(self, fmt, *args):
+    def log_message(self, format: str, *args: object) -> None:
         pass  # ponytail: quiet by default, uncomment for debugging
-
-    def handle_error(self, request, client_address):
-        # ponytail: browsers abort in-flight video fetches (seek/reload)
-        # constantly -- that's normal, not worth a traceback per occurrence.
-        exc = sys.exc_info()[1]
-        if not isinstance(exc, (BrokenPipeError, ConnectionResetError)):
-            super().handle_error(request, client_address)
 
 
 def main():

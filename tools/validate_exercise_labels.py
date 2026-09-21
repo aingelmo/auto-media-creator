@@ -36,10 +36,10 @@ sys.path.insert(0, str(ROOT / "src"))
 # cwd expectation (see tools/eval_exercises.py, same idiom).
 os.chdir(ROOT / "var")
 
-from edl_agent.candidates._common import FPS  # noqa: E402
-from edl_agent.llm import get_client  # noqa: E402
-from edl_agent.selector import select  # noqa: E402
-from edl_agent.web.pipeline import DEFAULT_MODELS  # noqa: E402
+from edl_agent.candidates._common import FPS
+from edl_agent.llm import get_client
+from edl_agent.selector import select
+from edl_agent.web.pipeline import DEFAULT_MODELS
 
 MODEL_TO_PROVIDER = {v: k for k, v in DEFAULT_MODELS.items()}
 THEME = "training"
@@ -266,13 +266,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_error(404)
 
-    def log_message(self, fmt, *args):
+    def log_message(self, format: str, *args: object) -> None:
         pass  # ponytail: quiet by default, uncomment for debugging
-
-    def handle_error(self, request, client_address):
-        exc = sys.exc_info()[1]
-        if not isinstance(exc, (BrokenPipeError, ConnectionResetError)):
-            super().handle_error(request, client_address)
 
 
 def main() -> None:
