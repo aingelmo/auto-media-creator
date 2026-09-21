@@ -129,7 +129,7 @@ export default function Session() {
       )}
 
       {job && job.awaiting_confirmation && job.pause_kind === "hook_choice" && (
-        <HookPicker name={name} hooks={job.hooks} hookSlot={job.hook_slot} onDone={refresh} />
+        <HookPicker name={name} hookSlot={job.hook_slot} onDone={refresh} />
       )}
 
       {job && job.awaiting_confirmation && job.pause_kind === "effects_preview" && (

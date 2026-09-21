@@ -111,14 +111,14 @@ class JobState:
             during an `"effects_preview"` pause) to rebuild the EDL with the
             new `hook_flash`/`punch_in` values and preview again, instead of
             proceeding to the full-resolution render.
-        more_hooks: `True` (set via `/sessions/{name}/confirm`) to
-            generate a fresh batch of 3 lines instead of proceeding to the
-            final render.
+        more_hooks: Deprecated, always `False`. The web `hooks` stage no
+            longer calls the hook-copy LLM (manual line or none only);
+            kept so old in-memory jobs and tests still construct.
         check_results_b: Stringified `run_render_checks` results for
             variant B, once the `checks` stage completes with a B variant.
         detail: Human-readable sub-step text for whichever stage is
-            currently `"running"` (e.g. "calling deepseek for hook line"),
-            cleared back to `""` each time a stage starts or finishes.
+            currently `"running"`, cleared back to `""` each time a
+            stage starts or finishes.
         music_candidates: Candidate music cuts (`{"offset_s", "path", "score"}`)
             accumulated so far during a `"music_choice"` pause; grows across
             "generate more" rounds instead of being replaced.

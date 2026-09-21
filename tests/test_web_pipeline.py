@@ -408,9 +408,13 @@ def _run_job_to_hook_choice(
     assert not thread.is_alive()
     assert job.error is None
     assert job.done
-    # run_planner builds a hookless preview EDL before run_hooks is called,
-    # so hook-copy generation reads the final, ordered clip list (#5.7).
-    assert call_order[:2] == ["planner", "hooks"]
+    # run_planner builds a hookless preview EDL before the manual-only
+    # hooks stage; with no override the web path never calls run_hooks.
+    assert call_order[0] == "planner"
+    if hook_line_override:
+        assert call_order[:2] == ["planner", "hooks"]
+    else:
+        assert "hooks" not in call_order
     return (
         job,
         render_segments_mock,
@@ -457,16 +461,36 @@ def test_job_hook_line_override_is_passed_to_run_hooks(tmp_path) -> None:
 
 def test_job_brief_and_audience_are_passed_to_run_hooks(tmp_path) -> None:
     _job, _rsm, hooks_calls, _pc, _hp = _run_job_to_hook_choice(
-        tmp_path, "", brief="Clase de Hyrox del jueves", audience="members"
+        tmp_path,
+        "",
+        hook_line_override="Del operador",
+        brief="Clase de Hyrox del jueves",
+        audience="members",
     )
 
     assert hooks_calls == [
         {
-            "hook_line_override": "",
+            "hook_line_override": "Del operador",
             "brief": "Clase de Hyrox del jueves",
             "audience": "members",
         }
     ]
+
+
+def test_manual_hooks_stage_writes_zero_cost_hooks_json(tmp_path) -> None:
+    import json as _json
+
+    _job, _rsm, hooks_calls, _pc, _hp = _run_job_to_hook_choice(
+        tmp_path, "", brief="Clase de Hyrox del jueves", audience="members"
+    )
+
+    assert hooks_calls == []
+    on_disk = _json.loads((tmp_path / "hooks.json").read_text())
+    assert on_disk["hooks"] == []
+    assert on_disk["source"] == "manual"
+    assert on_disk["cost_usd"] == 0.0
+    assert on_disk["brief"] == "Clase de Hyrox del jueves"
+    assert on_disk["audience"] == "members"
 
 
 def test_job_hook_flash_is_passed_to_run_planner(tmp_path) -> None:
@@ -477,17 +501,13 @@ def test_job_hook_flash_is_passed_to_run_planner(tmp_path) -> None:
     assert planner_calls[-1]["config"]["hook_flash"] is False
 
 
-def test_render_hook_previews_receives_all_three_hook_lines(tmp_path) -> None:
+def test_render_hook_previews_receives_no_llm_lines(tmp_path) -> None:
     _job, _rsm, _hooks_calls, _pc, render_hook_previews_mock = _run_job_to_hook_choice(
         tmp_path, ""
     )
 
     lines = render_hook_previews_mock.call_args_list[0].args[3]
-    assert lines == [
-        "el jueves de hyrox",
-        "la barra despega del suelo",
-        "cinco estaciones seguidas",
-    ]
+    assert lines == []
 
 
 def test_clear_stage_artifacts_from_selection_keeps_earlier_stages_and_backs_up_reel(

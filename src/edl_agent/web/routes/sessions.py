@@ -370,14 +370,14 @@ def session_confirm(
     `"low_candidates"` pause, `shorten=True` re-cuts the music to the
     suggested shorter duration instead of keeping the original one. For a
     `"hook_choice"` pause, `hook_custom` (if non-empty) wins over the
-    selected `hook_line` radio value, `hook_line_b` (idea #7) picks the
-    hook line for a second variant reel (`""` = no variant B), and
-    `more=True` regenerates a fresh batch of 3 lines instead of proceeding
-    to the final render. For an `"effects_preview"` pause, `hook_flash`
-    toggles the hook's white flash, `punch_in` toggles the develop-clip
-    punch-in zoom, and `effects_preview_again=True` rebuilds the EDL and
-    re-renders the preview instead of proceeding to the full-resolution
-    render.
+    selected `hook_line` radio value and `hook_line_b` (idea #7) picks the
+    hook line for a second variant reel (`""` = no variant B); both are
+    manual text or none, since the web `hooks` stage never calls the
+    hook-copy LLM (`more` is ignored there). For an `"effects_preview"`
+    pause, `hook_flash` toggles the hook's white flash, `punch_in` toggles
+    the develop-clip punch-in zoom, and `effects_preview_again=True`
+    rebuilds the EDL and re-renders the preview instead of proceeding to
+    the full-resolution render.
     """
     job = jobs.get(name)
     if job is None or not job.awaiting_confirmation:
@@ -388,8 +388,10 @@ def session_confirm(
     if job.pause_kind == "hook_choice":
         job.hook_choice = hook_custom.strip() or hook_line
         job.hook_choice_b = hook_line_b
+        job.more_hooks = False
+    else:
+        job.more_hooks = more
     job.hook_flash = hook_flash
-    job.more_hooks = more
     job.music_choice_offset = music_offset
     job.punch_in = punch_in
     job.effects_preview_again = effects_preview_again
