@@ -53,8 +53,9 @@ sin seguir hacia arriba = fase de clean/deadlift, no un ejercicio propio.
    - sentadilla que baja hasta tocar o sentarse brevemente en un cajón/banco \
 = box squat, no lunge ni back squat (mira las dos piernas doblando por igual, \
 sin dar un paso).
-{known_confusions}5. exercise_confidence: "alta" si la secuencia de fotogramas deja claro qué \
-movimiento es (o que no lo reconoces, "other"); "baja" si dudas entre dos o \
+{known_confusions}5. exercise_confidence: "alta" si la secuencia de \
+fotogramas deja claro qué movimiento es (o que no lo reconoces, "other"); \
+"baja" si dudas entre dos o \
 el encuadre/fotogramas no bastan para decidir. Ante la duda, usa "other" + \
 "baja" en vez de forzar un nombre concreto: un nombre equivocado es peor \
 que ninguno.
