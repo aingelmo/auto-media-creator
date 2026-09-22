@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api, fileUrl, reelUrl } from "../api";
 import MusicPicker from "../components/MusicPicker";
 import StageRail from "../components/StageRail";
@@ -15,6 +15,7 @@ export default function Studio() {
   const [punch, setPunch] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
@@ -29,6 +30,16 @@ export default function Studio() {
       setTimeline(await api.getTimeline(name));
     } catch {
       setTimeline(null);
+    }
+    try {
+      const payload = await api.getCandidates(name);
+      const map: Record<string, string> = {};
+      for (const c of payload.candidates) {
+        if (c.peak_urls.length > 0) map[c.id] = c.peak_urls[0];
+      }
+      setThumbs(map);
+    } catch {
+      setThumbs({});
     }
     return detail;
   }, [name]);
@@ -81,26 +92,10 @@ export default function Studio() {
   const musicGate = job?.awaiting_confirmation && job.pause_kind === "music_choice";
   const running = job && !job.done && !job.error && !job.awaiting_confirmation;
 
-  async function handleSwap(a: number, b: number) {
-    if (!timeline) return;
+  async function handleReorder(order: number[]) {
     setBusy(true);
     setError(null);
     try {
-      const orderedSlots = timeline.clips
-        .filter((c) => c.role === "develop")
-        .toSorted((x, y) => x.slot - y.slot)
-        .map((c) => c.slot);
-      const bySlot = new Map(timeline.clips.map((c) => [c.slot, c.candidate_id]));
-      const footage = orderedSlots.map((s) => bySlot.get(s));
-      const ia = orderedSlots.indexOf(a);
-      const ib = orderedSlots.indexOf(b);
-      [footage[ia], footage[ib]] = [footage[ib], footage[ia]];
-      const idToSlot = new Map(
-        timeline.clips
-          .filter((c) => c.role === "develop")
-          .map((c) => [c.candidate_id, c.slot] as const),
-      );
-      const order = footage.map((id) => idToSlot.get(id ?? "") ?? 0);
       setTimeline(await api.reorderDevelops(name, order));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Swap failed.");
@@ -141,6 +136,11 @@ export default function Studio() {
       <h2>
         {name} <span className="cost-badge">${session.total_cost_usd.toFixed(4)}</span>
       </h2>
+      <p className="field-hint">
+        <Link to={`/sessions/${encodeURIComponent(name)}`}>← Back to session</Link>
+        {" — swaps and saves apply instantly; to render, go back and Regenerate from "}
+        <em>render</em>.
+      </p>
       {error && (
         <p className="status-failed" role="alert">
           {error}
@@ -165,22 +165,22 @@ export default function Studio() {
         <MusicPicker name={name} candidates={job.music_candidates} onDone={refresh} />
       )}
       <div className="studio-grid">
-        <section aria-label="Preview">
+        <section className="studio-main" aria-label="Preview">
           <h3>Preview</h3>
           {session.reel_exists ? (
-            <video className="reel-player" controls src={reelUrl(name)} />
+            <video className="reel-player studio-preview-video" controls src={reelUrl(name)} />
           ) : previewSrc ? (
-            <video className="reel-player" controls src={previewSrc} aria-label="Draft preview" />
+            <video
+              className="reel-player studio-preview-video"
+              controls
+              src={previewSrc}
+              aria-label="Draft preview"
+            />
           ) : (
             <p>{running ? "Rendering preview…" : "Preview appears here."}</p>
           )}
-          {timeline ? (
-            <TimelineStrip clips={timeline.clips} disabled={busy} onSwap={handleSwap} />
-          ) : (
-            <p>Timeline appears once planning finishes.</p>
-          )}
         </section>
-        <section aria-label="Refine">
+        <section className="studio-side" aria-label="Refine">
           <h3>Refine</h3>
           <label>
             Hook text (manual, empty = none)
@@ -211,6 +211,19 @@ export default function Studio() {
           </p>
         </section>
       </div>
+      <section aria-label="Timeline">
+        <h3>Timeline</h3>
+        {timeline ? (
+          <TimelineStrip
+            clips={timeline.clips}
+            thumbUrls={thumbs}
+            disabled={busy}
+            onReorder={handleReorder}
+          />
+        ) : (
+          <p>Timeline appears once planning finishes.</p>
+        )}
+      </section>
       {running && <p className="status-running">Running&hellip;</p>}
       {job?.error && <pre>{job.error}</pre>}
     </div>
