@@ -21,7 +21,7 @@ from edl_agent.web.jobs import STAGES, JobState
 # (CLI/scripts pass --provider directly). Keep in sync with
 # frontend/src/types.ts `Provider` and `web/pipeline.py:DEFAULT_MODELS`:
 # adding a provider here needs the frontend type widened plus
-# `npm run build` recommitted to `web/static/`.
+# `npm run build` refreshed into `web/static/` (gitignored).
 UI_PROVIDERS = ("deepseek", "ollama")
 
 # Provider -> env var read by edl_agent.llm.get_client; gemini/ollama use

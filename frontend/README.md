@@ -8,7 +8,7 @@ dev workflow.
 ```
 npm install
 npm run dev      # Vite dev server with HMR, proxies /api and /sessions to :8000
-npm run build    # writes to ../src/edl_agent/web/static/ (committed to git)
+npm run build    # writes to ../src/edl_agent/web/static/ (gitignored)
 npm run lint     # oxlint
 npm run format   # oxfmt (--check for CI, no rewrite)
 ```

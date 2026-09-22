@@ -39,8 +39,8 @@ inspect render checks. Runtime data (sessions, feature cache, downloaded
 models) lives under `var/` (overridable via `EDL_AGENT_VAR`). LLM keys come
 from the environment (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`,
 `DEEPSEEK_API_KEY`); `ollama` uses a local Ollama server instead. Frontend
-source lives in `frontend/`; the served SPA is the prebuilt bundle committed
-under `src/edl_agent/web/static/`.
+source lives in `frontend/`; the served SPA is the prebuilt bundle built
+into `src/edl_agent/web/static/` (gitignored).
 
 ## Capabilities and Constraints
 

@@ -18,8 +18,8 @@ code map 1:1 to file prefixes, e.g. `#4.3` → `docs/architecture/04-features.md
 - Web UI: `uv run scripts/run_web.py [--host HOST] [--port PORT]` (defaults
   to `127.0.0.1:8000`); open the printed URL in a browser to upload media
   and run sessions without the CLI. This needs no node/npm — it serves the
-  React/TS SPA already built into `src/edl_agent/web/static/` (committed to
-  git). `src/edl_agent/web/app.py` mounts thin per-resource routers
+  React/TS SPA already built into `src/edl_agent/web/static/` (gitignored
+  build output). `src/edl_agent/web/app.py` mounts thin per-resource routers
   (`src/edl_agent/web/routes/`) over `src/edl_agent/web/pipeline.py`, which
   orchestrates the per-stage modules in `src/edl_agent/web/stages/` and
   stays framework-agnostic. Frontend source lives in `frontend/` (see
