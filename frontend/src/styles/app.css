@@ -23,6 +23,8 @@ body {
 
 a {
   color: var(--signal);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
 }
 
 a:focus-visible,
@@ -32,6 +34,36 @@ select:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--signal);
   outline-offset: 2px;
+}
+
+::selection {
+  background: var(--signal-dim);
+  color: var(--ink);
+}
+
+input,
+select,
+textarea {
+  caret-color: var(--signal);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 h1,
@@ -329,15 +361,18 @@ button.primary {
 
 .warning {
   border: 1px solid var(--rule);
-  border-left: 3px solid var(--signal);
   background: var(--panel);
   padding: var(--space-4);
   margin-bottom: var(--space-4);
   border-radius: 4px;
 }
 
-.warning.is-error {
-  border-left-color: var(--fail);
+.warning > p:first-child strong {
+  color: var(--signal);
+}
+
+.warning.is-error > p:first-child strong {
+  color: var(--fail);
 }
 
 /* Contact sheet: hook/music preview grids and candidate peak frames. */
@@ -564,6 +599,13 @@ button.primary {
   font-size: 0.6em;
   font-weight: normal;
   color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.stage-detail,
+.media-list,
+.cost-badge {
+  font-variant-numeric: tabular-nums;
 }
 
 .link-button {
@@ -573,6 +615,8 @@ button.primary {
   font: inherit;
   color: var(--signal);
   text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
   cursor: pointer;
 }
 
@@ -585,6 +629,7 @@ button.primary {
   background: var(--panel);
   border: 1px solid var(--rule);
   color: var(--ink);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.5);
 }
 
 /* Sized to its content (video + controls) instead of the fixed stage-modal
@@ -599,16 +644,52 @@ button.primary {
   background: rgb(0 0 0 / 0.6);
 }
 
-.stage-modal-close {
-  position: sticky;
-  top: 0;
-  float: right;
-  background: none;
-  border: none;
-  color: var(--ink-dim);
-  font-size: var(--text-xl);
-  line-height: 1;
-  cursor: pointer;
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+}
+
+.icon-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Inline stage inspector: replaces the former stage-view modal so the
+   rail, reel, and regenerate form stay visible alongside the tables. */
+.stage-detail-panel {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: var(--space-4) var(--space-6) var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.stage-detail-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.stage-detail-panel-header h3 {
+  margin: 0;
+  color: var(--ink);
+  text-transform: capitalize;
+}
+
+/* Inline library picker panel: replaces the former clips/music modals
+   so the surrounding session-name field stays visible while picking. */
+.library-panel {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  margin-top: var(--space-3);
 }
 
 /* Wizard step header for the new-session form. */

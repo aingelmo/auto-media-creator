@@ -4,7 +4,6 @@ import { api, fileUrl, reelUrl } from "../api";
 import EffectsPreview from "../components/EffectsPreview";
 import HookPicker from "../components/HookPicker";
 import LowCandidatesPause from "../components/LowCandidatesPause";
-import Modal from "../components/Modal";
 import MusicPicker from "../components/MusicPicker";
 import RegenerateForm from "../components/RegenerateForm";
 import RegenHistory from "../components/RegenHistory";
@@ -106,9 +105,27 @@ export default function Session() {
         (() => {
           const StageView = STAGE_VIEWS[viewStage];
           return (
-            <Modal open onClose={() => setViewStage(null)}>
+            <section className="stage-detail-panel" aria-label={`${viewStage} details`}>
+              <div className="stage-detail-panel-header">
+                <h3>{viewStage}</h3>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`Close ${viewStage} details`}
+                  onClick={() => setViewStage(null)}
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path
+                      d="M2 2l12 12M14 2L2 14"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              </div>
               <StageView />
-            </Modal>
+            </section>
           );
         })()}
 

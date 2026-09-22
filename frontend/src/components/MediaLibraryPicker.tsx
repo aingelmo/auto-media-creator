@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fileUrl } from "../api";
 import type { MediaEntry } from "../types";
-import Modal from "./Modal";
 
 function formatKb(bytes: number): string {
   return `${(bytes / 1000).toFixed(0)} KB`;
@@ -66,65 +65,82 @@ export default function MediaLibraryPicker({
       <fieldset>
         <legend>Clips / photos</legend>
         <p>
-          <button type="button" onClick={() => setClipsOpen(true)}>
-            Select clips&hellip; ({selectedClips.size} picked
+          <button
+            type="button"
+            aria-expanded={clipsOpen}
+            aria-controls="clips-panel"
+            onClick={() => setClipsOpen((v) => !v)}
+          >
+            {clipsOpen ? "Hide clips" : "Select clips"}&hellip; ({selectedClips.size} picked
             {uploadedClipsCount > 0 && `, ${uploadedClipsCount} uploaded`})
           </button>
         </p>
-        <Modal open={clipsOpen} onClose={() => setClipsOpen(false)}>
-          <p>
-            {clips.length > 0 && (
-              <>
-                <button type="button" onClick={selectAllClips}>
-                  Select all
-                </button>{" "}
-                <button type="button" onClick={clearClips}>
-                  Clear
-                </button>{" "}
-              </>
+        {clipsOpen && (
+          <div id="clips-panel" className="library-panel">
+            <p>
+              {clips.length > 0 && (
+                <>
+                  <button type="button" onClick={selectAllClips}>
+                    Select all
+                  </button>{" "}
+                  <button type="button" onClick={clearClips}>
+                    Clear
+                  </button>{" "}
+                </>
+              )}
+              <label htmlFor="new-clips">
+                Upload {clips.length > 0 ? "more clips" : "clips"}
+                <input
+                  id="new-clips"
+                  type="file"
+                  name="clips"
+                  multiple
+                  onChange={(e) => setUploadedClipsCount(e.target.files?.length ?? 0)}
+                />
+              </label>
+            </p>
+            {clips.length === 0 ? (
+              <p>No clips from past sessions yet.</p>
+            ) : (
+              <div className="contact-sheet contact-sheet--compact">
+                {clips.map((c) => {
+                  const ref = `${c.session}/${c.path}`;
+                  return (
+                    <figure key={ref}>
+                      <video muted preload="metadata" src={fileUrl(c.session, c.path)} />
+                      <figcaption>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={selectedClips.has(ref)}
+                            onChange={() => toggleClip(ref)}
+                          />
+                          {c.filename} &middot; {formatKb(c.size)}
+                        </label>
+                      </figcaption>
+                    </figure>
+                  );
+                })}
+              </div>
             )}
-            <label htmlFor="new-clips">
-              Upload {clips.length > 0 ? "more clips" : "clips"}
-              <input
-                id="new-clips"
-                type="file"
-                name="clips"
-                multiple
-                onChange={(e) => setUploadedClipsCount(e.target.files?.length ?? 0)}
-              />
-            </label>
-          </p>
-          {clips.length === 0 ? (
-            <p>No clips from past sessions yet.</p>
-          ) : (
-            <div className="contact-sheet contact-sheet--compact">
-              {clips.map((c) => {
-                const ref = `${c.session}/${c.path}`;
-                return (
-                  <figure key={ref}>
-                    <video muted preload="metadata" src={fileUrl(c.session, c.path)} />
-                    <figcaption>
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={selectedClips.has(ref)}
-                          onChange={() => toggleClip(ref)}
-                        />
-                        {c.filename} &middot; {formatKb(c.size)}
-                      </label>
-                    </figcaption>
-                  </figure>
-                );
-              })}
-            </div>
-          )}
-        </Modal>
+            <p>
+              <button type="button" onClick={() => setClipsOpen(false)}>
+                Done
+              </button>
+            </p>
+          </div>
+        )}
       </fieldset>
       <fieldset>
         <legend>Music</legend>
         <p>
-          <button type="button" onClick={() => setMusicOpen(true)}>
-            Select music&hellip;{" "}
+          <button
+            type="button"
+            aria-expanded={musicOpen}
+            aria-controls="music-panel"
+            onClick={() => setMusicOpen((v) => !v)}
+          >
+            {musicOpen ? "Hide music" : "Select music"}&hellip;{" "}
             {uploadedMusicName
               ? uploadedMusicName
               : selectedMusic
@@ -132,43 +148,50 @@ export default function MediaLibraryPicker({
                 : "(none chosen)"}
           </button>
         </p>
-        <Modal open={musicOpen} onClose={() => setMusicOpen(false)}>
-          <p>
-            <label htmlFor="new-music">
-              Upload {music.length > 0 ? "a different track" : "a track"} (mp3, wav, or mp4/m4a)
-              <input
-                id="new-music"
-                type="file"
-                name="music"
-                accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
-                onChange={(e) => setUploadedMusicName(e.target.files?.[0]?.name ?? "")}
-              />
-            </label>
-          </p>
-          {music.length === 0 ? (
-            <p>No music from past sessions yet.</p>
-          ) : (
-            <ul className="media-list">
-              {music.map((m) => {
-                const ref = `${m.session}/${m.path}`;
-                return (
-                  <li key={ref}>
-                    <label>
-                      <input
-                        type="radio"
-                        name="media-library-music"
-                        checked={selectedMusic === ref}
-                        onChange={() => pickMusic(ref)}
-                      />
-                      {m.filename} &middot; {formatKb(m.size)}
-                    </label>
-                    <audio controls preload="none" src={fileUrl(m.session, m.path)} />
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Modal>
+        {musicOpen && (
+          <div id="music-panel" className="library-panel">
+            <p>
+              <label htmlFor="new-music">
+                Upload {music.length > 0 ? "a different track" : "a track"} (mp3, wav, or mp4/m4a)
+                <input
+                  id="new-music"
+                  type="file"
+                  name="music"
+                  accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
+                  onChange={(e) => setUploadedMusicName(e.target.files?.[0]?.name ?? "")}
+                />
+              </label>
+            </p>
+            {music.length === 0 ? (
+              <p>No music from past sessions yet.</p>
+            ) : (
+              <ul className="media-list">
+                {music.map((m) => {
+                  const ref = `${m.session}/${m.path}`;
+                  return (
+                    <li key={ref}>
+                      <label>
+                        <input
+                          type="radio"
+                          name="media-library-music"
+                          checked={selectedMusic === ref}
+                          onChange={() => pickMusic(ref)}
+                        />
+                        {m.filename} &middot; {formatKb(m.size)}
+                      </label>
+                      <audio controls preload="none" src={fileUrl(m.session, m.path)} />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <p>
+              <button type="button" onClick={() => setMusicOpen(false)}>
+                Done
+              </button>
+            </p>
+          </div>
+        )}
       </fieldset>
     </div>
   );
