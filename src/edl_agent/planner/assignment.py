@@ -16,12 +16,135 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from edl_agent.planner._common import DEFAULT_CONFIG, PlannerError, admits, hook_ramp
+from edl_agent.planner._common import (
+    DEFAULT_CONFIG,
+    FPS,
+    PlannerError,
+    admits,
+    hook_ramp,
+)
 from edl_agent.planner.timing import compute_in_out
 
 
 def _norm_exercise(exercise: str) -> str:
     return exercise.lower().strip()
+
+
+def _longest_window(
+    selected: list[dict],
+    candidates_by_id: dict,
+    role: str,
+    kinds: set[str] | None,
+) -> tuple[str, float] | None:
+    """Longest candidate window among `selected` entries for a role.
+
+    Args:
+        selected: Selection entries (see `select_develop` for the shape).
+        candidates_by_id: Mapping `candidate_id -> candidate dict` with a
+            `window` key (`(start_s, end_s)` in seconds) and a `kind` key.
+        role: Role to filter `selected` by.
+        kinds: Candidate kinds to include, or `None` for all kinds.
+
+    Returns:
+        `(candidate_id, duration_s)` of the longest window, or `None`
+        if no entry matches.
+    """
+    best: tuple[str, float] | None = None
+    for s in selected:
+        if s["role"] != role:
+            continue
+        cand = candidates_by_id.get(s["candidate_id"])
+        if cand is None:
+            continue
+        if kinds is not None and cand["kind"] not in kinds:
+            continue
+        dur_s = cand["window"][1] - cand["window"][0]
+        if best is None or dur_s > best[1]:
+            best = (s["candidate_id"], dur_s)
+    return best
+
+
+def _no_admissible_msg(
+    role: str,
+    slot: dict,
+    selected: list[dict],
+    candidates_by_id: dict,
+    kinds: set[str] | None,
+) -> str:
+    """Build an actionable error for a role with no admissible candidate.
+
+    The failure is a footage/music mismatch (no window long enough for
+    the slot, per #6.1), not a planner bug, so the message carries the
+    numbers needed to unblock it instead of an internal-only note.
+
+    Args:
+        role: Role with no admissible candidate (`"hook"`/`"close"`).
+        slot: Slot dict with `slot`, `start_f`, `end_f`.
+        selected: Selection entries (see `select_develop` for the shape).
+        candidates_by_id: Mapping `candidate_id -> candidate dict`.
+        kinds: Kinds admissible for the role (`{"peak"}` for hook,
+            `{"calm", "image", "peak"}` for close).
+
+    Returns:
+        Message with the slot duration, the needed window length, how
+        many selection entries exist for the role and how many admit
+        the slot, the longest available window, and how to unblock.
+    """
+    d_f = slot["end_f"] - slot["start_f"]
+    need_s = d_f / FPS + 2 / FPS
+    pool = [
+        s
+        for s in selected
+        if s["role"] == role
+        and (
+            kinds is None
+            or candidates_by_id.get(s["candidate_id"], {}).get("kind")
+            in kinds
+        )
+    ]
+    n_admit = sum(
+        1
+        for s in pool
+        if admits(
+            tuple(candidates_by_id[s["candidate_id"]]["window"]), d_f, 1.0
+        )
+    )
+    longest = _longest_window(selected, candidates_by_id, role, kinds)
+    kinds_s = "/".join(sorted(kinds)) if kinds else "any"
+    if longest is None:
+        # The LLM pick (if any) was already dropped by S5 and the rules
+        # fallback found nothing either, so `selected` holds no entry
+        # for this role -- report the longest window across *all*
+        # candidates so the message still shows how far off the
+        # footage is.
+        best_all: tuple[str, float] | None = None
+        for cid, cand in candidates_by_id.items():
+            if kinds is not None and cand.get("kind") not in kinds:
+                continue
+            window = cand.get("window")
+            if not window:
+                continue
+            dur_s = window[1] - window[0]
+            if best_all is None or dur_s > best_all[1]:
+                best_all = (cid, dur_s)
+        if best_all is None:
+            longest_s = "no candidate of this kind exists at all"
+        else:
+            longest_s = (
+                f"longest {kinds_s} window anywhere is "
+                f"{best_all[1]:.2f}s ({best_all[0]}), "
+                "already rejected or inadmissible"
+            )
+    else:
+        longest_s = f"longest available is {longest[1]:.2f}s ({longest[0]})"
+    return (
+        f"no admissible {role} candidate for slot {slot['slot']} "
+        f"({d_f} frames, needs a >={need_s:.2f}s {kinds_s} window; "
+        f"{longest_s}; {n_admit}/{len(pool)} selection entries "
+        "admit the slot). Unblock: shorten the music cut so the slot "
+        "fits the available windows, or add footage with a longer "
+        f"{kinds_s} moment."
+    )
 
 
 def _select_single(
@@ -467,8 +590,11 @@ def assign_slots(
     Raises:
         PlannerError: If no admissible candidate exists for the hook or
             close slot, or fewer develop candidates were taken than there
-            are develop slots (the rules fallback for these cases is out
-            of this module's scope; it lives in `selection.py`).
+            are develop slots. The message carries the slot duration,
+            the needed window length, and the longest available window
+            (a footage/music mismatch per #6.1, not a planner bug); the
+            rules fallback for these cases lives in `selection.py` and
+            already ran before this module (see the module docstring).
     """
     config = {**DEFAULT_CONFIG, **(config or {})}
     hook_slot = next(s for s in slots if s["role"] == "hook")
@@ -486,8 +612,11 @@ def assign_slots(
         [],
     )
     if hook is None:
-        msg = "no admissible hook candidate (rules fallback out of scope here)"
-        raise PlannerError(msg)
+        raise PlannerError(
+            _no_admissible_msg(
+                "hook", hook_slot, selected, candidates_by_id, {"peak"}
+            )
+        )
 
     used = [
         {
@@ -519,8 +648,15 @@ def assign_slots(
         used,
     )
     if close is None:
-        msg = "no admissible close candidate (rules fallback out of scope here)"
-        raise PlannerError(msg)
+        raise PlannerError(
+            _no_admissible_msg(
+                "close",
+                close_slot,
+                selected,
+                candidates_by_id,
+                {"calm", "image", "peak"},
+            )
+        )
 
     if candidates_by_id[close["candidate_id"]]["kind"] != "image":
         close_timing = compute_in_out(
@@ -539,12 +675,12 @@ def assign_slots(
     warnings = []
     if len(taken) < len(develop_slots):
         msg = (
-            f"not enough develop candidates ({len(taken)}/{len(develop_slots)}); "
-            "rules fallback out of this module's scope"
+            f"not enough develop candidates ({len(taken)}/"
+            f"{len(develop_slots)} slots admit their windows; "
+            "footage/music mismatch per #6.1, not a planner bug). "
+            "Unblock: shorten the music cut or add longer peak footage."
         )
-        raise PlannerError(
-            msg,
-        )
+        raise PlannerError(msg)
 
     placement, arc_fallback = place_develop_arc(
         taken, hook, close, candidates_by_id, develop_slots
