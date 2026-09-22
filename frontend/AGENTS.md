@@ -1,8 +1,8 @@
 # AGENTS.md (frontend)
 
 React/TS SPA for `edl-agent`'s web UI. Builds into
-`../src/edl_agent/web/static/`, which is committed to git so the Python
-server needs no node toolchain at runtime. See the root `AGENTS.md` for
+`../src/edl_agent/web/static/` (gitignored build output, so the Python
+server needs no node toolchain at runtime). See the root `AGENTS.md` for
 overall project context.
 
 ## Setup / commands
@@ -11,9 +11,9 @@ overall project context.
 - `npm run dev` — Vite dev server with HMR; proxies `/api` and
   `/sessions/*/files` to `:8000`, so run `uv run scripts/run_web.py`
   alongside it.
-- `npm run build` — writes to `../src/edl_agent/web/static/`. **Rebuild and
-  commit this before committing any UI change** — it's the only thing the
-  Python server serves.
+- `npm run build` — writes to `../src/edl_agent/web/static/`. Run it to
+  verify a UI change compiles — that output is what the Python server
+  serves, but it is gitignored, so only `frontend/src/` is committed.
 - Checks (all must pass): `npx oxlint`, `npx oxfmt --check src`,
   `npx tsc -b --noEmit`, `npm run build`.
 
