@@ -8,6 +8,7 @@ import New from "./pages/New";
 import Planner from "./pages/Planner";
 import Selection from "./pages/Selection";
 import Session from "./pages/Session";
+import Studio from "./pages/Studio";
 
 function ThemeToggle() {
   const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? "dark");
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="/" element={<Index />} />
           <Route path="/new" element={<New />} />
           <Route path="/sessions/:name" element={<Session />} />
+          <Route path="/studio/:name" element={<Studio />} />
           <Route path="/sessions/:name/ingest" element={<Ingest />} />
           <Route path="/sessions/:name/candidates" element={<Candidates />} />
           <Route path="/sessions/:name/hooks" element={<Hooks />} />

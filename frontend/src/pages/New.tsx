@@ -114,7 +114,7 @@ export default function New() {
         }
       });
       clearDraft();
-      navigate(`/sessions/${created}`);
+      navigate(`/studio/${created}`);
     } catch (err) {
       setUploading(false);
       if (err instanceof ApiError) {

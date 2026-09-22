@@ -81,6 +81,11 @@ export interface LowCandidates {
   suggested_duration_s?: number;
 }
 
+export interface StudioNotice {
+  kind: string;
+  message: string;
+}
+
 export interface JobPayload {
   stages: Record<StageName, StageStatus>;
   detail: Record<StageName, string>;
@@ -94,9 +99,26 @@ export interface JobPayload {
   low_candidates: LowCandidates;
   hooks: Hooks;
   hook_slot: number;
+  hook_choice: string;
   music_candidates: MusicCandidate[];
   punch_in: boolean;
   hook_flash: boolean;
+  notices: StudioNotice[];
+}
+
+export interface TimelineClip {
+  slot: number;
+  role: "hook" | "develop" | "close" | string;
+  candidate_id: string;
+  src: string;
+  locked: boolean;
+}
+
+export interface TimelinePayload {
+  clips: TimelineClip[];
+  reel_exists: boolean;
+  preview_exists: boolean;
+  preview_path: string;
 }
 
 export interface HistoryEntry {

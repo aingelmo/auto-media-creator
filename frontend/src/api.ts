@@ -10,6 +10,7 @@ import type {
   SessionDetail,
   SessionListEntry,
   StatusPayload,
+  TimelinePayload,
 } from "./types";
 
 /** Thrown for any non-2xx API response; `detail` is the FastAPI error body. */
@@ -96,6 +97,32 @@ export const api = {
       method: "POST",
       body: form,
     }).then((r) => asJson<{ name: string }>(r)),
+
+  getTimeline: (name: string) =>
+    fetch(`/api/sessions/${encodeURIComponent(name)}/timeline`).then((r) =>
+      asJson<TimelinePayload>(r),
+    ),
+
+  reorderDevelops: (name: string, order: number[]) =>
+    fetch(`/api/sessions/${encodeURIComponent(name)}/develop-order`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order }),
+    }).then((r) => asJson<TimelinePayload>(r)),
+
+  setHookText: (name: string, hook_text: string) =>
+    fetch(`/api/sessions/${encodeURIComponent(name)}/hook-text`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hook_text }),
+    }).then((r) => asJson<TimelinePayload>(r)),
+
+  setEffects: (name: string, hook_flash: boolean, punch_in: boolean) =>
+    fetch(`/api/sessions/${encodeURIComponent(name)}/effects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hook_flash, punch_in }),
+    }).then((r) => asJson<TimelinePayload>(r)),
 };
 
 /**
