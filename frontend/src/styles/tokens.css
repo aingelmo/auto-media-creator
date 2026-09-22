@@ -1,30 +1,44 @@
 /*
- * Design tokens for the edl-agent console. Grounded in a colour-grading
- * suite, not a SaaS dashboard: a neutral (untinted) dark surround so
- * video/thumbnails read true, and monospace throughout because the content
- * genuinely is timecode, frame counts and JSON, not prose.
+ * Design tokens for the edl-agent studio. A warm creative studio around a
+ * color-true core: crafted paper/espresso chrome, soft serif display with a
+ * friendly sans body, and mono reserved strictly for machine data
+ * (timecode, counts, EDL/JSON, costs). Video wells stay neutral black so
+ * footage never judges against a tint.
  */
 :root {
-  --surround: #1c1c1c;
-  --panel: #262626;
-  --panel-raised: #2d2d2d;
-  --rule: #363636;
-  --ink: #e6e3dd;
-  --ink-dim: #9a968e;
-  --signal: #35c2c8;
-  --signal-dim: #1a6165;
-  --fail: #e06a63;
-  --fail-dim: #7a2a27;
+  --surround: #211a14;
+  --panel: #2d241c;
+  --panel-raised: #3b2f23;
+  --panel-sunken: #181209;
+  --rule: #4e4133;
+  --rule-soft: #3a3025;
+  --ink: #f6ecdc;
+  --ink-dim: #c9b6a0;
+  --ink-faint: #9c8873;
+  --signal: #61d7b6;
+  --signal-ink: #0c2420;
+  --signal-dim: #23473d;
+  --signal-border: #3d7d6c;
+  --signal-wash: #1d332d;
+  --fail: #ef7d6c;
+  --fail-ink: #2b100d;
+  --fail-dim: #59221d;
+  --fail-wash: #3d1a16;
+  --clay: #e2a458;
+  --clay-deep: #b97a32;
+  --gold-ink: #2c1c08;
 
-  --font-display: "Martian Mono Variable", ui-monospace, monospace;
-  --font-body: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
+  --font-body: "DM Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-brand: "Martian Mono Variable", ui-monospace, monospace;
 
   --text-xs: 0.75rem; /* 12 */
   --text-sm: 0.875rem; /* 14 */
   --text-base: 1rem; /* 16 */
-  --text-lg: 1.3125rem; /* 21 */
-  --text-xl: 1.75rem; /* 28 */
-  --text-2xl: 2.3125rem; /* 37 */
+  --text-lg: 1.375rem; /* 22 */
+  --text-xl: 2rem; /* 32 */
+  --text-2xl: 2.75rem; /* 44 */
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -33,21 +47,41 @@
   --space-6: 1.5rem;
   --space-8: 2rem;
 
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgb(18 11 5 / 0.45), 0 10px 28px rgb(18 11 5 / 0.35);
+  --shadow-pop: 0 20px 56px rgb(18 11 5 / 0.55);
+  --shadow-light-card: 0 1px 2px rgb(90 64 32 / 0.12), 0 10px 28px rgb(90 64 32 / 0.12);
+
   --measure: 72ch;
   color-scheme: dark;
 }
 
 [data-theme="light"] {
-  --surround: #f4f2ee;
-  --panel: #ffffff;
-  --panel-raised: #ececea;
-  --rule: #d8d5cf;
-  --ink: #1c1c1c;
-  --ink-dim: #6b665c;
-  --signal: #0c757b;
-  --signal-dim: #cfeceb;
+  --surround: #f6f0e3;
+  --panel: #fffdf6;
+  --panel-raised: #f2e9d6;
+  --panel-sunken: #e9dcc3;
+  --rule: #ddcfb6;
+  --rule-soft: #e9dcc6;
+  --ink: #2b2118;
+  --ink-dim: #6f6050;
+  --ink-faint: #978673;
+  --signal: #0b7a68;
+  --signal-ink: #f2fbf7;
+  --signal-dim: #cde9dd;
+  --signal-border: #5ba892;
+  --signal-wash: #e2f1e8;
   --fail: #b23029;
-  --fail-dim: #f6dcda;
+  --fail-ink: #fff5f3;
+  --fail-dim: #f3c9c3;
+  --fail-wash: #fae9e5;
+  --clay: #a86a1e;
+  --clay-deep: #8a5514;
+  --gold-ink: #fff8ea;
   color-scheme: light;
 }
 

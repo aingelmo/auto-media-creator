@@ -1,4 +1,6 @@
 @import "@fontsource-variable/martian-mono";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/dm-sans";
 @import "@fontsource/ibm-plex-mono";
 @import "./tokens.css";
 
@@ -14,11 +16,21 @@ body,
 
 body {
   margin: 0;
-  background: var(--surround);
+  background:
+    radial-gradient(1200px 500px at 15% -10%, rgb(226 164 88 / 0.1), transparent 60%),
+    radial-gradient(1000px 480px at 90% -10%, rgb(97 215 182 / 0.08), transparent 60%),
+    var(--surround);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--text-base);
-  line-height: 1.5;
+  line-height: 1.55;
+}
+
+[data-theme="light"] body {
+  background:
+    radial-gradient(1200px 500px at 15% -10%, rgb(168 106 30 / 0.12), transparent 60%),
+    radial-gradient(1000px 480px at 90% -10%, rgb(11 122 104 / 0.1), transparent 60%),
+    var(--surround);
 }
 
 a {
@@ -27,13 +39,19 @@ a {
   text-decoration-thickness: 1px;
 }
 
+[data-theme="dark"] a {
+  color: var(--signal);
+}
+
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
+textarea:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--signal);
   outline-offset: 2px;
+  border-radius: 4px;
 }
 
 ::selection {
@@ -59,7 +77,7 @@ textarea {
 
 *::-webkit-scrollbar-thumb {
   background: var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius-pill);
 }
 
 *::-webkit-scrollbar-track {
@@ -70,8 +88,9 @@ h1,
 h2,
 h3 {
   font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: 0.01em;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
   margin: 0 0 var(--space-4);
 }
 
@@ -80,12 +99,35 @@ h1 {
 }
 
 h2 {
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
+  font-variation-settings:
+    "opsz" 32,
+    "SOFT" 40;
 }
 
 h3 {
-  font-size: var(--text-base);
-  color: var(--ink-dim);
+  font-size: var(--text-lg);
+  color: var(--ink);
+}
+
+/* Mono reservation: machine data only — timecode, counts, EDL/JSON, costs. */
+pre,
+code,
+.mono,
+.stage-detail,
+.cost-badge,
+.track-time,
+.timeline-pos,
+.library-badge,
+.dashboard-stats,
+.library-summary,
+.trash-summary,
+.coverage-meter,
+.render-checks pre,
+.regen-history td,
+.library-specs dd {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 p {
@@ -95,17 +137,29 @@ p {
 pre {
   white-space: pre-wrap;
   word-break: break-word;
-  background: var(--panel);
-  border: 1px solid var(--rule);
-  border-radius: 4px;
+  background: var(--panel-sunken);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
   padding: var(--space-4);
   font-size: var(--text-sm);
   overflow-x: auto;
 }
 
+code {
+  background: var(--panel-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: 6px;
+  padding: 0.1em 0.35em;
+  font-size: 0.875em;
+}
+
 .table-scroll {
   overflow-x: auto;
   margin-bottom: var(--space-4);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
 }
 
 /* Long filenames/paths in manifest and EDL tables wrap instead of
@@ -125,17 +179,30 @@ th,
 td {
   text-align: left;
   padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule-soft);
 }
 
 th {
   color: var(--ink-dim);
-  font-weight: 400;
+  font-weight: 600;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+tbody tr:last-child th,
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr:hover td {
+  background: rgb(226 164 88 / 0.05);
 }
 
 td.num,
 th.num {
   text-align: right;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -144,6 +211,7 @@ label {
   margin-top: var(--space-4);
   color: var(--ink-dim);
   font-size: var(--text-sm);
+  font-weight: 500;
 }
 
 input[type="text"],
@@ -154,11 +222,17 @@ select {
   margin-top: var(--space-1);
   background: var(--panel);
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--text-base);
   padding: var(--space-2) var(--space-3);
+  transition: border-color 120ms ease;
+}
+
+input[type="text"]:hover,
+select:hover {
+  border-color: var(--ink-faint);
 }
 
 /* Two-column form layout: cuts vertical scroll on forms with many fields
@@ -189,43 +263,65 @@ select {
 
 fieldset {
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius);
   margin-top: var(--space-4);
   padding: var(--space-3) var(--space-4) var(--space-4);
+  background: rgb(255 255 255 / 0.015);
 }
 
 legend {
   color: var(--ink-dim);
   font-size: var(--text-sm);
+  font-weight: 600;
   padding: 0 var(--space-2);
 }
 
 button {
   font-family: var(--font-body);
   font-size: var(--text-sm);
+  font-weight: 600;
   background: var(--panel-raised);
   color: var(--ink);
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-4);
   margin-top: var(--space-4);
   margin-right: var(--space-2);
   cursor: pointer;
   min-height: 2.75rem;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
+  transition:
+    border-color 120ms ease,
+    transform 120ms ease,
+    background 120ms ease;
 }
 
 button:hover {
-  border-color: var(--signal-dim);
+  border-color: var(--signal-border);
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
 }
 
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
 button.primary {
   background: var(--signal-dim);
-  border-color: var(--signal);
+  border-color: var(--signal-border);
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 1px 0 rgb(0 0 0 / 0.25);
+}
+
+[data-theme="light"] button.primary {
+  color: var(--signal);
 }
 
 .app-shell {
@@ -234,8 +330,9 @@ button.primary {
 }
 
 .app-header {
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--rule);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--rule-soft);
+  background: rgb(0 0 0 / 0.18);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -243,9 +340,29 @@ button.primary {
   gap: var(--space-2) var(--space-4);
 }
 
+[data-theme="light"] .app-header {
+  background: rgb(255 255 255 / 0.55);
+}
+
 .app-header a {
   text-decoration: none;
   color: var(--ink);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-family: var(--font-brand);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+}
+
+.app-header h1::after {
+  content: " ●";
+  color: var(--clay);
+  font-size: 0.75em;
+  vertical-align: middle;
 }
 
 .app-header-actions {
@@ -253,6 +370,11 @@ button.primary {
   gap: var(--space-2) var(--space-4);
   flex-wrap: wrap;
   align-items: center;
+}
+
+.app-header-actions button {
+  margin: 0;
+  min-height: 2.5rem;
 }
 
 @media (max-width: 640px) {
@@ -280,6 +402,7 @@ button.primary {
 
 .status-running {
   color: var(--signal);
+  font-weight: 600;
 }
 
 .status-done {
@@ -288,16 +411,25 @@ button.primary {
 
 .status-failed {
   color: var(--fail);
+  font-weight: 600;
 }
 
-/* Stage rail: the one place boldness is spent, alongside the contact sheet. */
+/* Stage rail: the studio call-sheet — one crafted card, wash fills carry
+   state, the 4px status bar stays unambiguous. Never shrinks: as a flex
+   item in a column shell, overflow:hidden zeroes its automatic minimum
+   size, so it would absorb all page-overflow shrink and clip its rows. */
 .stage-rail {
-  list-style: none;
+  flex-shrink: 0;
   margin: 0 0 var(--space-6);
-  padding: 0;
-  border: 1px solid var(--rule);
-  border-radius: 4px;
+  padding: var(--space-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .stage-rail li {
@@ -305,28 +437,34 @@ button.primary {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
   font-size: var(--text-sm);
 }
 
-.stage-rail li:last-child {
-  border-bottom: none;
-}
-
 .stage-rail .stage-name {
-  font-family: var(--font-display);
+  font-weight: 650;
   width: 8rem;
   flex-shrink: 0;
+  text-transform: capitalize;
 }
 
 .stage-rail .stage-mark {
-  width: 3px;
+  width: 4px;
   align-self: stretch;
+  border-radius: var(--radius-pill);
   background: var(--rule);
+}
+
+.stage-rail li.status-running {
+  background: var(--signal-wash);
 }
 
 .stage-rail li.status-running .stage-mark {
   background: var(--signal);
+}
+
+.stage-rail li.status-failed {
+  background: var(--fail-wash);
 }
 
 .stage-rail li.status-failed .stage-mark {
@@ -336,6 +474,7 @@ button.primary {
 .stage-rail .stage-detail {
   flex: 1;
   color: var(--ink-dim);
+  font-size: var(--text-sm);
 }
 
 .stage-rail progress {
@@ -383,44 +522,78 @@ button.primary {
 
 .warning {
   border: 1px solid var(--rule);
+  border-left: 4px solid var(--signal);
   background: var(--panel);
   padding: var(--space-4);
   margin-bottom: var(--space-4);
-  border-radius: 4px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
 }
 
 .warning > p:first-child strong {
   color: var(--signal);
+  font-family: var(--font-display);
+  font-size: 1.05em;
+  letter-spacing: 0;
+}
+
+.warning.is-error {
+  border-left-color: var(--fail);
 }
 
 .warning.is-error > p:first-child strong {
   color: var(--fail);
 }
 
-/* Contact sheet: hook/music preview grids and candidate peak frames. */
+/* Contact sheet: the studio light-table. Warm mat, soft shadow, true-black
+   wells so color still judges against neutral. */
 .contact-sheet {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: var(--space-4);
   margin: var(--space-4) 0;
+  background: rgb(0 0 0 / 0.14);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+
+[data-theme="light"] .contact-sheet {
+  background: rgb(120 84 40 / 0.08);
 }
 
 .contact-sheet figure {
   margin: 0;
   position: relative;
+  background: var(--panel);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-card);
 }
 
 .contact-sheet video,
 .contact-sheet img {
   width: 100%;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: #000;
+  display: block;
+}
+
+/* Native player in the music-cut picker: replaced elements keep their
+   ~300px intrinsic width by default, which would overflow the 190px tile
+   and overlap its neighbours. */
+.contact-sheet audio {
+  width: 100%;
+  min-width: 0;
   display: block;
 }
 
 .contact-sheet figcaption {
   margin-top: var(--space-2);
   font-size: var(--text-sm);
+  color: var(--ink-dim);
+  text-wrap: pretty;
 }
 
 /* Destructive tile action: overlay chip in the thumbnail corner, revealed
@@ -440,7 +613,7 @@ button.primary {
   justify-content: center;
   background: rgb(0 0 0 / 0.65);
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   line-height: 1;
   opacity: 0;
@@ -450,6 +623,7 @@ button.primary {
 .tile-delete:hover {
   border-color: var(--fail);
   color: var(--fail);
+  transform: none;
 }
 
 figure:hover .tile-delete,
@@ -468,11 +642,15 @@ figure:focus-within .tile-delete,
   .tile-delete {
     transition: none;
   }
+
+  button:hover {
+    transform: none;
+  }
 }
 
 .contact-sheet.contact-sheet--compact {
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .media-list {
@@ -488,6 +666,11 @@ figure:focus-within .tile-delete,
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  background: var(--panel);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  box-shadow: var(--shadow-card);
 }
 
 .media-list label {
@@ -496,17 +679,18 @@ figure:focus-within .tile-delete,
 }
 
 .candidate {
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule-soft);
   padding: var(--space-3) 0;
 }
 
 .candidate img {
   margin-right: var(--space-2);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .session-list td a {
   text-decoration: none;
+  font-weight: 600;
 }
 
 .reel-player {
@@ -516,7 +700,9 @@ figure:focus-within .tile-delete,
   min-height: 0;
   object-fit: contain;
   background: #000;
-  border-radius: 4px;
+  border-radius: var(--radius);
+  border: 1px solid var(--rule-soft);
+  box-shadow: var(--shadow-card);
   transition:
     opacity 150ms,
     filter 150ms;
@@ -552,17 +738,18 @@ figure:focus-within .tile-delete,
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgb(0 0 0 / 0.6);
-  border-radius: 4px;
+  background: rgb(24 14 6 / 0.6);
+  border-radius: var(--radius);
 }
 
 .reel-preview-overlay span {
-  background: var(--panel);
-  border: 1px solid var(--signal);
+  background: var(--panel-raised);
+  border: 1px solid var(--signal-border);
   color: var(--ink);
   font-size: var(--text-sm);
+  font-weight: 600;
   padding: var(--space-2) var(--space-4);
-  border-radius: 4px;
+  border-radius: var(--radius-pill);
   animation: reel-preview-pulse 1.4s ease-in-out infinite;
 }
 
@@ -605,7 +792,6 @@ figure:focus-within .tile-delete,
   flex: 0 1 auto;
   min-width: 0;
   min-height: 0;
-  height: 100%;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-6);
@@ -617,34 +803,57 @@ figure:focus-within .tile-delete,
    regenerate sidebar still fit on one line instead of the sidebar wrapping below. */
 .reel-variant {
   flex: 0 1 auto;
+  width: min(380px, 100%);
   max-width: 380px;
   min-width: 0;
   min-height: 0;
-  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-card);
+}
+
+.reel-variant figcaption {
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+  margin-top: var(--space-2);
 }
 
 .session-result-video .reel-player {
   max-height: 65vh;
-  width: auto;
+  width: 100%;
+  height: auto;
   max-width: 100%;
+  flex: none;
 }
 
 .render-checks {
   margin-top: var(--space-6);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  box-shadow: var(--shadow-card);
 }
 
 .render-checks > summary {
   cursor: pointer;
   color: var(--ink-dim);
   font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 .render-checks h3 {
   margin-top: var(--space-3);
   font-size: var(--text-xs);
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
 }
 
 .render-checks pre {
@@ -698,6 +907,10 @@ figure:focus-within .tile-delete,
   max-height: 60vh;
   width: auto;
   max-width: 100%;
+  background: #000;
+  border-radius: var(--radius);
+  border: 1px solid var(--rule-soft);
+  box-shadow: var(--shadow-card);
 }
 
 .studio-notices {
@@ -712,29 +925,38 @@ figure:focus-within .tile-delete,
 .studio-notices > li {
   background: var(--panel);
   border: 1px solid var(--rule);
-  border-left: 3px solid var(--signal-dim);
-  border-radius: 4px;
+  border-left: 4px solid var(--signal-border);
+  border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-4);
+  box-shadow: var(--shadow-card);
 }
 
 .timeline-strip {
   list-style: none;
-  padding: 0;
+  padding: var(--space-3);
   margin: var(--space-4) 0;
   display: flex;
   gap: var(--space-3);
   flex-wrap: wrap;
   align-items: stretch;
+  background: rgb(0 0 0 / 0.14);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
+}
+
+[data-theme="light"] .timeline-strip {
+  background: rgb(120 84 40 / 0.08);
 }
 
 .timeline-slot {
-  border: 1px solid var(--rule);
-  border-radius: 4px;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
   padding: var(--space-2) var(--space-3);
   flex: 1 1 200px;
   min-width: 200px;
   max-width: 280px;
   background: var(--panel);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -762,12 +984,12 @@ figure:focus-within .tile-delete,
   position: absolute;
   top: var(--space-1);
   left: var(--space-1);
-  background: rgb(0 0 0 / 0.75);
-  color: var(--ink);
+  background: rgb(0 0 0 / 0.78);
+  color: #fff;
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
 }
 
 /* Visually hidden but announced: position info for timeline slots. */
@@ -787,14 +1009,14 @@ figure:focus-within .tile-delete,
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: #000;
   display: block;
 }
 
 .timeline-thumb.is-empty {
   min-height: 64px;
-  background: var(--panel-raised);
+  background: var(--panel-sunken);
   border: 1px dashed var(--rule);
 }
 
@@ -812,6 +1034,9 @@ figure:focus-within .tile-delete,
 
 .timeline-role {
   font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--ink-dim);
 }
 
@@ -857,17 +1082,22 @@ figure:focus-within .tile-delete,
   font-weight: normal;
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
+  background: var(--panel-raised);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-pill);
+  padding: 0.1em 0.6em;
+  white-space: nowrap;
 }
 
 .stage-detail,
-.media-list,
-.cost-badge {
+.media-list {
   font-variant-numeric: tabular-nums;
 }
 
 .link-button {
   background: none;
   border: none;
+  box-shadow: none;
   padding: var(--space-2) var(--space-2);
   margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2));
   min-height: 2.75rem;
@@ -889,8 +1119,9 @@ figure:focus-within .tile-delete,
   padding: var(--space-6);
   background: var(--panel);
   border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
   color: var(--ink);
-  box-shadow: 0 16px 48px rgb(0 0 0 / 0.5);
+  box-shadow: var(--shadow-pop);
 }
 
 /* Sized to its content (video + controls) instead of the fixed stage-modal
@@ -902,7 +1133,7 @@ figure:focus-within .tile-delete,
 }
 
 .stage-modal::backdrop {
-  background: rgb(0 0 0 / 0.6);
+  background: rgb(24 14 6 / 0.6);
 }
 
 .icon-button {
@@ -925,9 +1156,10 @@ figure:focus-within .tile-delete,
 /* Inline stage inspector: replaces the former stage-view modal so the
    rail, reel, and regenerate form stay visible alongside the tables. */
 .stage-detail-panel {
-  border: 1px solid var(--rule);
-  border-radius: 4px;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
   background: var(--panel);
+  box-shadow: var(--shadow-card);
   padding: var(--space-4) var(--space-6) var(--space-6);
   margin-bottom: var(--space-6);
 }
@@ -948,23 +1180,30 @@ figure:focus-within .tile-delete,
 /* Inline library picker panel: replaces the former clips/music modals
    so the surrounding session-name field stays visible while picking. */
 .library-panel {
-  border: 1px solid var(--rule);
-  border-radius: 4px;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
   background: var(--panel);
+  box-shadow: var(--shadow-card);
   padding: var(--space-3) var(--space-4) var(--space-4);
   margin-top: var(--space-3);
 }
 
-/* Wizard step header for the new-session form. */
+/* Wizard step header for the new-session form. Never shrinks: like the
+   stage rail, overflow:hidden zeroes its automatic minimum size as a flex
+   item, so it would absorb page-overflow shrink and clip its buttons. */
 .form-steps {
   display: flex;
+  flex-shrink: 0;
   flex-wrap: wrap;
   list-style: none;
   margin: 0 0 var(--space-6);
-  padding: 0;
-  border: 1px solid var(--rule);
-  border-radius: 4px;
+  padding: var(--space-1);
+  gap: var(--space-1);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-pill);
   overflow: hidden;
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
 }
 
 .form-steps li {
@@ -974,26 +1213,30 @@ figure:focus-within .tile-delete,
 .form-steps button {
   width: 100%;
   margin: 0;
-  background: var(--panel);
-  border: none;
-  border-right: 1px solid var(--rule);
-  border-radius: 0;
-  font-family: var(--font-display);
+  box-shadow: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
   font-size: var(--text-sm);
   color: var(--ink-dim);
-}
-
-.form-steps li:last-child button {
-  border-right: none;
+  min-height: 2.5rem;
 }
 
 .form-steps button:hover {
   color: var(--ink);
+  transform: none;
+  background: var(--panel-raised);
 }
 
 .form-steps button[aria-current="step"] {
   background: var(--signal-dim);
+  border-color: var(--signal-border);
   color: var(--ink);
+}
+
+[data-theme="light"] .form-steps button[aria-current="step"] {
+  color: var(--signal);
 }
 
 .form-steps li.is-done button {
@@ -1003,16 +1246,12 @@ figure:focus-within .tile-delete,
 @media (max-width: 640px) {
   .form-steps {
     flex-direction: column;
+    border-radius: var(--radius-lg);
   }
 
   .form-steps button {
-    border-right: none;
-    border-bottom: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
     text-align: left;
-  }
-
-  .form-steps li:last-child button {
-    border-bottom: none;
   }
 }
 
@@ -1022,7 +1261,10 @@ figure:focus-within .tile-delete,
 
 .review-list dt {
   color: var(--ink-dim);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   margin-top: var(--space-3);
 }
 
@@ -1034,16 +1276,23 @@ figure:focus-within .tile-delete,
   color: var(--ink-dim);
 }
 
-/* Intake dashboard + dropzones: neutral panel chrome, Signal/Fail only
-   via the shared status-* text colors and the 3px notice edge. */
+/* Intake dashboard + dropzones: warm panel chrome, Signal/Fail only
+   via the shared status-* text colors and the 4px notice edge. */
 .dashboard-stats {
   font-size: var(--text-sm);
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
+  background: var(--panel);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-pill);
+  padding: var(--space-2) var(--space-4);
+  display: inline-block;
+  box-shadow: var(--shadow-card);
 }
 
 .dashboard-stats a {
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .media-placeholder {
@@ -1051,9 +1300,9 @@ figure:focus-within .tile-delete,
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--panel-raised);
-  border: 1px solid var(--rule);
-  border-radius: 4px;
+  background: var(--panel-sunken);
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius-sm);
   color: var(--ink-dim);
   font-size: var(--text-sm);
 }
@@ -1063,22 +1312,25 @@ figure:focus-within .tile-delete,
   height: 72px;
   object-fit: cover;
   background: #000;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   vertical-align: middle;
   margin-right: var(--space-3);
+  border: 1px solid var(--rule-soft);
 }
 
 .dropzone {
   border: 1px dashed var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius);
   background: var(--panel);
   padding: var(--space-4);
   margin-top: var(--space-3);
+  transition: border-color 120ms ease;
 }
 
 .dropzone.is-dragging {
   border-style: solid;
   border-color: var(--signal);
+  background: var(--signal-wash);
 }
 
 .dropzone label {
@@ -1087,9 +1339,10 @@ figure:focus-within .tile-delete,
 
 .coverage-meter {
   border: 1px solid var(--rule);
-  border-left: 3px solid var(--signal);
-  border-radius: 4px;
+  border-left: 4px solid var(--signal);
+  border-radius: var(--radius-sm);
   background: var(--panel);
+  box-shadow: var(--shadow-card);
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
@@ -1110,12 +1363,16 @@ figure:focus-within .tile-delete,
   font-variant-numeric: tabular-nums;
 }
 
-section[aria-label="Library"] h4 {
-  font-family: var(--font-display);
-  font-size: var(--text-sm);
-  font-weight: 500;
+section[aria-label="Library"] h4,
+section[aria-label="Sessions"] h3,
+section[aria-label="Library"] h3 {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--ink-dim);
-  margin: var(--space-4) 0 var(--space-2);
+  margin: var(--space-6) 0 var(--space-2);
 }
 
 .library-tile {
@@ -1125,18 +1382,25 @@ section[aria-label="Library"] h4 {
   padding: 0;
   background: none;
   border: none;
+  box-shadow: none;
   cursor: pointer;
   text-align: left;
+  min-height: 0;
+}
+
+.library-tile:hover {
+  transform: none;
 }
 
 .library-tile:hover .library-thumb {
-  outline: 1px solid var(--signal-dim);
+  outline: 2px solid var(--signal-border);
+  outline-offset: 2px;
 }
 
 .library-thumb {
   position: relative;
   display: block;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   background: #000;
 }
@@ -1147,18 +1411,20 @@ section[aria-label="Library"] h4 {
   width: 100%;
   aspect-ratio: 9 / 16;
   object-fit: cover;
+  border-radius: 0;
+  border: none;
 }
 
 .library-badge {
   position: absolute;
   left: var(--space-1);
   bottom: var(--space-1);
-  background: rgb(0 0 0 / 0.75);
-  color: var(--ink);
+  background: rgb(0 0 0 / 0.78);
+  color: #fff;
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
 }
 
 .library-tracks li {
@@ -1211,6 +1477,9 @@ section[aria-label="Library"] h4 {
   flex: 1;
   min-width: 4rem;
   height: 2.75rem;
+  background: var(--panel-sunken);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-sm);
 }
 
 .track-wave canvas {
@@ -1223,7 +1492,7 @@ section[aria-label="Library"] h4 {
 .track-wave:has(.track-seek:focus-visible) {
   outline: 2px solid var(--signal);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .track-seek {
@@ -1280,13 +1549,14 @@ section[aria-label="Library"] h4 {
   overflow: auto;
   background: var(--panel);
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius-lg);
   padding: var(--space-4) var(--space-6) var(--space-6);
   color: var(--ink);
+  box-shadow: var(--shadow-pop);
 }
 
 .library-modal::backdrop {
-  background: rgb(0 0 0 / 0.6);
+  background: rgb(24 14 6 / 0.6);
 }
 
 .library-modal--wide {
@@ -1305,6 +1575,8 @@ section[aria-label="Library"] h4 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
 }
 
 .library-modal-header button {
@@ -1323,7 +1595,7 @@ section[aria-label="Library"] h4 {
   max-height: 55vh;
   object-fit: contain;
   display: block;
-  border-radius: 4px;
+  border-radius: var(--radius);
   background: #000;
 }
 
@@ -1343,6 +1615,7 @@ section[aria-label="Library"] h4 {
 .library-specs dt {
   color: var(--ink-dim);
   font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 .library-specs dd {
@@ -1366,15 +1639,20 @@ section[aria-label="Library"] h4 {
 
 .create-form {
   min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-6) var(--space-6);
+  box-shadow: var(--shadow-card);
 }
 
 .create-form textarea {
   display: block;
   width: 100%;
   margin-top: var(--space-1);
-  background: var(--panel);
+  background: var(--panel-sunken);
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--text-base);
@@ -1412,9 +1690,9 @@ section[aria-label="Library"] h4 {
 
 .draft-banner {
   border: 1px solid var(--rule);
-  border-left: 3px solid var(--signal);
-  border-radius: 4px;
-  background: var(--panel);
+  border-left: 4px solid var(--signal);
+  border-radius: var(--radius-sm);
+  background: var(--panel-raised);
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-sm);
 }
@@ -1433,7 +1711,10 @@ section[aria-label="Library"] h4 {
 
 .chip-row .chip {
   margin: 0;
+  min-height: 2.5rem;
+  border-radius: var(--radius-pill);
   font-size: var(--text-sm);
+  font-weight: 600;
   color: var(--ink-dim);
 }
 
@@ -1451,46 +1732,52 @@ section[aria-label="Library"] h4 {
 .card-options label {
   margin-top: 0;
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius);
+  background: var(--panel-raised);
   padding: var(--space-3) var(--space-4);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  box-shadow: var(--shadow-card);
+  transition: border-color 120ms ease;
 }
 
 .card-options label.is-picked {
-  border-color: var(--signal);
-  background: var(--panel-raised);
+  border-color: var(--signal-border);
+  background: var(--signal-wash);
 }
 
 .card-options label strong {
   color: var(--ink);
-  font-weight: 500;
+  font-weight: 650;
 }
 
 .card-options label span {
   font-size: var(--text-sm);
+  color: var(--ink-dim);
 }
 
-.card-options input[type="radio"] {
+.card-options input[type="radio"],
+.card-options input[type="checkbox"] {
   accent-color: var(--signal);
 }
 
-/* Live summary rail: tabular numerals, hairline rules, no cards-in-cards. */
+/* Live summary rail: crafted studio card, mono numerals for data. */
 .create-summary {
-  border: 1px solid var(--rule);
-  border-radius: 4px;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
   background: var(--panel);
+  box-shadow: var(--shadow-card);
   padding: var(--space-4);
   position: sticky;
   top: var(--space-4);
   font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
 }
 
 .create-summary h3 {
   margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
 }
 
 .create-summary dl {
@@ -1498,10 +1785,11 @@ section[aria-label="Library"] h4 {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .create-summary dl > div {
-  border-top: 1px solid var(--rule);
+  border-top: 1px solid var(--rule-soft);
   padding-top: var(--space-2);
 }
 
@@ -1513,6 +1801,9 @@ section[aria-label="Library"] h4 {
 .create-summary dt {
   color: var(--ink-dim);
   font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .create-summary dd {
@@ -1526,8 +1817,9 @@ section[aria-label="Library"] h4 {
 
 .advanced-panel {
   margin-top: var(--space-6);
-  border: 1px solid var(--rule);
-  border-radius: 4px;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
   padding: var(--space-3) var(--space-4) var(--space-4);
 }
 
@@ -1535,6 +1827,7 @@ section[aria-label="Library"] h4 {
   cursor: pointer;
   color: var(--ink-dim);
   font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 @media (max-width: 900px) {
@@ -1556,6 +1849,7 @@ section[aria-label="Library"] h4 {
 
 .confirm-title {
   margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
 }
 
 .confirm-body {
@@ -1598,6 +1892,11 @@ section[aria-label="Library"] h4 {
 button.danger {
   background: var(--fail-dim);
   border-color: var(--fail);
+  color: var(--ink);
+}
+
+[data-theme="light"] button.danger {
+  color: var(--fail);
 }
 
 /* Borderless text action for destructive triggers that should stay quiet
@@ -1605,6 +1904,7 @@ button.danger {
 .danger-text {
   background: none;
   border: none;
+  box-shadow: none;
   padding: var(--space-2) var(--space-2);
   margin: calc(-1 * var(--space-2)) 0;
   min-height: 2.75rem;
@@ -1617,6 +1917,7 @@ button.danger {
 
 .danger-text:hover:not(:disabled) {
   color: var(--fail);
+  transform: none;
 }
 
 /* Header bin link + count, neutral so it never reads as a "go" signal. */
@@ -1624,15 +1925,17 @@ button.danger {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
+  font-weight: 600;
 }
 
 .trash-count {
   min-width: 1.25rem;
-  padding: 0 var(--space-1);
+  padding: 0 var(--space-2);
   background: var(--panel-raised);
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius-pill);
   font-size: var(--text-xs);
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   line-height: 1.5;
   text-align: center;
@@ -1652,6 +1955,19 @@ button.danger {
 
 .trash-group {
   margin-top: var(--space-6);
+  background: var(--panel);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-6) var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.trash-group h3 {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
 }
 
 .trash-table td {
@@ -1660,12 +1976,14 @@ button.danger {
 
 .trash-label {
   display: block;
+  font-weight: 600;
 }
 
 .trash-item-detail {
   display: block;
   color: var(--ink-dim);
   font-size: var(--text-xs);
+  font-family: var(--font-mono);
 }
 
 .trash-origin {
@@ -1674,6 +1992,7 @@ button.danger {
 
 .trash-purge.is-soon {
   color: var(--fail);
+  font-weight: 600;
 }
 
 .trash-actions {
@@ -1699,6 +2018,15 @@ button.danger {
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
+}
+
+.session-heading h2 {
+  overflow-wrap: anywhere;
+}
+
+.session-heading .danger-text {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* Dashboard session rows: trash action revealed on hover/focus, forced on
