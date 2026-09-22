@@ -108,6 +108,13 @@ pre {
   margin-bottom: var(--space-4);
 }
 
+/* Long filenames/paths in manifest and EDL tables wrap instead of
+   forcing the scroll container wider than the viewport. */
+.table-scroll td.src-cell {
+  overflow-wrap: anywhere;
+  min-width: 12rem;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
@@ -231,7 +238,9 @@ button.primary {
   border-bottom: 1px solid var(--rule);
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
 }
 
 .app-header a {
@@ -241,7 +250,19 @@ button.primary {
 
 .app-header-actions {
   display: flex;
-  gap: var(--space-4);
+  gap: var(--space-2) var(--space-4);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    gap: var(--space-2);
+  }
+
+  .app-header-actions {
+    gap: var(--space-2);
+  }
 }
 
 .app-body {
@@ -847,7 +868,11 @@ figure:focus-within .tile-delete,
 .link-button {
   background: none;
   border: none;
-  padding: 0;
+  padding: var(--space-2) var(--space-2);
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2));
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
   font: inherit;
   color: var(--signal);
   text-decoration: underline;
@@ -1580,8 +1605,11 @@ button.danger {
 .danger-text {
   background: none;
   border: none;
-  padding: 0;
-  margin: 0;
+  padding: var(--space-2) var(--space-2);
+  margin: calc(-1 * var(--space-2)) 0;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
   font: inherit;
   color: var(--ink-dim);
   cursor: pointer;

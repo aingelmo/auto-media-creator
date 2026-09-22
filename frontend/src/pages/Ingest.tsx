@@ -18,34 +18,36 @@ export default function Ingest() {
       <h2>
         <Link to={`/sessions/${name}`}>{name}</Link> &mdash; ingest
       </h2>
-      <table>
-        <thead>
-          <tr>
-            <th>src</th>
-            <th>type</th>
-            <th>w x h</th>
-            <th>rotation</th>
-            <th className="num">duration_s</th>
-            <th>hdr</th>
-            <th>proxy_verified</th>
-          </tr>
-        </thead>
-        <tbody>
-          {manifest.sources.map((s) => (
-            <tr key={s.src}>
-              <td>{s.src}</td>
-              <td>{s.type}</td>
-              <td>
-                {s.w}x{s.h}
-              </td>
-              <td>{s.rotation}</td>
-              <td className="num">{s.type === "video" ? s.duration_s : ""}</td>
-              <td>{String(s.hdr)}</td>
-              <td>{String(s.proxy_verified)}</td>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>src</th>
+              <th>type</th>
+              <th>w x h</th>
+              <th>rotation</th>
+              <th className="num">duration_s</th>
+              <th>hdr</th>
+              <th>proxy_verified</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {manifest.sources.map((s) => (
+              <tr key={s.src}>
+                <td className="src-cell">{s.src}</td>
+                <td>{s.type}</td>
+                <td>
+                  {s.w}x{s.h}
+                </td>
+                <td>{s.rotation}</td>
+                <td className="num">{s.type === "video" ? s.duration_s : ""}</td>
+                <td>{String(s.hdr)}</td>
+                <td>{String(s.proxy_verified)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {manifest.warnings && manifest.warnings.length > 0 && (
         <>
           <h3>Warnings</h3>

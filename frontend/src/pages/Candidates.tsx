@@ -25,14 +25,20 @@ export default function Candidates() {
           </h3>
           <p>score_cv={c.score_cv}</p>
           <details>
-            <summary>raw</summary>
+            <summary>Details</summary>
             <p>
               src={c.src} admits_slots={JSON.stringify(c.admits_slots)}
             </p>
           </details>
-          {c.peak_urls.map((url) => (
-            <img key={url} src={url} alt={`${c.id} peak frame`} height={160} />
-          ))}
+          {c.peak_urls.length > 0 && (
+            <div className="contact-sheet contact-sheet--compact">
+              {c.peak_urls.map((url) => (
+                <figure key={url}>
+                  <img src={url} alt={`${c.id} peak frame`} loading="lazy" />
+                </figure>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </>

@@ -7,7 +7,6 @@ import TrackPlayer from "../components/TrackPlayer";
 import { isDisplayableImage } from "../components/mediaMeta";
 import {
   clipSecs,
-  dimsLabel,
   durationLabel,
   extOf,
   formatAge,
@@ -203,7 +202,6 @@ export default function Index() {
           type="button"
           className="library-tile"
           onClick={() => setPreview(c)}
-          title={`${c.filename} · ${durationLabel(c.duration_s, c.kind)}${dimsLabel(c.w, c.h) ? ` · ${dimsLabel(c.w, c.h)}` : ""} · ${formatSize(c.size)} — preview`}
           aria-label={`Preview ${c.filename}`}
         >
           <span className="library-thumb" aria-hidden="true">
@@ -402,65 +400,69 @@ export default function Index() {
 
       <section aria-label="Sessions">
         <h3>Sessions</h3>
-        <table className="session-list">
-          <thead>
-            <tr>
-              <th>Session</th>
-              <th className="num">Clips</th>
-              <th>Music</th>
-              <th className="num">Cost</th>
-              <th>Updated</th>
-              <th>Status</th>
-              <th aria-label="Actions" />
-            </tr>
-          </thead>
-          <tbody>
-            {sessions === null ? (
+        <div className="table-scroll">
+          <table className="session-list">
+            <thead>
               <tr>
-                <td colSpan={7}>Loading…</td>
+                <th>Session</th>
+                <th className="num">Clips</th>
+                <th>Music</th>
+                <th className="num">Cost</th>
+                <th>Updated</th>
+                <th>Status</th>
+                <th aria-label="Actions" />
               </tr>
-            ) : sessions.length === 0 ? (
-              <tr>
-                <td colSpan={7}>
-                  No sessions yet. <Link to="/new">Start one</Link> — drop clips plus a music track
-                  and the bench cuts the reel.
-                </td>
-              </tr>
-            ) : (
-              sessions.map((s) => (
-                <tr key={s.name}>
-                  <td>
-                    {s.reel_exists && (
-                      <video
-                        className="session-reel-thumb"
-                        muted
-                        preload="metadata"
-                        src={`${reelUrl(s.name)}#t=0.1`}
-                      />
-                    )}
-                    <Link to={`/sessions/${s.name}`}>{s.name}</Link>
-                  </td>
-                  <td className="num">{s.clip_count}</td>
-                  <td>{s.music_name || "—"}</td>
-                  <td className="num">${s.total_cost_usd.toFixed(4)}</td>
-                  <td>{new Date(s.mtime * 1000).toLocaleDateString()}</td>
-                  <td className={`status-${s.status}`}>{s.status}</td>
-                  <td className="session-actions-cell">
-                    <button
-                      type="button"
-                      className="danger-text session-trash"
-                      onClick={() => void handleDeleteSession(s)}
-                      disabled={deletingSession === s.name}
-                      aria-label={`Move ${s.name} to the trash`}
-                    >
-                      {deletingSession === s.name ? "…" : "Trash"}
-                    </button>
+            </thead>
+            <tbody>
+              {sessions === null ? (
+                <tr>
+                  <td colSpan={7}>Loading…</td>
+                </tr>
+              ) : sessions.length === 0 ? (
+                <tr>
+                  <td colSpan={7}>
+                    No sessions yet. <Link to="/new">Start one</Link> — drop clips plus a music
+                    track and the bench cuts the reel.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                sessions.map((s) => (
+                  <tr key={s.name}>
+                    <td>
+                      {s.reel_exists && (
+                        <video
+                          aria-hidden="true"
+                          tabIndex={-1}
+                          className="session-reel-thumb"
+                          muted
+                          preload="metadata"
+                          src={`${reelUrl(s.name)}#t=0.1`}
+                        />
+                      )}
+                      <Link to={`/sessions/${s.name}`}>{s.name}</Link>
+                    </td>
+                    <td className="num">{s.clip_count}</td>
+                    <td>{s.music_name || "—"}</td>
+                    <td className="num">${s.total_cost_usd.toFixed(4)}</td>
+                    <td>{new Date(s.mtime * 1000).toLocaleDateString()}</td>
+                    <td className={`status-${s.status}`}>{s.status}</td>
+                    <td className="session-actions-cell">
+                      <button
+                        type="button"
+                        className="danger-text session-trash"
+                        onClick={() => void handleDeleteSession(s)}
+                        disabled={deletingSession === s.name}
+                        aria-label={`Move ${s.name} to the trash`}
+                      >
+                        {deletingSession === s.name ? "…" : "Trash"}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </>
   );

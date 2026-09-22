@@ -41,7 +41,7 @@ export default function Planner() {
               <tr key={i}>
                 <td>{c.slot}</td>
                 <td>{c.role}</td>
-                <td>{c.src}</td>
+                <td className="src-cell">{c.src}</td>
                 <td className="num">{c.in_s.toFixed(2)}</td>
                 <td className="num">{c.out_s.toFixed(2)}</td>
                 <td className="num">{c.timeline_start_f}</td>

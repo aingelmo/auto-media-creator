@@ -33,7 +33,7 @@ export default function Hooks() {
       ))}
       {hooks.dropped !== undefined && (
         <details>
-          <summary>dropped</summary>
+          <summary>Dropped</summary>
           <pre>{JSON.stringify(hooks.dropped, null, 2)}</pre>
         </details>
       )}

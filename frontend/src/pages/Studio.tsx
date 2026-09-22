@@ -4,7 +4,20 @@ import { api, fileUrl, reelUrl } from "../api";
 import MusicPicker from "../components/MusicPicker";
 import StageRail from "../components/StageRail";
 import TimelineStrip from "../components/TimelineStrip";
-import type { SessionDetail, TimelinePayload } from "../types";
+import type { SessionDetail, StageName, TimelinePayload } from "../types";
+import Candidates from "./Candidates";
+import Hooks from "./Hooks";
+import Ingest from "./Ingest";
+import Planner from "./Planner";
+import Selection from "./Selection";
+
+const STAGE_VIEWS: Partial<Record<StageName, React.ComponentType>> = {
+  ingest: Ingest,
+  candidates: Candidates,
+  selection: Selection,
+  hooks: Hooks,
+  planner: Planner,
+};
 
 export default function Studio() {
   const { name = "" } = useParams();
@@ -17,6 +30,7 @@ export default function Studio() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [viewStage, setViewStage] = useState<StageName | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
@@ -150,13 +164,45 @@ export default function Studio() {
           {error}
         </p>
       )}
-      {notice && <output className="status-done">{notice}</output>}
+      {notice && (
+        <output className="status-done" aria-live="polite">
+          {notice}
+        </output>
+      )}
       <StageRail
         stages={session.stages}
         stageStatuses={session.stage_statuses}
         detail={job?.detail}
-        onView={() => undefined}
+        onView={setViewStage}
       />
+      {viewStage &&
+        STAGE_VIEWS[viewStage] &&
+        (() => {
+          const StageView = STAGE_VIEWS[viewStage];
+          return (
+            <section className="stage-detail-panel" aria-label={`${viewStage} details`}>
+              <div className="stage-detail-panel-header">
+                <h3>{viewStage}</h3>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`Close ${viewStage} details`}
+                  onClick={() => setViewStage(null)}
+                >
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path
+                      d="M2 2l12 12M14 2L2 14"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <StageView />
+            </section>
+          );
+        })()}
       {job?.notices && job.notices.length > 0 && (
         <ul className="studio-notices" aria-label="Auto decisions">
           {job.notices.map((n, i) => (
@@ -176,6 +222,7 @@ export default function Studio() {
             <video
               className="reel-player studio-preview-video"
               controls
+              preload="metadata"
               src={reelUrl(name)}
               aria-label="Finished reel"
             />
@@ -183,6 +230,7 @@ export default function Studio() {
             <video
               className="reel-player studio-preview-video"
               controls
+              preload="metadata"
               src={previewSrc}
               aria-label="Draft preview"
             />
@@ -234,7 +282,11 @@ export default function Studio() {
           <p>Timeline appears once planning finishes.</p>
         )}
       </section>
-      {running && <output className="status-running">Running&hellip;</output>}
+      {running && (
+        <output className="status-running" aria-live="polite">
+          Running&hellip;
+        </output>
+      )}
       {job?.error && (
         <div role="alert">
           <p className="status-failed">Render failed — {job.error}</p>

@@ -218,7 +218,13 @@ export default function Session() {
             <div className="reel-variant">
               {session.reel_exists ? (
                 <>
-                  <video className="reel-player" controls src={reelUrl(name)} />
+                  <video
+                    className="reel-player"
+                    controls
+                    preload="metadata"
+                    src={reelUrl(name)}
+                    aria-label="Finished reel"
+                  />
                   <p>
                     <a href={reelUrl(name)} download>
                       Download reel.mp4
@@ -232,7 +238,13 @@ export default function Session() {
             {session.reel_b_exists && (
               <div className="reel-variant">
                 <h3>Variant B</h3>
-                <video className="reel-player" controls src={fileUrl(name, "reel_b.mp4")} />
+                <video
+                  className="reel-player"
+                  controls
+                  preload="metadata"
+                  src={fileUrl(name, "reel_b.mp4")}
+                  aria-label="Finished reel variant B"
+                />
                 <p>
                   <a href={fileUrl(name, "reel_b.mp4")} download>
                     Download reel_b.mp4
@@ -290,7 +302,7 @@ export default function Session() {
       )}
 
       {!job?.awaiting_confirmation && job && !job.done && !job.error && (
-        <p className="status-running">Running&hellip;</p>
+        <output className="status-running" aria-live="polite">Running&hellip;</output>
       )}
     </div>
   );
