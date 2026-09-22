@@ -56,6 +56,14 @@ def _make_clip(path: Path, *, w=1080, h=1920, fps=30, duration=3, hlg=False) -> 
             "bt2020nc",
             "-pix_fmt",
             "yuv420p10le",
+            # ffmpeg 9's `-color_*` no longer writes H.264 VUI
+            # primaries/transfer: force them (9/18/9 = bt2020 /
+            # arib-std-b67 / bt2020nc) so probe classifies HLG.
+            "-bsf:v",
+            (
+                "h264_metadata=colour_primaries=9:transfer_characteristics=18"
+                ":matrix_coefficients=9"
+            ),
         ]
         if hlg
         else ["-pix_fmt", "yuv420p"]

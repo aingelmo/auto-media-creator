@@ -19,6 +19,16 @@ COLOR_ARGS = [
     "bt709",
     "-color_range",
     "tv",
+    # ffmpeg 9's `-color_*` options no longer write the H.264 VUI
+    # primaries/transfer (only colorspace survives), so R4 sees
+    # `None` for them. The bitstream filter forces all three VUI
+    # tags (1/1/1 = bt709) into the stream; `-c:v copy` in concat
+    # then preserves them into the reel.
+    "-bsf:v",
+    (
+        "h264_metadata=colour_primaries=1:transfer_characteristics=1"
+        ":matrix_coefficients=1"
+    ),
 ]
 
 

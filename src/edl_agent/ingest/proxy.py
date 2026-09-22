@@ -79,6 +79,14 @@ def build_proxy(info: VideoSourceInfo, out_path: Path, threads: int = 4) -> Path
         "bt709",
         "-color_range",
         "tv",
+        # ffmpeg 9's `-color_*` no longer writes H.264 VUI
+        # primaries/transfer: force them (1/1/1 = bt709) so the
+        # proxy probes as SDR bt709 downstream.
+        "-bsf:v",
+        (
+            "h264_metadata=colour_primaries=1:transfer_characteristics=1"
+            ":matrix_coefficients=1"
+        ),
         "-c:v",
         "libx264",
         # No B-frames: with them, libx264's negative initial DTS (from frame
