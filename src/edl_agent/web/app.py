@@ -15,7 +15,15 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from edl_agent.web.routes import config, files, media, sessions, stages, waveform
+from edl_agent.web.routes import (
+    config,
+    files,
+    media,
+    sessions,
+    stages,
+    studio,
+    waveform,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -23,6 +31,7 @@ app = FastAPI(title="edl-agent")
 app.include_router(sessions.router)
 app.include_router(files.router)
 app.include_router(stages.router)
+app.include_router(studio.router)
 app.include_router(config.router)
 app.include_router(media.router)
 app.include_router(waveform.router)

@@ -56,12 +56,16 @@ class JobState:
             `checks` stage completes.
         unverified_sources: Video `src` paths whose proxy failed temporal
             verification against the original, once `ingest` completes.
+            Studio flow auto-keeps them and records a `notices` entry
+            instead of pausing (#4.3).
         awaiting_confirmation: `True` while the job is paused waiting on
-            `confirm_event`, either after `ingest` (`unverified_sources`
-            non-empty) or after `candidates` (`low_candidates` non-empty).
+            `confirm_event`. Studio flow only pauses on `"music_choice"`
+            (the money gate before any LLM spend); all other former
+            pauses auto-resolve with defaults and record `notices`.
         pause_kind: Which pause `awaiting_confirmation` refers to:
-            `"music_choice"`, `"verification"`, `"low_candidates"`,
-            `"hook_choice"`, or `"effects_preview"`.
+            `"music_choice"` in studio flow; legacy values
+            `"verification"`, `"low_candidates"`, `"hook_choice"`,
+            `"effects_preview"` remain for old clients/tests.
         confirm_event: Set (via `/sessions/{name}/confirm`) to unblock a
             job paused on `awaiting_confirmation`.
         cancelled: `True` if the user chose not to proceed past the
@@ -91,26 +95,28 @@ class JobState:
             `evidence`, `rejected`, `source`), for the hook-choice template.
         hook_slot: Slot number of the hook clip, so the template can build
             preview URLs (`hook_previews/{key}/seg_{hook_slot:02d}.mp4`).
-        hook_choice: Chosen/custom hook text (`""` = no text), set via
-            `/sessions/{name}/confirm` during a `"hook_choice"` pause.
+        hook_choice: Manual hook text (`""` = no text). Studio flow
+            defaults to `hook_line_override` (if any) else `""` and
+            never pauses; edited later via `POST .../hook-text`.
         hook_choice_b: Chosen hook text for variant B (`""` = no variant
             B), set via `/sessions/{name}/confirm` during a `"hook_choice"`
             pause (idea #7).
         hook_flash: Whether the hook clip gets its white flash on the peak
-            beat, set via `/sessions/{name}/confirm` during an
-            `"effects_preview"` pause; defaults to `False` so the effect is
-            only enabled after the operator has watched a preview without
-            it. Combined with `punch_in`, picks which cached
+            beat. Studio flow defaults to `False`; edited later via
+            `POST .../effects` which rebuilds the EDL and re-renders.
+            Combined with `punch_in`, picks which cached
             `reel_preview{suffix}.mp4` (see `stages.render._combo_suffix`)
-            the pause shows.
-        punch_in: Whether develop clips get the punch-in zoom snap on cuts,
-            set via `/sessions/{name}/confirm` during an `"effects_preview"`
-            pause; defaults to `False` so the effect is only enabled after
-            the operator has watched a preview without it.
-        effects_preview_again: `True` (set via `/sessions/{name}/confirm`
-            during an `"effects_preview"` pause) to rebuild the EDL with the
-            new `hook_flash`/`punch_in` values and preview again, instead of
-            proceeding to the full-resolution render.
+            the studio preview shows.
+        punch_in: Whether develop clips get the punch-in zoom snap on cuts.
+            Studio flow defaults to `False`; edited later via
+            `POST .../effects`.
+        effects_preview_again: Legacy, set via `/sessions/{name}/confirm`
+            during an `"effects_preview"` pause. Studio flow never pauses
+            there, so it stays `False` on fresh runs.
+        notices: Non-blocking auto-resolutions (`{"kind", "message"}`),
+            e.g. unverified proxies kept, low-candidate auto-shorten,
+            empty manual hook. Surfaced inline in studio instead of
+            blocking pauses.
         more_hooks: Deprecated, always `False`. The web `hooks` stage no
             longer calls the hook-copy LLM (manual line or none only);
             kept so old in-memory jobs and tests still construct.
@@ -162,6 +168,7 @@ class JobState:
     music_candidates: list[dict] = field(default_factory=list)
     music_choice_offset: float = 0.0
     more_music: bool = False
+    notices: list[dict] = field(default_factory=list)
 
     @contextmanager
     def running(self, stage: str) -> Iterator[None]:

@@ -191,7 +191,9 @@ def job_payload(job: JobState | None) -> dict[str, Any] | None:
         "low_candidates": job.low_candidates,
         "hooks": job.hooks,
         "hook_slot": job.hook_slot,
+        "hook_choice": job.hook_choice,
         "music_candidates": job.music_candidates,
         "punch_in": job.punch_in,
         "hook_flash": job.hook_flash,
+        "notices": job.notices,
     }

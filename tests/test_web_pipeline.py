@@ -1,10 +1,9 @@
-"""Web pipeline: excluding unverified proxies at the confirmation pause."""
+"""Web pipeline: studio flow with a single music money-gate."""
 
 from __future__ import annotations
 
 import json
 import threading
-import time
 from unittest.mock import Mock, patch
 
 from edl_agent.web.pipeline import JobState, clear_stage_artifacts, run_pipeline_job
@@ -17,22 +16,11 @@ def _fake_ollama_response(json_data):
     return resp
 
 
-def _confirm_effects_preview(job: JobState) -> None:
-    """Wait for, then answer, the render stage's hook-flash/punch-in preview pause."""
-    deadline = time.monotonic() + 5
-    while job.pause_kind != "effects_preview" and time.monotonic() < deadline:
-        time.sleep(0.01)
-    assert job.pause_kind == "effects_preview"
-    job.effects_preview_again = False
-    job.cancelled = False
-    job.confirm_event.set()
+def test_unverified_sources_auto_kept_with_notice_using_ollama(tmp_path) -> None:
+    """Studio flow auto-keeps unverified clips and records a notice.
 
-
-def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
-    tmp_path,
-) -> None:
-    """A clip excluded at the confirmation pause never reaches `run_candidates`,
-    and the rest of the pipeline (through the real Ollama client) still completes.
+    No verification pause exists anymore; both sources reach candidates
+    and the notice is surfaced inline.
     """
     session_dir = tmp_path
     manifest = {
@@ -107,50 +95,24 @@ def test_excluding_unverified_source_drops_it_before_candidates_using_ollama(
             args=(session_dir, "ollama", "qwen3-vl:8b-instruct", job),
         )
         thread.start()
-
-        # ingest flags the mismatched clip and pauses for confirmation.
-        deadline = time.monotonic() + 5
-        while not job.awaiting_confirmation and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert job.awaiting_confirmation
-        assert job.unverified_sources == ["inputs/bad.mov"]
-
-        # Simulate the user excluding the bad clip and continuing.
-        job.excluded_sources = ["inputs/bad.mov"]
-        job.cancelled = False
-        job.confirm_event.set()
-
-        # hooks stage pauses for the hook-choice screen next.
-        deadline = time.monotonic() + 5
-        while job.pause_kind != "hook_choice" and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert job.pause_kind == "hook_choice"
-        job.hook_choice = ""
-        job.more_hooks = False
-        job.cancelled = False
-        job.confirm_event.set()
-        _confirm_effects_preview(job)
         thread.join(timeout=10)
 
     assert not thread.is_alive()
     assert job.error is None
     assert job.done
+    assert job.awaiting_confirmation is False
+    assert job.unverified_sources == ["inputs/bad.mov"]
+    assert any(n["kind"] == "verification" for n in job.notices)
     assert [s["src"] for s in candidates_seen["manifest"]["sources"]] == [
-        "inputs/good.mov"
+        "inputs/good.mov",
+        "inputs/bad.mov",
     ]
-    on_disk = json.loads((session_dir / "manifest.json").read_text())
-    assert [s["src"] for s in on_disk["sources"]] == ["inputs/good.mov"]
     selection = json.loads((session_dir / "selection.json").read_text())
     assert selection == {"selected": [], "rejected": [], "notes": ""}
 
 
-def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates(
-    tmp_path,
-) -> None:
-    """One source clip for 3 slots pauses the job; choosing "shorten" re-cuts the
-    music to the suggested duration and recomputes each candidate's `admits_slots`
-    against the new, shorter slot list.
-    """
+def test_low_candidates_auto_shortens_without_pause(tmp_path) -> None:
+    """One source clip for 3 slots auto-recuts music without pausing."""
     session_dir = tmp_path
     manifest = {
         "session_id": "s1",
@@ -172,7 +134,6 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
         ],
         "duration_f": 180,
     }
-    # 1 slot needing 2.0s; the candidate's 2.2s window still admits it.
     shortened_slots = {
         "slots": [{"slot": 0, "start_f": 0, "end_f": 60, "role": "hook"}],
         "duration_f": 60,
@@ -245,36 +206,18 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
             args=(session_dir, "ollama", "qwen3-vl:8b-instruct", job),
         )
         thread.start()
-
-        deadline = time.monotonic() + 5
-        while not job.awaiting_confirmation and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert job.awaiting_confirmation
-        assert job.pause_kind == "low_candidates"
-        assert job.low_candidates == {
-            "real_sources": 1,
-            "slot_count": 3,
-            "suggested_duration_s": 5.0,
-        }
-
-        job.shorten = True
-        job.cancelled = False
-        job.confirm_event.set()
-
-        deadline = time.monotonic() + 5
-        while job.pause_kind != "hook_choice" and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert job.pause_kind == "hook_choice"
-        job.hook_choice = ""
-        job.more_hooks = False
-        job.cancelled = False
-        job.confirm_event.set()
-        _confirm_effects_preview(job)
         thread.join(timeout=10)
 
     assert not thread.is_alive()
     assert job.error is None
     assert job.done
+    assert job.awaiting_confirmation is False
+    assert job.low_candidates == {
+        "real_sources": 1,
+        "slot_count": 3,
+        "suggested_duration_s": 5.0,
+    }
+    assert any(n["kind"] == "low_candidates" for n in job.notices)
 
     on_disk_slots = json.loads((session_dir / "slots.json").read_text())
     assert on_disk_slots == shortened_slots
@@ -284,18 +227,19 @@ def test_shortening_at_low_candidates_pause_recuts_music_and_readmits_candidates
     assert on_disk_candidates["candidates"][0]["admits_slots"] == [0]
 
 
-def _run_job_to_hook_choice(
+def _run_job_to_completion(
     tmp_path,
-    hook_choice_b: str,
+    hook_choice_b: str = "",
     hook_line_override: str = "",
-    hook_flash: bool = True,
+    hook_flash: bool = False,
     brief: str = "",
     audience: str = "prospects",
 ) -> tuple[JobState, Mock, list[dict], list[dict], Mock]:
-    """Drive a job to the hook-choice pause (image-only sources skip both
-    pauses), answer it with `hook_choice_b`, then run it to completion with
-    every render/planner call mocked. Returns the job and the `render_segments`
-    mock so callers can inspect suffix/reuse kwargs used for variant B.
+    """Run a studio job to completion with every render/planner call mocked.
+
+    Image-only sources skip the music money-gate; studio flow has no
+    other pauses. `hook_choice_b` is preset on the job so variant-B
+    tests can exercise that path without a pause.
     """
     session_dir = tmp_path
     manifest = {
@@ -342,9 +286,8 @@ def _run_job_to_hook_choice(
     render_segments_mock = Mock()
     render_hook_previews_mock = Mock()
     job = JobState()
-    # render_segments/run_planner are shared mocks patched into both the
-    # `render` stage (variant A) and `variant_b` stage (variant B), which
-    # import them independently -- see AGENTS.md's note on module splits.
+    job.hook_choice_b = hook_choice_b
+    job.hook_flash = hook_flash
     with (
         patch("edl_agent.web.stages.ingest.run_ingest", return_value=manifest),
         patch("edl_agent.web.stages.ingest.slots_from_file", return_value=slots),
@@ -391,25 +334,12 @@ def _run_job_to_hook_choice(
             ),
         )
         thread.start()
-
-        deadline = time.monotonic() + 5
-        while job.pause_kind != "hook_choice" and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert job.pause_kind == "hook_choice"
-        job.hook_choice = ""
-        job.hook_choice_b = hook_choice_b
-        job.hook_flash = hook_flash
-        job.more_hooks = False
-        job.cancelled = False
-        job.confirm_event.set()
-        _confirm_effects_preview(job)
         thread.join(timeout=10)
 
     assert not thread.is_alive()
     assert job.error is None
     assert job.done
-    # run_planner builds a hookless preview EDL before the manual-only
-    # hooks stage; with no override the web path never calls run_hooks.
+    assert job.awaiting_confirmation is False
     assert call_order[0] == "planner"
     if hook_line_override:
         assert call_order[:2] == ["planner", "hooks"]
@@ -426,27 +356,27 @@ def _run_job_to_hook_choice(
 
 def test_hook_choice_b_renders_variant_b_reel(tmp_path) -> None:
     job, render_segments_mock, _hooks_calls, _planner_calls, _hp = (
-        _run_job_to_hook_choice(tmp_path, "line b")
+        _run_job_to_completion(tmp_path, "line b")
     )
 
     calls = render_segments_mock.call_args_list
-    assert len(calls) == 2  # variant A, then variant B
+    assert len(calls) == 2
     assert calls[1].kwargs["suffix"] == "_b"
     assert job.check_results_b == []
 
 
 def test_no_hook_choice_b_skips_variant_b_render(tmp_path) -> None:
     job, render_segments_mock, _hooks_calls, _planner_calls, _hp = (
-        _run_job_to_hook_choice(tmp_path, "")
+        _run_job_to_completion(tmp_path, "")
     )
 
     calls = render_segments_mock.call_args_list
-    assert len(calls) == 1  # variant A only
+    assert len(calls) == 1
     assert job.check_results_b == []
 
 
 def test_job_hook_line_override_is_passed_to_run_hooks(tmp_path) -> None:
-    _job, _rsm, hooks_calls, _pc, _hp = _run_job_to_hook_choice(
+    _job, _rsm, hooks_calls, _pc, _hp = _run_job_to_completion(
         tmp_path, "", hook_line_override="Del operador"
     )
 
@@ -460,7 +390,7 @@ def test_job_hook_line_override_is_passed_to_run_hooks(tmp_path) -> None:
 
 
 def test_job_brief_and_audience_are_passed_to_run_hooks(tmp_path) -> None:
-    _job, _rsm, hooks_calls, _pc, _hp = _run_job_to_hook_choice(
+    _job, _rsm, hooks_calls, _pc, _hp = _run_job_to_completion(
         tmp_path,
         "",
         hook_line_override="Del operador",
@@ -480,7 +410,7 @@ def test_job_brief_and_audience_are_passed_to_run_hooks(tmp_path) -> None:
 def test_manual_hooks_stage_writes_zero_cost_hooks_json(tmp_path) -> None:
     import json as _json
 
-    _job, _rsm, hooks_calls, _pc, _hp = _run_job_to_hook_choice(
+    _job, _rsm, hooks_calls, _pc, _hp = _run_job_to_completion(
         tmp_path, "", brief="Clase de Hyrox del jueves", audience="members"
     )
 
@@ -494,20 +424,19 @@ def test_manual_hooks_stage_writes_zero_cost_hooks_json(tmp_path) -> None:
 
 
 def test_job_hook_flash_is_passed_to_run_planner(tmp_path) -> None:
-    _job, _rsm, _hooks_calls, planner_calls, _hp = _run_job_to_hook_choice(
+    _job, _rsm, _hooks_calls, planner_calls, _hp = _run_job_to_completion(
         tmp_path, "", hook_flash=False
     )
 
     assert planner_calls[-1]["config"]["hook_flash"] is False
 
 
-def test_render_hook_previews_receives_no_llm_lines(tmp_path) -> None:
-    _job, _rsm, _hooks_calls, _pc, render_hook_previews_mock = _run_job_to_hook_choice(
-        tmp_path, ""
+def test_render_hook_previews_skipped_with_no_llm_lines(tmp_path) -> None:
+    _job, _rsm, _hooks_calls, _pc, render_hook_previews_mock = (
+        _run_job_to_completion(tmp_path, "")
     )
 
-    lines = render_hook_previews_mock.call_args_list[0].args[3]
-    assert lines == []
+    render_hook_previews_mock.assert_not_called()
 
 
 def test_clear_stage_artifacts_from_selection_keeps_earlier_stages_and_backs_up_reel(
@@ -548,9 +477,8 @@ def test_clear_stage_artifacts_does_not_touch_cost_ledger(tmp_path) -> None:
     assert (tmp_path / "costs.jsonl").exists()
 
 
-def test_render_stage_caches_effects_preview_combos_and_reuses_clips(tmp_path) -> None:
-    """Revisiting an already-rendered hook_flash/punch_in combo skips
-    re-encoding; a fresh combo hardlinks the clips the toggle didn't touch."""
+def test_render_stage_single_pass_preview_then_final(tmp_path) -> None:
+    """Studio render does one preview pass then final, with no pause."""
     from edl_agent.web.stages.render import _run_render_stage
 
     session_dir = tmp_path
@@ -595,36 +523,13 @@ def test_render_stage_caches_effects_preview_combos_and_reuses_clips(tmp_path) -
         patch("edl_agent.web.stages.render.concat_and_audio", fake_concat_and_audio),
         patch("edl_agent.web.stages.render.render_segments"),
         patch("edl_agent.web.stages.render.run_render_checks", return_value=[]),
-        patch("edl_agent.web.stages.render._build_final_edl", fake_build_final_edl),
     ):
-        thread = threading.Thread(
-            target=_run_render_stage,
-            args=(session_dir, job, False, edl, manifest, {}, {}, None, {}, ""),
+        result = _run_render_stage(
+            session_dir, job, False, edl, manifest, {}, {}, None, {}, ""
         )
-        thread.start()
 
-        def _confirm(again: bool, punch_in: bool) -> None:
-            deadline = time.monotonic() + 5
-            while job.pause_kind != "effects_preview" and time.monotonic() < deadline:
-                time.sleep(0.01)
-            assert job.pause_kind == "effects_preview"
-            # Reset so the next _confirm()'s wait loop doesn't see this same
-            # (not-yet-cleared) pause and fire before the next pause happens.
-            job.pause_kind = ""
-            job.punch_in = punch_in
-            job.effects_preview_again = again
-            job.cancelled = False
-            job.confirm_event.set()
-
-        _confirm(True, True)  # new combo: punch_in on
-        _confirm(True, False)  # back to the original combo: cached, no render
-        _confirm(False, False)  # proceed to the final render
-        thread.join(timeout=5)
-
-    assert not thread.is_alive()
-    assert [suffix for suffix, _ in render_calls] == ["_h0p0", "_h0p1"]
-    # The second render (new combo) reuses the unaffected hook clip (slot 0)
-    # from the first combo's segments, and only re-renders the develop clip.
-    _, second_reuse = render_calls[1]
-    assert second_reuse is not None
-    assert set(second_reuse) == {0}
+    assert job.error is None
+    assert job.awaiting_confirmation is False
+    assert [suffix for suffix, _ in render_calls] == ["_h0p0"]
+    assert result["clips"][0]["slot"] == 0
+    assert any(n["kind"] == "effects" for n in job.notices)

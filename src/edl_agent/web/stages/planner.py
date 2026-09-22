@@ -9,7 +9,7 @@ from edl_agent.llm import get_client
 from edl_agent.render import render_hook_previews
 from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session import run_hooks, run_planner
-from edl_agent.web.jobs import THREADS, JobState, _JobCancelledError
+from edl_agent.web.jobs import THREADS, JobState
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -104,16 +104,13 @@ def _run_hooks_and_planner_stage(
 ) -> dict:
     """Run the manual-only hooks stage, then the planner stage.
 
-    Never calls the hook-copy LLM: the hook line is either
-    `job.hook_line_override` (regenerate form) or picked manually at
-    the `hook_choice` pause (`""` = none). The automatic path stays
-    available via `scripts/run_e2e.py` for calibration.
+    Studio flow never pauses here: the hook line defaults to
+    `job.hook_line_override` (regenerate form) else `""` (no text) and
+    is edited later via `POST .../hook-text`. The automatic hook-copy
+    path stays available via `scripts/run_e2e.py` for calibration.
 
     Returns:
         Final `edl` dict.
-
-    Raises:
-        _JobCancelledError: If the operator declines the hook-choice pause.
     """
     edl_path = session_dir / "edl.json"
     if resume and edl_path.exists():
@@ -166,24 +163,24 @@ def _run_hooks_and_planner_stage(
                 hooks = _write_manual_hooks(session_dir, base_edl, job)
     job.hooks = hooks
     preview_edl = base_edl
-    job.detail["hooks"] = "rendering hook preview"
-    render_hook_previews(
-        preview_edl,
-        manifest,
-        session_dir,
-        [h["hook_line"] for h in hooks["hooks"] if h["hook_line"]],
-        THREADS,
-        tonemap_chain,
-    )
-    job.detail["hooks"] = ""
+    hook_lines = [h["hook_line"] for h in hooks["hooks"] if h["hook_line"]]
+    if hook_lines:
+        job.detail["hooks"] = "rendering hook preview"
+        render_hook_previews(
+            preview_edl,
+            manifest,
+            session_dir,
+            hook_lines,
+            THREADS,
+            tonemap_chain,
+        )
+        job.detail["hooks"] = ""
 
-    job.pause_kind = "hook_choice"
-    job.awaiting_confirmation = True
-    job.confirm_event.wait()
-    job.confirm_event.clear()
-    job.awaiting_confirmation = False
-    if job.cancelled:
-        raise _JobCancelledError
+    job.hook_choice = clean_hook_line(job.hook_line_override)
+    if not job.hook_choice:
+        job.notices.append(
+            {"kind": "hook", "message": "No hook text; edit it in studio anytime"}
+        )
 
     with job.running("planner"):
         job.detail["planner"] = "building final EDL"

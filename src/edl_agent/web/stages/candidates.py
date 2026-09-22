@@ -1,4 +1,4 @@
-"""The `candidates` stage: feature extraction plus the `"low_candidates"` pause."""
+"""The `candidates` stage: feature extraction plus auto-shorten on scarcity."""
 
 from __future__ import annotations
 
@@ -10,30 +10,83 @@ from edl_agent.features import free_torch_memory, yolo_pose_detector
 from edl_agent.ingest import cut_music, sha256_file, write_manifest
 from edl_agent.session import DEFAULT_CACHE_DIR, run_candidates
 from edl_agent.slots import slots_from_file
-from edl_agent.web.jobs import POSE_MODEL, JobState, _JobCancelledError
+from edl_agent.web.jobs import POSE_MODEL, JobState
 from edl_agent.web.stages.music import (
     MIN_SHORTEN_DURATION_S,
     MUSIC_MAX_DURATION_S,
-    _shorten_durations,
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
+def _shorten_to_fit(
+    session_dir: Path, manifest: dict, slots: dict, job: JobState
+) -> dict:
+    """Re-cut the music shorter so slot count fits usable sources.
+
+    Tries progressively shorter durations (see `music._shorten_durations`)
+    until the slot count fits `real_sources`, keeping the fewest-slot
+    result. Rewrites `manifest.json`/`slots.json` and readmits candidates.
+
+    Args:
+        session_dir: Session directory with `music/track_cut.wav`.
+        manifest: Ingest manifest dict (mutated in place).
+        slots: Current slots dict (replaced on success).
+        job: Live job; reads `low_candidates["suggested_duration_s"]`.
+
+    Returns:
+        New slots dict.
+    """
+    from edl_agent.web.stages.music import _shorten_durations
+
+    music = manifest["music"]
+    cut_path = session_dir / "music" / "track_cut.wav"
+    orig_track = session_dir / music["src"]
+
+    best_duration, best_slots = None, None
+    for new_duration in _shorten_durations(
+        job.low_candidates["suggested_duration_s"]
+    ):
+        cut_music(orig_track, cut_path, music["offset_s"], new_duration)
+        candidate_slots = slots_from_file(str(cut_path))
+        if best_slots is None or len(candidate_slots["slots"]) < len(
+            best_slots["slots"]
+        ):
+            best_duration, best_slots = new_duration, candidate_slots
+        if len(candidate_slots["slots"]) <= job.low_candidates["real_sources"]:
+            break
+
+    if best_slots is None or best_duration is None:
+        msg = "No valid slot duration found"
+        raise RuntimeError(msg)
+
+    if new_duration != best_duration:
+        cut_music(orig_track, cut_path, music["offset_s"], best_duration)
+    slots = best_slots
+
+    music["max_duration_s"] = best_duration
+    music["cut_sha256"] = sha256_file(cut_path)
+    write_manifest(manifest, session_dir / "manifest.json")
+
+    (session_dir / "slots.json").write_text(
+        json.dumps(slots, indent=2, ensure_ascii=False)
+    )
+    return slots
+
+
 def _run_candidates_stage(
     session_dir: Path, job: JobState, resume: bool, manifest: dict, slots: dict
 ) -> tuple[dict, dict]:
-    """Run (or resume) the candidates stage, pausing if usable sources are scarce.
+    """Run (or resume) the candidates stage, auto-shortening on scarcity.
 
-    Re-cuts the music to a shorter duration and rebuilds `slots` if the
-    operator chooses to shorten past a `"low_candidates"` pause.
+    Studio flow never pauses here: when usable video sources are fewer
+    than slots, the music is auto-recut shorter so the reel fits the
+    footage, recording a `notices` entry instead of blocking (#4.3).
 
     Returns:
-        `(candidates, slots)` -- `slots` may differ from the input if shortened.
-
-    Raises:
-        _JobCancelledError: If the operator declines the low-candidates pause.
+        `(candidates, slots)` -- `slots` may differ from the input if
+        auto-shortened.
     """
     candidates_path = session_dir / "candidates.json"
     if resume and candidates_path.exists():
@@ -77,46 +130,18 @@ def _run_candidates_stage(
             round(MUSIC_MAX_DURATION_S * real_sources / slot_count, 1),
         ),
     }
-    job.pause_kind = "low_candidates"
-    job.awaiting_confirmation = True
-    job.confirm_event.wait()
-    job.confirm_event.clear()
-    job.awaiting_confirmation = False
-    if job.cancelled:
-        raise _JobCancelledError
-    if not job.shorten:
-        return candidates, slots
-
-    music = manifest["music"]
-    cut_path = session_dir / "music" / "track_cut.wav"
-    orig_track = session_dir / music["src"]
-
-    best_duration, best_slots = None, None
-    for new_duration in _shorten_durations(job.low_candidates["suggested_duration_s"]):
-        cut_music(orig_track, cut_path, music["offset_s"], new_duration)
-        candidate_slots = slots_from_file(str(cut_path))
-        if best_slots is None or len(candidate_slots["slots"]) < len(
-            best_slots["slots"]
-        ):
-            best_duration, best_slots = new_duration, candidate_slots
-        if len(candidate_slots["slots"]) <= real_sources:
-            break
-
-    if best_slots is None or best_duration is None:
-        msg = "No valid slot duration found"
-        raise RuntimeError(msg)
-
-    if new_duration != best_duration:
-        cut_music(orig_track, cut_path, music["offset_s"], best_duration)
-    slots = best_slots
-
-    music["max_duration_s"] = best_duration
-    music["cut_sha256"] = sha256_file(cut_path)
-    write_manifest(manifest, session_dir / "manifest.json")
-
-    (session_dir / "slots.json").write_text(
-        json.dumps(slots, indent=2, ensure_ascii=False)
+    slots = _shorten_to_fit(session_dir, manifest, slots, job)
+    job.notices.append(
+        {
+            "kind": "low_candidates",
+            "message": (
+                f"Auto-shortened to fit {real_sources} source(s) "
+                f"into {len(slots['slots'])} slot(s)"
+            ),
+            "detail": dict(job.low_candidates),
+        }
     )
+
     readmit_candidates(candidates["candidates"], slots["slots"])
     candidates_path.write_text(json.dumps(candidates, indent=2, ensure_ascii=False))
 

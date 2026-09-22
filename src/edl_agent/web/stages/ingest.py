@@ -1,14 +1,13 @@
-"""The `ingest` stage: proxy build, verification pause, and beat-slot detection."""
+"""The `ingest` stage: music gate, proxy build, and beat-slot detection."""
 
 from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING
 
-from edl_agent.ingest import write_manifest
 from edl_agent.session import DEFAULT_CACHE_DIR, run_ingest
 from edl_agent.slots import slots_from_file
-from edl_agent.web.jobs import THREADS, JobState, _JobCancelledError
+from edl_agent.web.jobs import THREADS, JobState
 from edl_agent.web.stages.music import (
     MUSIC_MAX_DURATION_S,
     MUSIC_OFFSET_S,
@@ -23,13 +22,17 @@ if TYPE_CHECKING:
 def _run_ingest_stage(
     session_dir: Path, job: JobState, resume: bool
 ) -> tuple[dict, dict]:
-    """Run (or resume) the ingest stage, pausing if any proxy is unverified.
+    """Run (or resume) the ingest stage without blocking pauses.
+
+    The studio flow keeps only the `"music_choice"` money gate (before
+    any LLM spend). Unverified proxies are auto-kept and recorded in
+    `job.notices` instead of pausing (#4.3).
 
     Returns:
         `(manifest, slots)`.
 
     Raises:
-        _JobCancelledError: If the operator declines the verification pause.
+        _JobCancelledError: If the operator declines the music gate.
     """
     manifest_path = session_dir / "manifest.json"
     slots_path = session_dir / "slots.json"
@@ -65,16 +68,14 @@ def _run_ingest_stage(
         if s.get("type") == "video" and not s.get("proxy_verified", True)
     ]
     if job.unverified_sources:
-        job.pause_kind = "verification"
-        job.awaiting_confirmation = True
-        job.confirm_event.wait()
-        job.confirm_event.clear()
-        job.awaiting_confirmation = False
-        if job.cancelled:
-            raise _JobCancelledError
-        if job.excluded_sources:
-            manifest["sources"] = [
-                s for s in manifest["sources"] if s["src"] not in job.excluded_sources
-            ]
-            write_manifest(manifest, session_dir / "manifest.json")
+        job.notices.append(
+            {
+                "kind": "verification",
+                "message": (
+                    f"{len(job.unverified_sources)} clip(s) kept "
+                    "without proxy verification"
+                ),
+                "sources": list(job.unverified_sources),
+            }
+        )
     return manifest, slots
