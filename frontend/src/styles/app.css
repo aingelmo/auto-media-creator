@@ -898,11 +898,6 @@ section[aria-label="Library"] h4 {
   border-radius: 4px;
 }
 
-.library-more {
-  font-size: var(--text-sm);
-  color: var(--ink-dim);
-}
-
 .library-tracks li {
   flex-wrap: wrap;
 }

@@ -14,7 +14,7 @@ import {
 } from "../components/mediaMeta";
 import type { MediaEntry, SessionListEntry } from "../types";
 
-const CLIP_SHOWN = 8;
+const CLIP_SHOWN = 10;
 const TRACK_SHOWN = 4;
 
 function newestOf(clips: MediaEntry[], music: MediaEntry[]): MediaEntry | null {
@@ -29,6 +29,8 @@ export default function Index() {
   const [clips, setClips] = useState<MediaEntry[] | null>(null);
   const [music, setMusic] = useState<MediaEntry[] | null>(null);
   const [preview, setPreview] = useState<MediaEntry | null>(null);
+  const [allClips, setAllClips] = useState(false);
+  const [allTracks, setAllTracks] = useState(false);
 
   useEffect(() => {
     api.listSessions().then(setSessions);
@@ -92,7 +94,7 @@ export default function Index() {
               <>
                 <h4>Clips</h4>
                 <div className="contact-sheet contact-sheet--compact">
-                  {clips.slice(0, CLIP_SHOWN).map((c) => (
+                  {(allClips ? clips : clips.slice(0, CLIP_SHOWN)).map((c) => (
                     <figure key={`${c.session}/${c.path}`}>
                       <button
                         type="button"
@@ -123,9 +125,10 @@ export default function Index() {
                   ))}
                 </div>
                 {clips.length > CLIP_SHOWN && (
-                  <p className="library-more">
-                    + {clips.length - CLIP_SHOWN} more in{" "}
-                    <Link to="/new">the new-session picker</Link>
+                  <p>
+                    <button type="button" onClick={() => setAllClips((v) => !v)}>
+                      {allClips ? "Show less" : `Show all ${clips.length} clips`}
+                    </button>
                   </p>
                 )}
               </>
@@ -135,7 +138,7 @@ export default function Index() {
               <>
                 <h4>Tracks</h4>
                 <ul className="media-list library-tracks">
-                  {music.slice(0, TRACK_SHOWN).map((m) => (
+                  {(allTracks ? music : music.slice(0, TRACK_SHOWN)).map((m) => (
                     <li key={`${m.session}/${m.path}`}>
                       <span>
                         {m.filename} · {m.duration_s != null ? formatSecs(m.duration_s) : "—"} ·{" "}
@@ -146,9 +149,10 @@ export default function Index() {
                   ))}
                 </ul>
                 {music.length > TRACK_SHOWN && (
-                  <p className="library-more">
-                    + {music.length - TRACK_SHOWN} more in{" "}
-                    <Link to="/new">the new-session picker</Link>
+                  <p>
+                    <button type="button" onClick={() => setAllTracks((v) => !v)}>
+                      {allTracks ? "Show less" : `Show all ${music.length} tracks`}
+                    </button>
                   </p>
                 )}
               </>
