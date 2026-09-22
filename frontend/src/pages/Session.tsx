@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import { api, fileUrl, reelUrl } from "../api";
+import { useNavigate, useParams } from "react-router-dom";
+import { ApiError, api, fileUrl, reelUrl } from "../api";
+import { useConfirm } from "../components/confirm";
 import EffectsPreview from "../components/EffectsPreview";
 import HookPicker from "../components/HookPicker";
 import LowCandidatesPause from "../components/LowCandidatesPause";
@@ -10,6 +11,7 @@ import RegenHistory from "../components/RegenHistory";
 import StageRail from "../components/StageRail";
 import StartForm from "../components/StartForm";
 import VerificationPause from "../components/VerificationPause";
+import { notifyTrashChanged } from "../trash";
 import type { Config, SessionDetail, StageName } from "../types";
 import Candidates from "./Candidates";
 import Hooks from "./Hooks";
@@ -30,7 +32,11 @@ export default function Session() {
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [viewStage, setViewStage] = useState<StageName | null>(null);
+  const [trashing, setTrashing] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigate = useNavigate();
+  const confirm = useConfirm();
 
   const refresh = useCallback(async () => {
     const detail = await api.getSession(name);
@@ -83,6 +89,35 @@ export default function Session() {
   }, [session?.job?.done, session?.job?.awaiting_confirmation, name, refresh]);
   // oxlint-enable react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies
 
+  async function handleTrash() {
+    const ok = await confirm({
+      title: `Move ${name} to the trash?`,
+      body: (
+        <>
+          <p>
+            The whole session leaves the bench: inputs, reel, and stage results. Nothing is deleted.
+          </p>
+          <p className="confirm-note">Moves to Trash · restorable for 30 days.</p>
+        </>
+      ),
+      confirmLabel: "Move to trash",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setTrashing(true);
+    setActionError(null);
+    try {
+      await api.deleteSession(name);
+      notifyTrashChanged();
+      navigate("/");
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError ? err.detail : "Could not move the session to the trash.",
+      );
+      setTrashing(false);
+    }
+  }
+
   if (!session || !config) return <p>Loading&hellip;</p>;
 
   const { job } = session;
@@ -90,9 +125,24 @@ export default function Session() {
 
   return (
     <div className="session-page">
-      <h2>
-        {name} <span className="cost-badge">${session.total_cost_usd.toFixed(4)}</span>
-      </h2>
+      <div className="session-heading">
+        <h2>
+          {name} <span className="cost-badge">${session.total_cost_usd.toFixed(4)}</span>
+        </h2>
+        <button
+          type="button"
+          className="danger-text"
+          onClick={() => void handleTrash()}
+          disabled={trashing}
+        >
+          {trashing ? "Moving…" : "Move to trash"}
+        </button>
+      </div>
+      {actionError && (
+        <p className="status-failed" role="alert">
+          {actionError}
+        </p>
+      )}
       <StageRail
         stages={session.stages}
         stageStatuses={session.stage_statuses}

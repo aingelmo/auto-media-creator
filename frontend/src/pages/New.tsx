@@ -6,6 +6,7 @@ import { getFormMemory, saveFormMemory } from "../formMemory";
 import { clearDraft, loadDraft, suggestName, useCreateDraft } from "../useCreateDraft";
 import type { Config } from "../types";
 import BrandFieldset from "../components/BrandFieldset";
+import { useConfirm } from "../components/confirm";
 import CreateSummary, { type CreateStats } from "../components/CreateSummary";
 import DescribeFields from "../components/DescribeFields";
 import FormSteps from "../components/FormSteps";
@@ -45,6 +46,7 @@ export default function New() {
   const [handle, setHandle] = useState(() => loadDraft()?.handle ?? getFormMemory("handle") ?? "");
   const formRef = useRef<HTMLFormElement>(null);
   const navigate = useNavigate();
+  const confirm = useConfirm();
 
   useEffect(() => {
     api.getConfig().then(setConfig);
@@ -64,6 +66,28 @@ export default function New() {
       return "Add at least one clip or photo — drop files or reuse library.";
     if (!stats.musicName) return "Pick a music track — a track is required for the cut.";
     return null;
+  }
+
+  async function discardDraft() {
+    const ok = await confirm({
+      title: "Discard this draft?",
+      body: (
+        <p>
+          Clears the saved name, brief, and library picks for this form. Uploaded files are not
+          touched. This cannot be undone.
+        </p>
+      ),
+      confirmLabel: "Discard draft",
+      tone: "danger",
+    });
+    if (!ok) return;
+    clearDraft();
+    setDraftNotice(false);
+    setName("");
+    setBrief("");
+    setClipRefs([]);
+    setMusicRef("");
+    setHandle(getFormMemory("handle") ?? "");
   }
 
   function goTo(next: number) {
@@ -134,19 +158,7 @@ export default function New() {
       {draftNotice && (
         <p className="draft-banner">
           Draft restored — text and library picks are back; fresh files need re-adding.{" "}
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => {
-              clearDraft();
-              setDraftNotice(false);
-              setName("");
-              setBrief("");
-              setClipRefs([]);
-              setMusicRef("");
-              setHandle(getFormMemory("handle") ?? "");
-            }}
-          >
+          <button type="button" className="link-button" onClick={() => void discardDraft()}>
             Discard draft
           </button>
         </p>

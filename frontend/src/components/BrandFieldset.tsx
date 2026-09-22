@@ -8,6 +8,8 @@ import {
   saveBrandPreset,
 } from "../brandPresets";
 import { getFormMemory } from "../formMemory";
+import { trashPreset } from "../trash";
+import { useConfirm } from "./confirm";
 
 /** Optional brand fieldset (logo/handle) shared by new/regenerate forms. */
 export default function BrandFieldset({
@@ -23,6 +25,7 @@ export default function BrandFieldset({
   const handleRef = useRef<HTMLInputElement>(null);
   const [presets, setPresets] = useState<BrandPreset[]>(getBrandPresets);
   const [selected, setSelected] = useState("");
+  const confirm = useConfirm();
 
   async function applyPreset(name: string) {
     setSelected(name);
@@ -55,9 +58,23 @@ export default function BrandFieldset({
     setSelected(name);
   }
 
-  function removeSelectedPreset() {
+  async function removeSelectedPreset() {
     if (!selected) return;
+    const preset = presets.find((p) => p.name === selected);
+    const ok = await confirm({
+      title: `Move "${selected}" to the trash?`,
+      body: (
+        <>
+          <p>Removes it from your saved brands. Nothing is deleted.</p>
+          <p className="confirm-note">Moves to Trash · restorable for 30 days.</p>
+        </>
+      ),
+      confirmLabel: "Move to trash",
+      tone: "danger",
+    });
+    if (!ok) return;
     deleteBrandPreset(selected);
+    if (preset) trashPreset(preset);
     setPresets(getBrandPresets());
     setSelected("");
   }

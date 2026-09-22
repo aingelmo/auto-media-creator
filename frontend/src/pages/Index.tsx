@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, api, fileUrl, reelUrl } from "../api";
+import { useConfirm } from "../components/confirm";
 import LibraryPreview from "../components/LibraryPreview";
 import TrackPlayer from "../components/TrackPlayer";
 import { isDisplayableImage } from "../components/mediaMeta";
@@ -13,6 +14,7 @@ import {
   formatSecs,
   formatSize,
 } from "../components/mediaMeta";
+import { notifyTrashChanged } from "../trash";
 import type { MediaEntry, SessionListEntry } from "../types";
 
 const CLIP_SHOWN = 10;
@@ -34,12 +36,24 @@ export default function Index() {
   const [clips, setClips] = useState<MediaEntry[] | null>(null);
   const [music, setMusic] = useState<MediaEntry[] | null>(null);
   const [preview, setPreview] = useState<MediaEntry | null>(null);
-  const [allClips, setAllClips] = useState(false);
+  const [clipsOpen, setClipsOpen] = useState(false);
   const [allTracks, setAllTracks] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [deletingSession, setDeletingSession] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [libError, setLibError] = useState<string | null>(null);
+  const clipsDialogRef = useRef<HTMLDialogElement>(null);
+  const confirm = useConfirm();
+
+  useEffect(() => {
+    if (!clipsOpen) return;
+    const dialog = clipsDialogRef.current;
+    dialog?.showModal();
+    return () => {
+      dialog?.close();
+    };
+  }, [clipsOpen]);
 
   useEffect(() => {
     api.listSessions().then(setSessions);
@@ -65,11 +79,21 @@ export default function Index() {
   async function handleDeleteSelected() {
     const refs = [...selected];
     if (refs.length === 0) return;
-    const ok = window.confirm(
-      `Delete ${refs.length} selected file${refs.length === 1 ? "" : "s"}? This unlinks ` +
-        `each file, removes it from its manifest, and clears downstream results so the ` +
-        `next run rebuilds. This cannot be undone.`,
-    );
+    const count = refs.length;
+    const ok = await confirm({
+      title: `Move ${count} file${count === 1 ? "" : "s"} to the trash?`,
+      body: (
+        <>
+          <p>
+            Each file leaves its session's library and manifest, and downstream results clear so the
+            next run rebuilds.
+          </p>
+          <p className="confirm-note">Moves to Trash · restorable for 30 days.</p>
+        </>
+      ),
+      confirmLabel: `Move ${count} to trash`,
+      tone: "danger",
+    });
     if (!ok) return;
     setBulkDeleting(true);
     setLibError(null);
@@ -83,18 +107,16 @@ export default function Index() {
     }
     if (preview && selected.has(entryRef(preview))) setPreview(null);
     setSelected(new Set());
+    notifyTrashChanged();
     try {
       await refreshLibrary();
     } catch {
-      setLibError("Deleted, but refreshing the library failed — reload the page.");
+      setLibError("Moved, but refreshing the library failed — reload the page.");
     } finally {
       setBulkDeleting(false);
     }
     if (failed.length > 0) {
-      setLibError(
-        `Deleted ${refs.length - failed.length} of ${refs.length}. ` +
-          `Failed: ${failed.join("; ")}`,
-      );
+      setLibError(`Moved ${count - failed.length} of ${count}. Failed: ${failed.join("; ")}`);
     }
   }
 
@@ -116,23 +138,110 @@ export default function Index() {
 
   async function handleDelete(entry: MediaEntry) {
     const ref = entryRef(entry);
-    const ok = window.confirm(
-      `Delete ${entry.filename} from session ${entry.session}? This unlinks the file, ` +
-        `removes it from the manifest, and clears downstream results so the next run ` +
-        `rebuilds. This cannot be undone.`,
-    );
+    const ok = await confirm({
+      title: `Move ${entry.filename} to the trash?`,
+      body: (
+        <>
+          <p>
+            It leaves session {entry.session}'s library and manifest, and downstream results clear
+            so the next run rebuilds.
+          </p>
+          <p className="confirm-note">Moves to Trash · restorable for 30 days.</p>
+        </>
+      ),
+      confirmLabel: "Move to trash",
+      tone: "danger",
+    });
     if (!ok) return;
     setDeleting(ref);
     setLibError(null);
     try {
       await api.deleteMedia(ref);
       if (preview && entryRef(preview) === ref) setPreview(null);
+      notifyTrashChanged();
       await refreshLibrary();
     } catch (err) {
       setLibError(err instanceof ApiError ? err.detail : "Delete failed.");
     } finally {
       setDeleting(null);
     }
+  }
+
+  async function handleDeleteSession(session: SessionListEntry) {
+    const ok = await confirm({
+      title: `Move ${session.name} to the trash?`,
+      body: (
+        <>
+          <p>
+            The whole session — {session.clip_count} clip
+            {session.clip_count === 1 ? "" : "s"}, its reel, and its cost ledger — leaves the bench.
+          </p>
+          <p className="confirm-note">Moves to Trash · restorable for 30 days.</p>
+        </>
+      ),
+      confirmLabel: "Move to trash",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setDeletingSession(session.name);
+    setLibError(null);
+    try {
+      await api.deleteSession(session.name);
+      notifyTrashChanged();
+      await refreshLibrary();
+    } catch (err) {
+      setLibError(err instanceof ApiError ? err.detail : "Could not move the session.");
+    } finally {
+      setDeletingSession(null);
+    }
+  }
+
+  function renderClipTile(c: MediaEntry) {
+    return (
+      <figure key={`${c.session}/${c.path}`}>
+        <button
+          type="button"
+          className="library-tile"
+          onClick={() => setPreview(c)}
+          title={`${c.filename} · ${durationLabel(c.duration_s, c.kind)}${dimsLabel(c.w, c.h) ? ` · ${dimsLabel(c.w, c.h)}` : ""} · ${formatSize(c.size)} — preview`}
+          aria-label={`Preview ${c.filename}`}
+        >
+          <span className="library-thumb" aria-hidden="true">
+            {c.kind === "image" && !isDisplayableImage(c.filename) ? (
+              <span className="media-placeholder">
+                {extOf(c.filename).slice(1).toUpperCase()} still
+              </span>
+            ) : c.kind === "image" ? (
+              <img src={fileUrl(c.session, c.path)} alt="" loading="lazy" />
+            ) : (
+              <video muted preload="metadata" src={fileUrl(c.session, c.path)} />
+            )}
+            <span className="library-badge">{durationLabel(c.duration_s, c.kind)}</span>
+          </span>
+        </button>
+        <figcaption>
+          <label>
+            <input
+              type="checkbox"
+              checked={selected.has(`${c.session}/${c.path}`)}
+              onChange={() => toggleSelect(`${c.session}/${c.path}`)}
+              disabled={bulkDeleting}
+              aria-label={`Select ${c.filename}`}
+            />
+            {c.filename} · {c.session} · {formatAge(c.mtime)}
+          </label>
+          <button
+            type="button"
+            className="tile-delete"
+            onClick={() => void handleDelete(c)}
+            disabled={deleting === `${c.session}/${c.path}` || bulkDeleting}
+            aria-label={`Delete ${c.filename} from ${c.session}`}
+          >
+            {deleting === `${c.session}/${c.path}` ? "…" : "✕"}
+          </button>
+        </figcaption>
+      </figure>
+    );
   }
 
   const reelCount = sessions?.filter((s) => s.reel_exists).length ?? 0;
@@ -206,60 +315,34 @@ export default function Index() {
               <>
                 <h4>Clips</h4>
                 <div className="contact-sheet contact-sheet--compact">
-                  {(allClips ? clips : clips.slice(0, CLIP_SHOWN)).map((c) => (
-                    <figure key={`${c.session}/${c.path}`}>
-                      <button
-                        type="button"
-                        className="library-tile"
-                        onClick={() => setPreview(c)}
-                        title={`${c.filename} · ${durationLabel(c.duration_s, c.kind)}${dimsLabel(c.w, c.h) ? ` · ${dimsLabel(c.w, c.h)}` : ""} · ${formatSize(c.size)} — preview`}
-                        aria-label={`Preview ${c.filename}`}
-                      >
-                        <span className="library-thumb" aria-hidden="true">
-                          {c.kind === "image" && !isDisplayableImage(c.filename) ? (
-                            <span className="media-placeholder">
-                              {extOf(c.filename).slice(1).toUpperCase()} still
-                            </span>
-                          ) : c.kind === "image" ? (
-                            <img src={fileUrl(c.session, c.path)} alt="" loading="lazy" />
-                          ) : (
-                            <video muted preload="metadata" src={fileUrl(c.session, c.path)} />
-                          )}
-                          <span className="library-badge">
-                            {durationLabel(c.duration_s, c.kind)}
-                          </span>
-                        </span>
-                      </button>
-                      <figcaption>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={selected.has(`${c.session}/${c.path}`)}
-                            onChange={() => toggleSelect(`${c.session}/${c.path}`)}
-                            disabled={bulkDeleting}
-                            aria-label={`Select ${c.filename}`}
-                          />
-                          {c.filename} · {c.session} · {formatAge(c.mtime)}
-                        </label>
-                        <br />
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(c)}
-                          disabled={deleting === `${c.session}/${c.path}` || bulkDeleting}
-                          aria-label={`Delete ${c.filename} from ${c.session}`}
-                        >
-                          {deleting === `${c.session}/${c.path}` ? "Deleting…" : "Delete"}
-                        </button>
-                      </figcaption>
-                    </figure>
-                  ))}
+                  {clips.slice(0, CLIP_SHOWN).map((c) => renderClipTile(c))}
                 </div>
                 {clips.length > CLIP_SHOWN && (
                   <p>
-                    <button type="button" onClick={() => setAllClips((v) => !v)}>
-                      {allClips ? "Show less" : `Show all ${clips.length} clips`}
+                    <button type="button" className="primary" onClick={() => setClipsOpen(true)}>
+                      {`Browse all ${clips.length} clips`}
                     </button>
                   </p>
+                )}
+                {clipsOpen && (
+                  <dialog
+                    ref={clipsDialogRef}
+                    className="library-modal library-modal--wide"
+                    aria-label={`All ${clips.length} clips`}
+                    onClose={() => setClipsOpen(false)}
+                  >
+                    <div className="library-modal-header">
+                      <strong>{`All ${clips.length} clips`}</strong>
+                      <form method="dialog">
+                        <button type="submit" autoFocus aria-label="Close clips viewer">
+                          ✕
+                        </button>
+                      </form>
+                    </div>
+                    <div className="contact-sheet contact-sheet--compact">
+                      {clips.map((c) => renderClipTile(c))}
+                    </div>
+                  </dialog>
                 )}
               </>
             )}
@@ -328,16 +411,17 @@ export default function Index() {
               <th className="num">Cost</th>
               <th>Updated</th>
               <th>Status</th>
+              <th aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
             {sessions === null ? (
               <tr>
-                <td colSpan={6}>Loading…</td>
+                <td colSpan={7}>Loading…</td>
               </tr>
             ) : sessions.length === 0 ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   No sessions yet. <Link to="/new">Start one</Link> — drop clips plus a music track
                   and the bench cuts the reel.
                 </td>
@@ -361,6 +445,17 @@ export default function Index() {
                   <td className="num">${s.total_cost_usd.toFixed(4)}</td>
                   <td>{new Date(s.mtime * 1000).toLocaleDateString()}</td>
                   <td className={`status-${s.status}`}>{s.status}</td>
+                  <td className="session-actions-cell">
+                    <button
+                      type="button"
+                      className="danger-text session-trash"
+                      onClick={() => void handleDeleteSession(s)}
+                      disabled={deletingSession === s.name}
+                      aria-label={`Move ${s.name} to the trash`}
+                    >
+                      {deletingSession === s.name ? "…" : "Trash"}
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
