@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fileUrl } from "../api";
 import type { MediaEntry } from "../types";
 import CoverageMeter from "./CoverageMeter";
+import type { CreateStats } from "./CreateSummary";
 import TrackPlayer from "./TrackPlayer";
 import {
   IMAGE_FOOTAGE_S,
@@ -57,14 +58,20 @@ function dropFiles(list: FileList | File[], allowed: string[]): File[] {
 export default function MediaLibraryPicker({
   onClipsChange,
   onMusicChange,
+  onStatsChange,
+  initialClips = [],
+  initialMusic = "",
 }: {
   onClipsChange: (refs: string[]) => void;
   onMusicChange: (ref: string) => void;
+  onStatsChange?: (stats: CreateStats) => void;
+  initialClips?: string[];
+  initialMusic?: string;
 }) {
   const [clips, setClips] = useState<MediaEntry[]>([]);
   const [music, setMusic] = useState<MediaEntry[]>([]);
-  const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set());
-  const [selectedMusic, setSelectedMusic] = useState("");
+  const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set(initialClips));
+  const [selectedMusic, setSelectedMusic] = useState(initialMusic);
   const [uploadedClips, setUploadedClips] = useState<File[]>([]);
   const [uploadedMusic, setUploadedMusic] = useState<File | null>(null);
   const [upMeta, setUpMeta] = useState<Record<string, UpMeta>>({});
@@ -175,6 +182,16 @@ export default function MediaLibraryPicker({
   }, 0);
   const musicEntry = selectedMusic ? musicByRef.get(selectedMusic) : undefined;
   const musicSecs = uploadedMusic ? upMusicDur : (musicEntry?.duration_s ?? null);
+  const musicName = uploadedMusic?.name ?? (selectedMusic ? fileName(selectedMusic) : "");
+
+  useEffect(() => {
+    onStatsChange?.({
+      clipCount: selectedClips.size + uploadedClips.length,
+      clipSecs: libClipSecs + upClipSecs,
+      musicName,
+      musicSecs,
+    });
+  }, [selectedClips, uploadedClips, libClipSecs, upClipSecs, musicName, musicSecs, onStatsChange]);
 
   return (
     <div className="media-library-picker">

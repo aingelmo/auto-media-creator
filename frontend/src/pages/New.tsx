@@ -2,34 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, createSessionWithProgress } from "../api";
 import { api } from "../api";
+import { getFormMemory, saveFormMemory } from "../formMemory";
+import { clearDraft, loadDraft, suggestName, useCreateDraft } from "../useCreateDraft";
+import type { Config } from "../types";
 import BrandFieldset from "../components/BrandFieldset";
+import CreateSummary, { type CreateStats } from "../components/CreateSummary";
+import DescribeFields from "../components/DescribeFields";
 import FormSteps from "../components/FormSteps";
 import MediaLibraryPicker from "../components/MediaLibraryPicker";
 import ProviderModelFields from "../components/ProviderModelFields";
-import ThemeAudienceFields from "../components/ThemeAudienceFields";
-import { saveFormMemory } from "../formMemory";
-import type { Config } from "../types";
 
-const STEPS = ["Media", "Content", "Look", "Review"] as const;
+const STEPS = ["Media", "Describe", "Style & launch"] as const;
+const NAME_RE = /^[A-Za-z0-9_-]+$/;
 
 function formatMb(bytes: number) {
   return (bytes / 1e6).toFixed(1);
-}
-
-function fileName(ref: string) {
-  return ref.split("/").pop() ?? ref;
-}
-
-interface ReviewData {
-  name: string;
-  clips: string;
-  music: string;
-  theme: string;
-  audience: string;
-  brief: string;
-  model: string;
-  logo: string;
-  handle: string;
 }
 
 export default function New() {
@@ -37,79 +24,71 @@ export default function New() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState("");
-  const [clipRefs, setClipRefs] = useState<string[]>([]);
-  const [musicRef, setMusicRef] = useState("");
   const [step, setStep] = useState(0);
-  const [review, setReview] = useState<ReviewData | null>(null);
+  const [draftNotice, setDraftNotice] = useState(false);
+  const [stats, setStats] = useState<CreateStats>({
+    clipCount: 0,
+    clipSecs: 0,
+    musicName: "",
+    musicSecs: null,
+  });
+  const [clipRefs, setClipRefs] = useState<string[]>(() => loadDraft()?.clipRefs ?? []);
+  const [musicRef, setMusicRef] = useState(() => loadDraft()?.musicRef ?? "");
+  const [name, setName] = useState(() => loadDraft()?.name ?? "");
+  const [brief, setBrief] = useState(() => loadDraft()?.brief ?? "");
+  const [theme, setTheme] = useState(
+    () => loadDraft()?.theme || getFormMemory("theme") || "training",
+  );
+  const [audience, setAudience] = useState(
+    () => loadDraft()?.audience || getFormMemory("audience") || "prospects",
+  );
+  const [handle, setHandle] = useState(() => loadDraft()?.handle ?? getFormMemory("handle") ?? "");
   const formRef = useRef<HTMLFormElement>(null);
-  const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
     api.getConfig().then(setConfig);
   }, []);
 
-  // Uncontrolled form: snapshot the review-step values only when it's shown.
   useEffect(() => {
-    const form = formRef.current;
-    if (step !== 3 || !form) return;
-    const field = <T extends Element>(name: string) => form.elements.namedItem(name) as T | null;
-    const clipsInput = field<HTMLInputElement>("clips");
-    const musicInput = field<HTMLInputElement>("music");
-    const logoInput = field<HTMLInputElement>("logo");
-    const uploadedClips = clipsInput?.files?.length ?? 0;
-    const uploadedMusic = musicInput?.files?.[0]?.name;
-    setReview({
-      name: field<HTMLInputElement>("name")?.value || "—",
-      clips:
-        clipRefs.length + uploadedClips > 0
-          ? [
-              clipRefs.length && `${clipRefs.length} picked`,
-              uploadedClips && `${uploadedClips} uploaded`,
-            ]
-              .filter(Boolean)
-              .join(", ")
-          : "—",
-      music: uploadedMusic ?? (musicRef ? fileName(musicRef) : "—"),
-      theme: field<HTMLSelectElement>("theme")?.selectedOptions[0]?.textContent ?? "—",
-      audience: field<HTMLSelectElement>("audience")?.selectedOptions[0]?.textContent ?? "—",
-      brief: field<HTMLInputElement>("brief")?.value || "—",
-      model: field<HTMLSelectElement>("provider")?.selectedOptions[0]?.textContent ?? "—",
-      logo: logoInput?.files?.[0]?.name ?? "none",
-      handle: field<HTMLInputElement>("handle")?.value || "—",
-    });
-  }, [step, clipRefs, musicRef]);
+    if (loadDraft()) setDraftNotice(true);
+  }, []);
 
-  /** True if every required input/select visible in step `i` is filled in.
-   * Reports the first invalid one so the browser's native bubble shows up
-   * (only meaningful while that step is on screen). */
-  function stepValid(i: number): boolean {
-    const el = stepRefs.current[i];
-    if (!el) return true;
-    for (const c of el.querySelectorAll<HTMLInputElement>("input, select")) {
-      if (!c.checkValidity()) {
-        c.reportValidity();
-        return false;
-      }
-    }
-    return true;
+  useCreateDraft({ name, brief, theme, audience, handle, clipRefs, musicRef });
+
+  function mediaError(): string | null {
+    if (!name) return "Give the session a name — or hit Suggest.";
+    if (!NAME_RE.test(name))
+      return "Session name may only use letters, numbers, _ and - (no spaces).";
+    if (stats.clipCount === 0)
+      return "Add at least one clip or photo — drop files or reuse library.";
+    if (!stats.musicName) return "Pick a music track — a track is required for the cut.";
+    return null;
   }
 
   function goTo(next: number) {
-    if (next > step && !stepValid(step)) return;
+    if (next > step) {
+      if (step === 0) {
+        const err = mediaError();
+        if (err) {
+          setError(err);
+          return;
+        }
+      }
+    }
     setError(null);
     setStep(next);
+    window.scrollTo({ top: 0 });
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!formRef.current) return;
-
-    for (let i = 0; i < STEPS.length; i++) {
-      if (!stepValid(i)) {
-        setStep(i);
-        return;
-      }
+    const mediaErr = mediaError();
+    if (mediaErr) {
+      setStep(0);
+      setError(mediaErr);
+      return;
     }
     const formData = new FormData(formRef.current);
     const hasClipUpload = (formData.get("clips") as File | null)?.size;
@@ -127,14 +106,15 @@ export default function New() {
     formData.set("music_ref", musicRef);
     saveFormMemory(formData);
     try {
-      const { name } = await createSessionWithProgress(formData, (loaded, total) => {
+      const { name: created } = await createSessionWithProgress(formData, (loaded, total) => {
         const pct = Math.round((loaded / total) * 100);
         setStatus(`Uploading: ${formatMb(loaded)} / ${formatMb(total)} MB (${pct}%)`);
         if (loaded === total) {
           setStatus("Upload complete, saving session and launching pipeline...");
         }
       });
-      navigate(`/sessions/${name}`);
+      clearDraft();
+      navigate(`/sessions/${created}`);
     } catch (err) {
       setUploading(false);
       if (err instanceof ApiError) {
@@ -151,102 +131,135 @@ export default function New() {
   return (
     <>
       <h2>New session</h2>
-      {error && <p className="status-failed">{error}</p>}
-      <FormSteps steps={STEPS} current={step} onJump={goTo} />
-      <form ref={formRef} onSubmit={handleSubmit}>
-        <div
-          className="form-grid"
-          hidden={step !== 0}
-          ref={(el) => {
-            stepRefs.current[0] = el;
-          }}
-        >
-          <label htmlFor="new-name">
-            Session name
-            <input id="new-name" type="text" name="name" required pattern="[A-Za-z0-9_-]+" />
-          </label>
-          <MediaLibraryPicker onClipsChange={setClipRefs} onMusicChange={setMusicRef} />
-        </div>
-
-        <div
-          className="form-grid"
-          hidden={step !== 1}
-          ref={(el) => {
-            stepRefs.current[1] = el;
-          }}
-        >
-          <ThemeAudienceFields idPrefix="new" />
-        </div>
-
-        <div
-          className="form-grid"
-          hidden={step !== 2}
-          ref={(el) => {
-            stepRefs.current[2] = el;
-          }}
-        >
-          <p>Provider, model &amp; brand (remembered from last run)</p>
-          <ProviderModelFields
-            providers={config.providers}
-            defaultModels={config.default_models}
-            idPrefix="new"
-          />
-          <BrandFieldset
-            idPrefix="new"
-            legend="Brand (optional; no logo = no watermark / end card)"
-          />
-        </div>
-
-        <div
-          className="form-grid"
-          hidden={step !== 3}
-          ref={(el) => {
-            stepRefs.current[3] = el;
-          }}
-        >
-          {review && (
-            <dl className="review-list">
-              <dt>Session name</dt>
-              <dd className={review.name === "—" ? "is-empty" : undefined}>{review.name}</dd>
-              <dt>Clips</dt>
-              <dd>{review.clips}</dd>
-              <dt>Music</dt>
-              <dd className={review.music === "—" ? "is-empty" : undefined}>{review.music}</dd>
-              <dt>Theme</dt>
-              <dd>{review.theme}</dd>
-              <dt>Audience</dt>
-              <dd>{review.audience}</dd>
-              <dt>Brief</dt>
-              <dd className={review.brief === "—" ? "is-empty" : undefined}>{review.brief}</dd>
-              <dt>Model</dt>
-              <dd>{review.model}</dd>
-              <dt>Logo</dt>
-              <dd className={review.logo === "none" ? "is-empty" : undefined}>{review.logo}</dd>
-              <dt>Handle</dt>
-              <dd className={review.handle === "—" ? "is-empty" : undefined}>{review.handle}</dd>
-            </dl>
-          )}
-        </div>
-
-        <p>
-          {step > 0 && (
-            <button type="button" onClick={() => goTo(step - 1)}>
-              Back
-            </button>
-          )}
-          {step < STEPS.length - 1 && (
-            <button type="button" onClick={() => goTo(step + 1)}>
-              Next
-            </button>
-          )}
-          {step === STEPS.length - 1 && (
-            <button type="submit" disabled={uploading}>
-              Start run
-            </button>
-          )}
+      {draftNotice && (
+        <p className="draft-banner">
+          Draft restored — text and library picks are back; fresh files need re-adding.{" "}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              clearDraft();
+              setDraftNotice(false);
+              setName("");
+              setBrief("");
+              setClipRefs([]);
+              setMusicRef("");
+              setHandle(getFormMemory("handle") ?? "");
+            }}
+          >
+            Discard draft
+          </button>
         </p>
-        <p id="upload-status">{status}</p>
-      </form>
+      )}
+      {error && (
+        <p className="status-failed" role="alert">
+          {error}
+        </p>
+      )}
+      <FormSteps steps={STEPS} current={step} onJump={goTo} />
+      <div className="create-layout">
+        <form
+          ref={formRef}
+          onSubmit={handleSubmit}
+          className="create-form"
+          onInput={(e) => {
+            const t = e.target as HTMLInputElement;
+            if (t.name === "handle") setHandle(t.value);
+          }}
+        >
+          {/* All steps stay mounted (inactive ones `hidden`) so file inputs,
+              picks, and named fields are all in the submitted FormData. */}
+          <section aria-label="Media" hidden={step !== 0}>
+            <label htmlFor="new-name">
+              Session name
+              <span className="name-row">
+                <input
+                  id="new-name"
+                  type="text"
+                  name="name"
+                  required
+                  pattern="[A-Za-z0-9_\-]+"
+                  title="Letters, numbers, _ and - only (no spaces)"
+                  placeholder="reel-20260922-42"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+                <button type="button" onClick={() => setName(suggestName())}>
+                  Suggest
+                </button>
+              </span>
+            </label>
+            <MediaLibraryPicker
+              onClipsChange={setClipRefs}
+              onMusicChange={setMusicRef}
+              onStatsChange={setStats}
+              initialClips={clipRefs}
+              initialMusic={musicRef}
+            />
+          </section>
+
+          <section aria-label="Describe" hidden={step !== 1}>
+            <DescribeFields
+              brief={brief}
+              theme={theme}
+              audience={audience}
+              onBrief={setBrief}
+              onTheme={setTheme}
+              onAudience={setAudience}
+            />
+          </section>
+
+          <section aria-label="Style and launch" hidden={step !== 2}>
+            <BrandFieldset
+              idPrefix="new"
+              legend="Brand (optional; no logo = no watermark / end card)"
+            />
+            <details className="advanced-panel">
+              <summary>Advanced: model</summary>
+              <ProviderModelFields
+                providers={config.providers}
+                defaultModels={config.default_models}
+                idPrefix="new"
+              />
+              <p className="field-hint">
+                The model plans the cut. Defaults are fine — change only if you know why.
+              </p>
+            </details>
+          </section>
+
+          <p className="create-nav">
+            {step > 0 && (
+              <button type="button" onClick={() => goTo(step - 1)}>
+                Back
+              </button>
+            )}
+            {step < STEPS.length - 1 && (
+              <button type="button" className="primary" onClick={() => goTo(step + 1)}>
+                {step === 0 && stats.clipCount > 0 && stats.musicName
+                  ? `Continue · ${stats.clipCount} clips`
+                  : "Next"}
+              </button>
+            )}
+            {step === STEPS.length - 1 && (
+              <button type="submit" className="primary" disabled={uploading}>
+                {uploading ? "Uploading…" : "Start run"}
+              </button>
+            )}
+          </p>
+          <p id="upload-status" aria-live="polite">
+            {status}
+          </p>
+        </form>
+        <CreateSummary
+          stats={stats}
+          brief={brief}
+          theme={theme}
+          audience={audience}
+          handle={handle}
+          step={step}
+          onEdit={goTo}
+        />
+      </div>
     </>
   );
 }

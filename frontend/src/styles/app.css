@@ -1086,3 +1086,196 @@ section[aria-label="Library"] h4 {
 .library-modal-actions {
   margin-bottom: 0;
 }
+
+/* Session creation flow: form + live summary rail. Two columns on desktop,
+   stacked with the summary first-as-strip on narrow screens. */
+.create-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.create-form {
+  min-width: 0;
+}
+
+.create-form textarea {
+  display: block;
+  width: 100%;
+  margin-top: var(--space-1);
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+}
+
+.create-nav {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-6);
+}
+
+.name-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.name-row input {
+  flex: 1;
+}
+
+.name-row button {
+  margin-top: var(--space-1);
+  white-space: nowrap;
+}
+
+.field-hint {
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.draft-banner {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--signal);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+}
+
+/* Prompt-first describe step: chips + visual radio cards. */
+.describe-fields fieldset {
+  margin-top: var(--space-6);
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.chip-row .chip {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+}
+
+.chip-row .chip:hover {
+  color: var(--ink);
+}
+
+.card-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.card-options label {
+  margin-top: 0;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.card-options label.is-picked {
+  border-color: var(--signal);
+  background: var(--panel-raised);
+}
+
+.card-options label strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.card-options label span {
+  font-size: var(--text-sm);
+}
+
+.card-options input[type="radio"] {
+  accent-color: var(--signal);
+}
+
+/* Live summary rail: tabular numerals, hairline rules, no cards-in-cards. */
+.create-summary {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: var(--space-4);
+  position: sticky;
+  top: var(--space-4);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.create-summary h3 {
+  margin: 0 0 var(--space-2);
+}
+
+.create-summary dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.create-summary dl > div {
+  border-top: 1px solid var(--rule);
+  padding-top: var(--space-2);
+}
+
+.create-summary dl > div:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.create-summary dt {
+  color: var(--ink-dim);
+  font-size: var(--text-xs);
+}
+
+.create-summary dd {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.create-summary dd.is-empty {
+  color: var(--ink-dim);
+}
+
+.advanced-panel {
+  margin-top: var(--space-6);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.advanced-panel > summary {
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 900px) {
+  .create-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .create-summary {
+    position: static;
+    order: -1;
+  }
+}
