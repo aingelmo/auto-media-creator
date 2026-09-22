@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link, Route, Routes, useNavigate } from "react-router-dom";
+import { ConfirmProvider } from "./components/ConfirmDialog";
+import TrashLink from "./components/TrashLink";
 import Candidates from "./pages/Candidates";
 import Hooks from "./pages/Hooks";
 import Ingest from "./pages/Ingest";
@@ -9,6 +11,7 @@ import Planner from "./pages/Planner";
 import Selection from "./pages/Selection";
 import Session from "./pages/Session";
 import Studio from "./pages/Studio";
+import Trash from "./pages/Trash";
 
 function ThemeToggle() {
   const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? "dark");
@@ -31,31 +34,35 @@ export default function App() {
   const navigate = useNavigate();
 
   return (
-    <div className="app-shell" style={{ flexDirection: "column", width: "100%" }}>
-      <header className="app-header">
-        <Link to="/">
-          <h1>edl-agent</h1>
-        </Link>
-        <div className="app-header-actions">
-          <button type="button" onClick={() => navigate("/new")}>
-            New session
-          </button>
-          <ThemeToggle />
-        </div>
-      </header>
-      <main className="app-body">
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/new" element={<New />} />
-          <Route path="/sessions/:name" element={<Session />} />
-          <Route path="/studio/:name" element={<Studio />} />
-          <Route path="/sessions/:name/ingest" element={<Ingest />} />
-          <Route path="/sessions/:name/candidates" element={<Candidates />} />
-          <Route path="/sessions/:name/hooks" element={<Hooks />} />
-          <Route path="/sessions/:name/selection" element={<Selection />} />
-          <Route path="/sessions/:name/planner" element={<Planner />} />
-        </Routes>
-      </main>
-    </div>
+    <ConfirmProvider>
+      <div className="app-shell" style={{ flexDirection: "column", width: "100%" }}>
+        <header className="app-header">
+          <Link to="/">
+            <h1>edl-agent</h1>
+          </Link>
+          <div className="app-header-actions">
+            <TrashLink />
+            <button type="button" onClick={() => navigate("/new")}>
+              New session
+            </button>
+            <ThemeToggle />
+          </div>
+        </header>
+        <main className="app-body">
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/new" element={<New />} />
+            <Route path="/trash" element={<Trash />} />
+            <Route path="/sessions/:name" element={<Session />} />
+            <Route path="/studio/:name" element={<Studio />} />
+            <Route path="/sessions/:name/ingest" element={<Ingest />} />
+            <Route path="/sessions/:name/candidates" element={<Candidates />} />
+            <Route path="/sessions/:name/hooks" element={<Hooks />} />
+            <Route path="/sessions/:name/selection" element={<Selection />} />
+            <Route path="/sessions/:name/planner" element={<Planner />} />
+          </Routes>
+        </main>
+      </div>
+    </ConfirmProvider>
   );
 }

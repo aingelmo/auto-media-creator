@@ -385,6 +385,7 @@ button.primary {
 
 .contact-sheet figure {
   margin: 0;
+  position: relative;
 }
 
 .contact-sheet video,
@@ -398,6 +399,53 @@ button.primary {
 .contact-sheet figcaption {
   margin-top: var(--space-2);
   font-size: var(--text-sm);
+}
+
+/* Destructive tile action: overlay chip in the thumbnail corner, revealed
+   on hover or keyboard focus so the caption stays a quiet spec row. Forced
+   visible on touch (no hover) and while a delete is running. */
+.tile-delete {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 1;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.65);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-size: var(--text-sm);
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+
+.tile-delete:hover {
+  border-color: var(--fail);
+  color: var(--fail);
+}
+
+figure:hover .tile-delete,
+figure:focus-within .tile-delete,
+.tile-delete:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .tile-delete {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile-delete {
+    transition: none;
+  }
 }
 
 .contact-sheet.contact-sheet--compact {
@@ -1189,6 +1237,10 @@ section[aria-label="Library"] h4 {
   background: rgb(0 0 0 / 0.6);
 }
 
+.library-modal--wide {
+  width: min(1020px, 94vw);
+}
+
 .library-modal-header {
   display: flex;
   align-items: baseline;
@@ -1441,5 +1493,184 @@ section[aria-label="Library"] h4 {
   .create-summary {
     position: static;
     order: -1;
+  }
+}
+
+/* One confirmation modal for every destructive action. Friction scales with
+   reversibility: soft deletes ask once, permanent purges add a typed gate. */
+.confirm-modal {
+  width: min(460px, 92vw);
+}
+
+.confirm-title {
+  margin: 0 0 var(--space-3);
+}
+
+.confirm-body {
+  font-size: var(--text-sm);
+}
+
+.confirm-body p {
+  margin: 0 0 var(--space-2);
+  max-width: none;
+}
+
+.confirm-body p:last-child {
+  margin-bottom: 0;
+}
+
+.confirm-note {
+  color: var(--ink-dim);
+}
+
+.confirm-note.is-fail {
+  color: var(--fail);
+}
+
+.confirm-typed input {
+  margin-top: var(--space-2);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.confirm-actions button {
+  margin: 0;
+}
+
+/* The one filled destructive button, mirroring .primary's Signal fill. */
+button.danger {
+  background: var(--fail-dim);
+  border-color: var(--fail);
+}
+
+/* Borderless text action for destructive triggers that should stay quiet
+   until reached for. */
+.danger-text {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.danger-text:hover:not(:disabled) {
+  color: var(--fail);
+}
+
+/* Header bin link + count, neutral so it never reads as a "go" signal. */
+.trash-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.trash-count {
+  min-width: 1.25rem;
+  padding: 0 var(--space-1);
+  background: var(--panel-raised);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* Trash ledger: a table per kind, restore/purge as quiet text actions. */
+.trash-summary {
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.trash-empty {
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+}
+
+.trash-group {
+  margin-top: var(--space-6);
+}
+
+.trash-table td {
+  vertical-align: top;
+}
+
+.trash-label {
+  display: block;
+}
+
+.trash-item-detail {
+  display: block;
+  color: var(--ink-dim);
+  font-size: var(--text-xs);
+}
+
+.trash-origin {
+  color: var(--ink-dim);
+}
+
+.trash-purge.is-soon {
+  color: var(--fail);
+}
+
+.trash-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  white-space: nowrap;
+}
+
+.trash-actions button {
+  margin: 0;
+}
+
+/* The page's one loud destructive action; the per-row purges stay quiet
+   text so a list of rows never reads as a wall of red buttons. */
+.trash-foot {
+  margin-top: var(--space-6);
+}
+
+/* Session page: title with its destructive action beside it. */
+.session-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+/* Dashboard session rows: trash action revealed on hover/focus, forced on
+   touch (same quiet-ledger pattern as the library tile chip). */
+.session-actions-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.session-trash {
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+}
+
+.session-list tbody tr:hover .session-trash,
+.session-list tbody tr:focus-within .session-trash {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .session-trash {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-trash {
+    transition: none;
   }
 }

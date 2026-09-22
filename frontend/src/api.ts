@@ -11,6 +11,8 @@ import type {
   SessionListEntry,
   StatusPayload,
   TimelinePayload,
+  TrashItem,
+  TrashPayload,
 } from "./types";
 
 /** Thrown for any non-2xx API response; `detail` is the FastAPI error body. */
@@ -42,8 +44,29 @@ export const api = {
 
   deleteMedia: (ref: string) =>
     fetch(`/api/media?ref=${encodeURIComponent(ref)}`, { method: "DELETE" }).then((r) =>
-      asJson<{ ref: string }>(r),
+      asJson<{ ref: string; item: TrashItem }>(r),
     ),
+
+  /** Move a whole session to the trash (`DELETE /api/sessions/{name}`). */
+  deleteSession: (name: string) =>
+    fetch(`/api/sessions/${encodeURIComponent(name)}`, { method: "DELETE" }).then((r) =>
+      asJson<{ name: string; item: TrashItem }>(r),
+    ),
+
+  getTrash: () => fetch("/api/trash").then((r) => asJson<TrashPayload>(r)),
+
+  restoreTrashItem: (id: string) =>
+    fetch(`/api/trash/${encodeURIComponent(id)}/restore`, { method: "POST" }).then((r) =>
+      asJson<{ item: TrashItem }>(r),
+    ),
+
+  purgeTrashItem: (id: string) =>
+    fetch(`/api/trash/${encodeURIComponent(id)}`, { method: "DELETE" }).then((r) =>
+      asJson<{ id: string }>(r),
+    ),
+
+  emptyTrash: () =>
+    fetch("/api/trash", { method: "DELETE" }).then((r) => asJson<{ removed: number }>(r)),
 
   getPeaks: (ref: string) =>
     fetch(`/api/media/peaks?ref=${encodeURIComponent(ref)}`).then((r) =>

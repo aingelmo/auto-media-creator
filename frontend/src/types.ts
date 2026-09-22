@@ -75,6 +75,26 @@ export interface MediaLibrary {
   music: MediaEntry[];
 }
 
+/** Server-side trash entry: a session or media file parked in `var/trash`. */
+export interface TrashItem {
+  id: string;
+  kind: "session" | "media";
+  label: string;
+  session: string;
+  origin: string;
+  /** Unix milliseconds. */
+  deleted_at: number;
+  /** Unix milliseconds; the entry auto-purges at this time. */
+  purge_after: number;
+  size_bytes: number;
+  meta: Record<string, unknown>;
+}
+
+export interface TrashPayload {
+  items: TrashItem[];
+  retention_days: number;
+}
+
 export interface LowCandidates {
   real_sources?: number;
   slot_count?: number;
