@@ -45,7 +45,11 @@ export default function StageRail({
               )}
             </span>
             {progress && Number(progress[2]) > 0 && (
-              <progress max={Number(progress[2])} value={Number(progress[1])} />
+              <progress
+                max={Number(progress[2])}
+                value={Number(progress[1])}
+                aria-label={`${s} progress`}
+              />
             )}
           </li>
         );

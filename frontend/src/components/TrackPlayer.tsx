@@ -57,6 +57,8 @@ export default function TrackPlayer({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const waveRef = useRef<HTMLSpanElement>(null);
   const pendingSecs = useRef<number | null>(null);
+  const themeColors = useRef<{ signal: string; rule: string } | null>(null);
+  const rafRef = useRef<number>(0);
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -154,9 +156,17 @@ export default function TrackPlayer({
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
 
-    const styles = getComputedStyle(canvas);
-    const signal = styles.getPropertyValue("--signal").trim() || "#35c2c8";
-    const rule = styles.getPropertyValue("--rule").trim() || "#363636";
+    // Theme tokens are read once and cached: `timeupdate` fires ~4Hz and
+    // a full getComputedStyle per tick is wasteful across 200 rows.
+    // Invalidated on `data-theme` flips (see the MutationObserver below).
+    if (!themeColors.current) {
+      const styles = getComputedStyle(canvas);
+      themeColors.current = {
+        signal: styles.getPropertyValue("--signal").trim() || "#35c2c8",
+        rule: styles.getPropertyValue("--rule").trim() || "#363636",
+      };
+    }
+    const { signal, rule } = themeColors.current;
     const mid = h / 2;
 
     if (peaks.length === 0) {
@@ -180,7 +190,9 @@ export default function TrackPlayer({
   }, [peaks, current, duration]);
 
   useEffect(() => {
-    draw();
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => draw());
+    return () => cancelAnimationFrame(rafRef.current);
   }, [draw]);
 
   // The band is fluid (grid/row width) and the palette is themeable, so
@@ -190,7 +202,10 @@ export default function TrackPlayer({
     if (!parent) return;
     const resize = new ResizeObserver(() => draw());
     resize.observe(parent);
-    const theme = new MutationObserver(() => draw());
+    const theme = new MutationObserver(() => {
+      themeColors.current = null;
+      draw();
+    });
     theme.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["data-theme"],

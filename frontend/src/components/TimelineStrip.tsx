@@ -77,9 +77,10 @@ export default function TimelineStrip({
             }}
             title={clip.src}
           >
-            <span className="timeline-pos" aria-label={`Position ${pos + 1}`}>
+            <span className="timeline-pos" aria-hidden="true">
               {pos + 1}
             </span>
+            <span className="sr-only">Position {pos + 1}</span>
             {thumb ? (
               <img className="timeline-thumb" src={thumb} alt="" loading="lazy" />
             ) : (
@@ -100,7 +101,16 @@ export default function TimelineStrip({
                   onClick={() => move(devIdx, devIdx - 1)}
                   aria-label={`Move clip ${pos + 1} earlier`}
                 >
-                  ←
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path
+                      d="M10 3L5 8l5 5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  </svg>
                 </button>
                 <button
                   type="button"
@@ -108,7 +118,16 @@ export default function TimelineStrip({
                   onClick={() => move(devIdx, devIdx + 1)}
                   aria-label={`Move clip ${pos + 1} later`}
                 >
-                  →
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path
+                      d="M6 3l5 5-5 5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  </svg>
                 </button>
               </span>
             )}

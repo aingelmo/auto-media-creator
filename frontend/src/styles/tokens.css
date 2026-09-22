@@ -12,8 +12,8 @@
   --ink: #e6e3dd;
   --ink-dim: #8f8b84;
   --signal: #35c2c8;
-  --signal-dim: #1f7276;
-  --fail: #d0413b;
+  --signal-dim: #1a6165;
+  --fail: #e06a63;
   --fail-dim: #7a2a27;
 
   --font-display: "Martian Mono Variable", ui-monospace, monospace;
@@ -44,7 +44,7 @@
   --rule: #d8d5cf;
   --ink: #1c1c1c;
   --ink-dim: #6b665c;
-  --signal: #0f8a90;
+  --signal: #0c757b;
   --signal-dim: #cfeceb;
   --fail: #b23029;
   --fail-dim: #f6dcda;
@@ -58,5 +58,11 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+  /* Scoped alternative: the loading pulse would vanish under the global
+     kill, so pin it to a steady state instead of pulsing. */
+  .reel-preview-overlay span {
+    animation: none !important;
+    opacity: 1 !important;
   }
 }

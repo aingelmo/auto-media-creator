@@ -15,6 +15,7 @@ export default function Studio() {
   const [punch, setPunch] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -97,6 +98,7 @@ export default function Studio() {
     setError(null);
     try {
       setTimeline(await api.reorderDevelops(name, order));
+      setNotice("Clip order saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Swap failed.");
     } finally {
@@ -109,6 +111,7 @@ export default function Studio() {
     setError(null);
     try {
       setTimeline(await api.setHookText(name, hookText));
+      setNotice("Hook saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hook save failed.");
     } finally {
@@ -122,6 +125,7 @@ export default function Studio() {
     try {
       setTimeline(await api.setEffects(name, flash, punch));
       await refresh();
+      setNotice("Effects saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Effects save failed.");
     } finally {
@@ -146,6 +150,7 @@ export default function Studio() {
           {error}
         </p>
       )}
+      {notice && <output className="status-done">{notice}</output>}
       <StageRail
         stages={session.stages}
         stageStatuses={session.stage_statuses}
@@ -168,7 +173,12 @@ export default function Studio() {
         <section className="studio-main" aria-label="Preview">
           <h3>Preview</h3>
           {session.reel_exists ? (
-            <video className="reel-player studio-preview-video" controls src={reelUrl(name)} />
+            <video
+              className="reel-player studio-preview-video"
+              controls
+              src={reelUrl(name)}
+              aria-label="Finished reel"
+            />
           ) : previewSrc ? (
             <video
               className="reel-player studio-preview-video"
@@ -224,8 +234,12 @@ export default function Studio() {
           <p>Timeline appears once planning finishes.</p>
         )}
       </section>
-      {running && <p className="status-running">Running&hellip;</p>}
-      {job?.error && <pre>{job.error}</pre>}
+      {running && <output className="status-running">Running&hellip;</output>}
+      {job?.error && (
+        <div role="alert">
+          <p className="status-failed">Render failed — {job.error}</p>
+        </div>
+      )}
     </div>
   );
 }
