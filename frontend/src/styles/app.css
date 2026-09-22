@@ -595,6 +595,74 @@ button.primary {
   min-height: 0;
 }
 
+/* Studio: preview beside refine, collapsing to one column under 640px. */
+.studio-grid {
+  display: flex;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  align-items: start;
+}
+
+.studio-grid > section {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.studio-notices {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-4) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.studio-notices > li {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--signal-dim);
+  border-radius: 4px;
+  padding: var(--space-2) var(--space-4);
+}
+
+.timeline-strip {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-4) 0;
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+}
+
+.timeline-slot {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: var(--space-2) var(--space-3);
+  min-width: 140px;
+  background: var(--panel);
+}
+
+.timeline-slot.is-locked {
+  opacity: 0.85;
+}
+
+.timeline-role,
+.timeline-src {
+  display: block;
+}
+
+.timeline-actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+@media (max-width: 640px) {
+  .studio-grid {
+    display: block;
+  }
+}
+
 .cost-badge {
   font-size: 0.6em;
   font-weight: normal;
