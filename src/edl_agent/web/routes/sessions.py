@@ -39,10 +39,58 @@ router = APIRouter()
 
 @router.get("/api/sessions")
 def list_sessions() -> list[dict]:
-    """List existing sessions with their derived status."""
-    dirs = SESSIONS_DIR.iterdir() if SESSIONS_DIR.exists() else []
-    names = sorted(p.name for p in dirs if p.is_dir())
-    return [{"name": n, "status": session_status(n)} for n in names]
+    """List existing sessions with their derived status and intake summary.
+
+    Returns:
+        One dict per session directory with `name`, `status` (see
+        `state.session_status`), `reel_exists`, `clip_count` (video/image
+        files under `inputs/`), `music_name` (first track under `music/`,
+        excluding the generated `track_cut.wav`), `total_cost_usd`, and
+        `mtime` (session directory mtime, for recency sorting).
+    """
+    if not SESSIONS_DIR.exists():
+        return []
+    allowed = VIDEO_EXTS | IMAGE_EXTS
+    out = []
+    for p in sorted(p.name for p in SESSIONS_DIR.iterdir() if p.is_dir()):
+        sdir = SESSIONS_DIR / p
+        inputs = sdir / "inputs"
+        clip_count = (
+            sum(
+                1
+                for f in inputs.iterdir()
+                if f.is_file() and f.suffix.lower() in allowed
+            )
+            if inputs.is_dir()
+            else 0
+        )
+        music_dir = sdir / "music"
+        music_name = ""
+        if music_dir.is_dir():
+            tracks = sorted(
+                f.name
+                for f in music_dir.iterdir()
+                if f.is_file()
+                and f.suffix.lower() in MUSIC_EXTS
+                and f.name != "track_cut.wav"
+            )
+            music_name = tracks[0] if tracks else ""
+        try:
+            mtime = sdir.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        out.append(
+            {
+                "name": p,
+                "status": session_status(p),
+                "reel_exists": (sdir / "reel.mp4").exists(),
+                "clip_count": clip_count,
+                "music_name": music_name,
+                "total_cost_usd": total_cost_usd(p),
+                "mtime": mtime,
+            }
+        )
+    return out
 
 
 def _link_ref(ref: str, dest_dir: Path, dest_name: str) -> None:

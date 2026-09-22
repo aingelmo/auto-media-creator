@@ -770,3 +770,72 @@ button.primary {
 .review-list dd.is-empty {
   color: var(--ink-dim);
 }
+
+/* Intake dashboard + dropzones: neutral panel chrome, Signal/Fail only
+   via the shared status-* text colors and the 3px notice edge. */
+.dashboard-stats {
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-stats a {
+  white-space: nowrap;
+}
+
+.media-placeholder {
+  aspect-ratio: 9 / 16;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-raised);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+}
+
+.session-reel-thumb {
+  width: 48px;
+  height: 72px;
+  object-fit: cover;
+  background: #000;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-right: var(--space-3);
+}
+
+.dropzone {
+  border: 1px dashed var(--rule);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.dropzone.is-dragging {
+  border-style: solid;
+  border-color: var(--signal);
+}
+
+.dropzone label {
+  margin-top: 0;
+}
+
+.coverage-meter {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--signal);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.coverage-meter.status-failed {
+  border-left-color: var(--fail);
+}
+
+.coverage-meter.status-pending {
+  border-left-color: var(--rule);
+}

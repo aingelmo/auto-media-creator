@@ -55,3 +55,75 @@ def test_link_ref_symlinks_existing_file(tmp_path, monkeypatch) -> None:
     sessions._link_ref("s1/inputs/clip.mp4", dest_dir, "clip.mp4")
 
     assert (dest_dir / "clip.mp4").resolve() == src.resolve()
+
+
+def test_scan_attaches_probe_meta(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(media, "SESSIONS_DIR", tmp_path)
+    monkeypatch.setattr(media, "_META_CACHE_PATH", tmp_path / "meta.json")
+    monkeypatch.setattr(
+        media,
+        "_probe_file",
+        lambda path, audio_only=False: {
+            "duration_s": 12.5,
+            "w": 1080,
+            "h": 1920,
+            "kind": "audio" if audio_only else "video",
+        },
+    )
+    d = tmp_path / "s1" / "inputs"
+    d.mkdir(parents=True)
+    (d / "clip.mp4").write_bytes(b"x")
+
+    entries = media._scan("inputs", {".mp4"})
+
+    assert entries[0]["duration_s"] == 12.5
+    assert entries[0]["w"] == 1080
+    assert entries[0]["h"] == 1920
+    assert entries[0]["kind"] == "video"
+
+
+def test_scan_caps_entries_at_limit(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(media, "SESSIONS_DIR", tmp_path)
+    monkeypatch.setattr(media, "_META_CACHE_PATH", tmp_path / "meta.json")
+    monkeypatch.setattr(media, "MEDIA_SCAN_LIMIT", 3)
+    monkeypatch.setattr(
+        media,
+        "_probe_file",
+        lambda path, audio_only=False: {
+            "duration_s": None,
+            "w": None,
+            "h": None,
+            "kind": "video",
+        },
+    )
+    for i in range(5):
+        d = tmp_path / f"s{i}" / "inputs"
+        d.mkdir(parents=True)
+        (d / f"clip{i}.mp4").write_bytes(b"x")
+
+    assert len(media._scan("inputs", {".mp4"})) == 3
+
+
+def test_list_sessions_enriched(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(sessions, "SESSIONS_DIR", tmp_path)
+    monkeypatch.setattr(sessions, "session_status", lambda name: "done")
+    monkeypatch.setattr(sessions, "total_cost_usd", lambda name: 0.012)
+    sdir = tmp_path / "s1"
+    (sdir / "inputs").mkdir(parents=True)
+    (sdir / "inputs" / "a.mp4").write_bytes(b"x")
+    (sdir / "inputs" / "b.jpg").write_bytes(b"x")
+    (sdir / "inputs" / "notes.txt").write_bytes(b"x")
+    (sdir / "music").mkdir(parents=True)
+    (sdir / "music" / "track.mp3").write_bytes(b"x")
+    (sdir / "music" / "track_cut.wav").write_bytes(b"x")
+    (sdir / "reel.mp4").write_bytes(b"x")
+
+    (entry,) = sessions.list_sessions()
+
+    assert entry["name"] == "s1"
+    assert entry["status"] == "done"
+    assert entry["reel_exists"] is True
+    assert entry["clip_count"] == 2
+    assert entry["music_name"] == "track.mp3"
+    assert entry["total_cost_usd"] == 0.012
+    assert entry["mtime"] > 0

@@ -31,6 +31,11 @@ export interface Config {
 export interface SessionListEntry {
   name: string;
   status: "new" | "running" | "done" | "failed";
+  reel_exists: boolean;
+  clip_count: number;
+  music_name: string;
+  total_cost_usd: number;
+  mtime: number;
 }
 
 export interface HookCandidate {
@@ -58,6 +63,10 @@ export interface MediaEntry {
   path: string;
   filename: string;
   size: number;
+  duration_s: number | null;
+  w: number | null;
+  h: number | null;
+  kind: "video" | "image" | "audio";
 }
 
 export interface MediaLibrary {
