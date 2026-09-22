@@ -15,5 +15,8 @@ VAR = Path(os.environ.get("EDL_AGENT_VAR", ROOT / "var"))
 SESSIONS_DIR = VAR / "sessions"
 CACHE_DIR = VAR / "cache"
 MODELS_DIR = VAR / "models"
+# Soft-delete bin: sessions and media moved aside instead of unlinked, so a
+# mistaken delete is restorable for a retention window. See `web/trash.py`.
+TRASH_DIR = VAR / "trash"
 # Eval fixtures (test videos/songs/proxy cache) used by scripts/run_gap_eval_*.py.
 DATA_DIR = VAR / "data"

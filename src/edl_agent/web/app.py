@@ -22,6 +22,7 @@ from edl_agent.web.routes import (
     sessions,
     stages,
     studio,
+    trash,
     waveform,
 )
 
@@ -34,6 +35,7 @@ app.include_router(stages.router)
 app.include_router(studio.router)
 app.include_router(config.router)
 app.include_router(media.router)
+app.include_router(trash.router)
 app.include_router(waveform.router)
 
 # Mounted at /assets (not "/") so it can't shadow the /api and /sessions
