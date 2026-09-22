@@ -47,3 +47,14 @@ export function durationLabel(duration_s: number | null, kind: MediaEntry["kind"
   if (duration_s != null) return formatSecs(duration_s);
   return kind === "image" ? "still" : "—";
 }
+
+export function formatAge(mtime_s: number, now_s: number = Date.now() / 1000): string {
+  const delta = Math.max(0, now_s - mtime_s);
+  if (delta < 3600) {
+    const m = Math.max(1, Math.floor(delta / 60));
+    return `${m}m ago`;
+  }
+  if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+  if (delta < 86400 * 30) return `${Math.floor(delta / 86400)}d ago`;
+  return new Date(mtime_s * 1000).toLocaleDateString();
+}

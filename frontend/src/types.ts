@@ -63,6 +63,7 @@ export interface MediaEntry {
   path: string;
   filename: string;
   size: number;
+  mtime: number;
   duration_s: number | null;
   w: number | null;
   h: number | null;
