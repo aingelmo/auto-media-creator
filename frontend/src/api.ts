@@ -39,6 +39,11 @@ export const api = {
 
   getMedia: () => fetch("/api/media").then((r) => asJson<MediaLibrary>(r)),
 
+  deleteMedia: (ref: string) =>
+    fetch(`/api/media?ref=${encodeURIComponent(ref)}`, { method: "DELETE" }).then((r) =>
+      asJson<{ ref: string }>(r),
+    ),
+
   getPeaks: (ref: string) =>
     fetch(`/api/media/peaks?ref=${encodeURIComponent(ref)}`).then((r) =>
       asJson<{ peaks: number[] }>(r),

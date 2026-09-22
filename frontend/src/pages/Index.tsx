@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, fileUrl, reelUrl } from "../api";
+import { ApiError, api, fileUrl, reelUrl } from "../api";
 import LibraryPreview from "../components/LibraryPreview";
 import TrackPlayer from "../components/TrackPlayer";
 import { isDisplayableImage } from "../components/mediaMeta";
@@ -25,6 +25,10 @@ function newestOf(clips: MediaEntry[], music: MediaEntry[]): MediaEntry | null {
   return c ?? m;
 }
 
+function entryRef(e: MediaEntry): string {
+  return `${e.session}/${e.path}`;
+}
+
 export default function Index() {
   const [sessions, setSessions] = useState<SessionListEntry[] | null>(null);
   const [clips, setClips] = useState<MediaEntry[] | null>(null);
@@ -32,6 +36,10 @@ export default function Index() {
   const [preview, setPreview] = useState<MediaEntry | null>(null);
   const [allClips, setAllClips] = useState(false);
   const [allTracks, setAllTracks] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [libError, setLibError] = useState<string | null>(null);
 
   useEffect(() => {
     api.listSessions().then(setSessions);
@@ -46,6 +54,86 @@ export default function Index() {
         setMusic([]);
       });
   }, []);
+
+  async function refreshLibrary() {
+    const [freshSessions, lib] = await Promise.all([api.listSessions(), api.getMedia()]);
+    setSessions(freshSessions);
+    setClips(lib.clips);
+    setMusic(lib.music);
+  }
+
+  async function handleDeleteSelected() {
+    const refs = [...selected];
+    if (refs.length === 0) return;
+    const ok = window.confirm(
+      `Delete ${refs.length} selected file${refs.length === 1 ? "" : "s"}? This unlinks ` +
+        `each file, removes it from its manifest, and clears downstream results so the ` +
+        `next run rebuilds. This cannot be undone.`,
+    );
+    if (!ok) return;
+    setBulkDeleting(true);
+    setLibError(null);
+    const failed: string[] = [];
+    for (const ref of refs) {
+      try {
+        await api.deleteMedia(ref);
+      } catch (err) {
+        failed.push(`${ref}: ${err instanceof ApiError ? err.detail : "Delete failed."}`);
+      }
+    }
+    if (preview && selected.has(entryRef(preview))) setPreview(null);
+    setSelected(new Set());
+    try {
+      await refreshLibrary();
+    } catch {
+      setLibError("Deleted, but refreshing the library failed — reload the page.");
+    } finally {
+      setBulkDeleting(false);
+    }
+    if (failed.length > 0) {
+      setLibError(
+        `Deleted ${refs.length - failed.length} of ${refs.length}. ` +
+          `Failed: ${failed.join("; ")}`,
+      );
+    }
+  }
+
+  function toggleSelect(ref: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(ref)) next.delete(ref);
+      else next.add(ref);
+      return next;
+    });
+  }
+
+  function selectAll() {
+    const all = new Set<string>();
+    for (const c of clips ?? []) all.add(entryRef(c));
+    for (const m of music ?? []) all.add(entryRef(m));
+    setSelected(all);
+  }
+
+  async function handleDelete(entry: MediaEntry) {
+    const ref = entryRef(entry);
+    const ok = window.confirm(
+      `Delete ${entry.filename} from session ${entry.session}? This unlinks the file, ` +
+        `removes it from the manifest, and clears downstream results so the next run ` +
+        `rebuilds. This cannot be undone.`,
+    );
+    if (!ok) return;
+    setDeleting(ref);
+    setLibError(null);
+    try {
+      await api.deleteMedia(ref);
+      if (preview && entryRef(preview) === ref) setPreview(null);
+      await refreshLibrary();
+    } catch (err) {
+      setLibError(err instanceof ApiError ? err.detail : "Delete failed.");
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   const reelCount = sessions?.filter((s) => s.reel_exists).length ?? 0;
   const footageSecs = (clips ?? []).reduce((acc, c) => acc + clipSecs(c), 0);
@@ -71,6 +159,7 @@ export default function Index() {
 
       <section aria-label="Library">
         <h3>Library</h3>
+        {libError && <p className="status-failed">{libError}</p>}
         {clips === null || music === null ? (
           <p>Loading…</p>
         ) : clips.length === 0 && music.length === 0 ? (
@@ -88,6 +177,28 @@ export default function Index() {
                   {" "}
                   · newest: {newest.filename} from {newest.session}, {formatAge(newest.mtime)}
                 </>
+              )}
+            </p>
+
+            <p>
+              <button type="button" onClick={selectAll}>
+                Select all
+              </button>{" "}
+              <button
+                type="button"
+                onClick={() => setSelected(new Set())}
+                disabled={selected.size === 0}
+              >
+                Clear
+              </button>{" "}
+              {selected.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteSelected()}
+                  disabled={bulkDeleting}
+                >
+                  {bulkDeleting ? "Deleting…" : `Delete selected (${selected.size})`}
+                </button>
               )}
             </p>
 
@@ -120,7 +231,25 @@ export default function Index() {
                         </span>
                       </button>
                       <figcaption>
-                        {c.filename} · {c.session} · {formatAge(c.mtime)}
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={selected.has(`${c.session}/${c.path}`)}
+                            onChange={() => toggleSelect(`${c.session}/${c.path}`)}
+                            disabled={bulkDeleting}
+                            aria-label={`Select ${c.filename}`}
+                          />
+                          {c.filename} · {c.session} · {formatAge(c.mtime)}
+                        </label>
+                        <br />
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(c)}
+                          disabled={deleting === `${c.session}/${c.path}` || bulkDeleting}
+                          aria-label={`Delete ${c.filename} from ${c.session}`}
+                        >
+                          {deleting === `${c.session}/${c.path}` ? "Deleting…" : "Delete"}
+                        </button>
                       </figcaption>
                     </figure>
                   ))}
@@ -142,7 +271,16 @@ export default function Index() {
                   {(allTracks ? music : music.slice(0, TRACK_SHOWN)).map((m) => (
                     <li key={`${m.session}/${m.path}`}>
                       <span className="track-meta">
-                        {m.filename} · {formatSize(m.size)} · {m.session} · {formatAge(m.mtime)}
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={selected.has(`${m.session}/${m.path}`)}
+                            onChange={() => toggleSelect(`${m.session}/${m.path}`)}
+                            disabled={bulkDeleting}
+                            aria-label={`Select ${m.filename}`}
+                          />
+                          {m.filename} · {formatSize(m.size)} · {m.session} · {formatAge(m.mtime)}
+                        </label>
                       </span>
                       <TrackPlayer
                         src={fileUrl(m.session, m.path)}
@@ -150,6 +288,14 @@ export default function Index() {
                         peaksRef={`${m.session}/${m.path}`}
                         durationHint={m.duration_s}
                       />
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(m)}
+                        disabled={deleting === `${m.session}/${m.path}` || bulkDeleting}
+                        aria-label={`Delete ${m.filename} from ${m.session}`}
+                      >
+                        {deleting === `${m.session}/${m.path}` ? "Deleting…" : "Delete"}
+                      </button>
                     </li>
                   ))}
                 </ul>

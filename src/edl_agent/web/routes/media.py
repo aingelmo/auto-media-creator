@@ -6,11 +6,13 @@ import json
 import subprocess
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query
 
 from edl_agent.ingest.probe import ffprobe, post_rotation_dims
 from edl_agent.paths import CACHE_DIR, SESSIONS_DIR
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
+from edl_agent.web.artifacts import clear_stage_artifacts
+from edl_agent.web.state import jobs
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -204,3 +206,162 @@ def list_media() -> dict:
         "clips": _scan("inputs", VIDEO_EXTS | IMAGE_EXTS),
         "music": _scan("music", MUSIC_EXTS),
     }
+
+
+def _parse_media_ref(ref: str) -> tuple[str, str]:
+    """Split a `"{session}/{path}"` library ref into its parts.
+
+    Args:
+        ref: Library ref as returned by `list_media` entries
+            (`session` + session-relative `path`).
+
+    Returns:
+        `(session, relpath)` tuple.
+
+    Raises:
+        HTTPException: 400 if the ref is malformed or points at a
+            generated file (`track_cut.wav`) or an unsupported
+            directory/extension; 404 if the session or file is missing.
+    """
+    session, _, relpath = ref.partition("/")
+    if not session or not relpath or ".." in relpath.split("/"):
+        raise HTTPException(status_code=400, detail=f"malformed media ref {ref!r}")
+    subdir, _, filename = relpath.partition("/")
+    if subdir not in ("inputs", "music") or not filename or "/" in filename:
+        raise HTTPException(status_code=400, detail=f"malformed media ref {ref!r}")
+    if filename == "track_cut.wav":
+        raise HTTPException(
+            status_code=400, detail="track_cut.wav is generated output, not deletable"
+        )
+    ext = f".{filename.rsplit('.', 1)[-1].lower()}" if "." in filename else ""
+    allowed = (VIDEO_EXTS | IMAGE_EXTS) if subdir == "inputs" else MUSIC_EXTS
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail=f"unsupported file type {ref!r}")
+    session_dir = SESSIONS_DIR / session
+    if not session_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"no such session {session!r}")
+    target = session_dir / relpath
+    if not target.is_symlink() and not target.is_file():
+        raise HTTPException(status_code=404, detail=f"no such media {ref!r}")
+    return session, relpath
+
+
+def _evict_meta_cache(abspath_str: str) -> None:
+    """Drop ffprobe cache rows for one absolute file path, best-effort.
+
+    Args:
+        abspath_str: Resolved absolute path whose `"{path}:*"` cache keys
+            should go. Cache write failures are swallowed (see
+            `_save_meta_cache`).
+    """
+    cache = _load_meta_cache()
+    doomed = [k for k in cache if k.startswith(f"{abspath_str}:")]
+    if not doomed:
+        return
+    for k in doomed:
+        del cache[k]
+    _save_meta_cache(cache)
+
+
+def _remove_from_manifest(session: str, relpath: str) -> None:
+    """Drop one source/music entry from a session's `manifest.json`, if present.
+
+    Args:
+        session: Session directory name under `SESSIONS_DIR`.
+        relpath: Session-relative path (e.g. `"inputs/clip.mp4"`) to drop
+            from `sources` (or from `music` when it matches `music.src`).
+            A missing `manifest.json` is a no-op; the file is rewritten
+            only when an entry was actually removed.
+    """
+    manifest_path = SESSIONS_DIR / session / "manifest.json"
+    if not manifest_path.is_file():
+        return
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, ValueError):
+        return
+    sources = manifest.get("sources", [])
+    kept = [s for s in sources if s.get("src") != relpath]
+    music = manifest.get("music")
+    if isinstance(music, dict) and music.get("src") == relpath:
+        manifest.pop("music", None)
+    else:
+        music = None
+    if len(kept) == len(sources) and music is None:
+        return
+    manifest["sources"] = kept
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
+
+
+@router.delete("/api/media")
+def delete_media(ref: str = Query(...)) -> dict:
+    """Delete one library file (that session copy only) and invalidate downstream.
+
+    Unlinks the file without following symlinks, so a picked ref only drops
+    the link in its own session. Removes the matching derived output
+    (`proxies/<stem>.mp4` / `inputs_norm/<stem>.jpg` for clips,
+    `music/track_cut.wav` for tracks), drops the entry from
+    `manifest.json`, and clears `candidates`-onward artifacts so the next
+    run rebuilds cleanly.
+
+    Args:
+        ref: `"{session}/{path}"` library ref from `list_media`.
+
+    Returns:
+        Dict with the deleted `ref`.
+
+    Raises:
+        HTTPException: 400 for a malformed ref, a generated/unsupported
+            file, or deleting the session's last clip/music track; 404 for
+            a missing session/file; 409 while the owning session has a live
+            (not `done`) job.
+    """
+    session, relpath = _parse_media_ref(ref)
+    job = jobs.get(session)
+    if job is not None and not job.done:
+        raise HTTPException(
+            status_code=409, detail=f"session {session!r} has a running job"
+        )
+    session_dir = SESSIONS_DIR / session
+    subdir = relpath.split("/", 1)[0]
+    target = session_dir / relpath
+    if subdir == "inputs":
+        allowed = VIDEO_EXTS | IMAGE_EXTS
+        siblings = [
+            f
+            for f in (session_dir / "inputs").iterdir()
+            if (f.is_file() or f.is_symlink()) and f.suffix.lower() in allowed
+        ]
+        remaining = [f for f in siblings if f.name != target.name]
+        if not remaining:
+            raise HTTPException(
+                status_code=400, detail="cannot delete the session's last clip"
+            )
+    else:
+        siblings = [
+            f
+            for f in (session_dir / "music").iterdir()
+            if (f.is_file() or f.is_symlink())
+            and f.suffix.lower() in MUSIC_EXTS
+            and f.name != "track_cut.wav"
+        ]
+        remaining = [f for f in siblings if f.name != target.name]
+        if not remaining:
+            raise HTTPException(
+                status_code=400, detail="cannot delete the session's only track"
+            )
+    try:
+        abspath_str = str(target.resolve())
+    except OSError:
+        abspath_str = str(target.absolute())
+    target.unlink()
+    stem = target.stem
+    if subdir == "inputs":
+        (session_dir / "proxies" / f"{stem}.mp4").unlink(missing_ok=True)
+        (session_dir / "inputs_norm" / f"{stem}.jpg").unlink(missing_ok=True)
+    else:
+        (session_dir / "music" / "track_cut.wav").unlink(missing_ok=True)
+    _remove_from_manifest(session, relpath)
+    clear_stage_artifacts(session_dir, "candidates")
+    _evict_meta_cache(abspath_str)
+    return {"ref": ref}

@@ -1,6 +1,9 @@
-"""Media-library listing (dedupe) and picker-ref containment checks."""
+"""Media-library listing (dedupe), picker-ref containment, and delete endpoint."""
 
 from __future__ import annotations
+
+import json
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -128,3 +131,130 @@ def test_list_sessions_enriched(tmp_path, monkeypatch) -> None:
     assert entry["music_name"] == "track.mp3"
     assert entry["total_cost_usd"] == 0.012
     assert entry["mtime"] > 0
+
+
+def _make_session(tmp_path, name="s1") -> None:
+    sdir = tmp_path / name
+    (sdir / "inputs").mkdir(parents=True)
+    (sdir / "inputs" / "a.mp4").write_bytes(b"aaa")
+    (sdir / "inputs" / "b.mp4").write_bytes(b"bbb")
+    (sdir / "proxies").mkdir(exist_ok=True)
+    (sdir / "proxies" / "a.mp4").write_bytes(b"proxy")
+    (sdir / "inputs_norm").mkdir(exist_ok=True)
+    (sdir / "inputs_norm" / "a.jpg").write_bytes(b"norm")
+    (sdir / "music").mkdir(exist_ok=True)
+    (sdir / "music" / "track.mp3").write_bytes(b"mmm")
+    manifest = {
+        "session_id": name,
+        "sources": [
+            {"src": "inputs/a.mp4", "type": "video"},
+            {"src": "inputs/b.mp4", "type": "video"},
+        ],
+        "music": {"src": "music/track.mp3"},
+    }
+    (sdir / "manifest.json").write_text(json.dumps(manifest))
+    (sdir / "candidates.json").write_text("{}")
+    (sdir / "edl.json").write_text("{}")
+
+
+def _patch_dirs(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(media, "SESSIONS_DIR", tmp_path)
+    monkeypatch.setattr(media, "_META_CACHE_PATH", tmp_path / "meta.json")
+    monkeypatch.setattr(media, "jobs", {})
+
+
+def test_delete_clip_removes_file_derived_manifest_and_stages(
+    tmp_path, monkeypatch
+) -> None:
+    _patch_dirs(tmp_path, monkeypatch)
+    _make_session(tmp_path)
+
+    out = media.delete_media(ref="s1/inputs/a.mp4")
+
+    assert out == {"ref": "s1/inputs/a.mp4"}
+    assert not (tmp_path / "s1" / "inputs" / "a.mp4").exists()
+    assert (tmp_path / "s1" / "inputs" / "b.mp4").exists()
+    assert not (tmp_path / "s1" / "proxies" / "a.mp4").exists()
+    assert not (tmp_path / "s1" / "inputs_norm" / "a.jpg").exists()
+    manifest = json.loads((tmp_path / "s1" / "manifest.json").read_text())
+    assert [s["src"] for s in manifest["sources"]] == ["inputs/b.mp4"]
+    assert not (tmp_path / "s1" / "candidates.json").exists()
+    assert not (tmp_path / "s1" / "edl.json").exists()
+
+
+def test_delete_unlinks_symlink_and_keeps_original(tmp_path, monkeypatch) -> None:
+    _patch_dirs(tmp_path, monkeypatch)
+    _make_session(tmp_path, name="s1")
+    sdir2 = tmp_path / "s2"
+    (sdir2 / "inputs").mkdir(parents=True)
+    (sdir2 / "inputs" / "b.mp4").write_bytes(b"other")
+    (sdir2 / "inputs" / "linked.mp4").symlink_to(
+        (tmp_path / "s1" / "inputs" / "a.mp4").resolve()
+    )
+    (sdir2 / "music").mkdir(exist_ok=True)
+    (sdir2 / "music" / "track.mp3").write_bytes(b"mmm")
+
+    media.delete_media(ref="s2/inputs/linked.mp4")
+
+    assert not (sdir2 / "inputs" / "linked.mp4").exists()
+    assert (tmp_path / "s1" / "inputs" / "a.mp4").exists()
+
+
+def test_delete_music_drops_track_cut_and_manifest_music(
+    tmp_path, monkeypatch,
+) -> None:
+    _patch_dirs(tmp_path, monkeypatch)
+    _make_session(tmp_path)
+    (tmp_path / "s1" / "music" / "extra.wav").write_bytes(b"e")
+    (tmp_path / "s1" / "music" / "track_cut.wav").write_bytes(b"cut")
+
+    media.delete_media(ref="s1/music/track.mp3")
+
+    assert not (tmp_path / "s1" / "music" / "track.mp3").exists()
+    assert not (tmp_path / "s1" / "music" / "track_cut.wav").exists()
+    manifest = json.loads((tmp_path / "s1" / "manifest.json").read_text())
+    assert "music" not in manifest
+
+
+def test_delete_blocked_while_job_running(tmp_path, monkeypatch) -> None:
+    _patch_dirs(tmp_path, monkeypatch)
+    _make_session(tmp_path)
+    monkeypatch.setattr(media, "jobs", {"s1": SimpleNamespace(done=False)})
+
+    with pytest.raises(HTTPException) as exc:
+        media.delete_media(ref="s1/inputs/a.mp4")
+    assert exc.value.status_code == 409
+    assert (tmp_path / "s1" / "inputs" / "a.mp4").exists()
+
+
+def test_delete_blocked_for_last_clip_and_only_track(
+    tmp_path, monkeypatch,
+) -> None:
+    _patch_dirs(tmp_path, monkeypatch)
+    _make_session(tmp_path)
+    (tmp_path / "s1" / "inputs" / "b.mp4").unlink()
+
+    with pytest.raises(HTTPException) as exc:
+        media.delete_media(ref="s1/inputs/a.mp4")
+    assert exc.value.status_code == 400
+
+    with pytest.raises(HTTPException) as exc:
+        media.delete_media(ref="s1/music/track.mp3")
+    assert exc.value.status_code == 400
+
+
+def test_delete_rejects_generated_and_traversal(tmp_path, monkeypatch) -> None:
+    _patch_dirs(tmp_path, monkeypatch)
+    _make_session(tmp_path)
+
+    with pytest.raises(HTTPException) as exc:
+        media.delete_media(ref="s1/music/track_cut.wav")
+    assert exc.value.status_code == 400
+
+    with pytest.raises(HTTPException) as exc:
+        media.delete_media(ref="s1/../../secret.mp4")
+    assert exc.value.status_code in (400, 404)
+
+    with pytest.raises(HTTPException) as exc:
+        media.delete_media(ref="s1/inputs/missing.mp4")
+    assert exc.value.status_code == 404
