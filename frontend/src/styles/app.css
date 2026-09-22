@@ -589,6 +589,78 @@ button.primary {
   display: block;
 }
 
+/* Music-cut picker: one waveform card per candidate excerpt. Cards are
+   wider than image tiles so the 15s shape (intro, build, drop) stays
+   legible; the selected card carries the Signal wash instead of a new
+   accent edge, matching the card-options picked vocabulary. */
+.contact-sheet--music {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.contact-sheet--music figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+
+.contact-sheet--music figure:hover {
+  border-color: var(--signal-border);
+}
+
+.contact-sheet--music figure.is-selected {
+  border-color: var(--signal-border);
+  background: var(--signal-wash);
+}
+
+.contact-sheet--music .track-player {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.contact-sheet--music .track-wave {
+  flex: 1 1 100%;
+  height: 4.5rem;
+}
+
+.contact-sheet--music .track-seek::-webkit-slider-runnable-track {
+  height: 4.5rem;
+}
+
+.contact-sheet--music .track-seek::-webkit-slider-thumb {
+  height: 4.5rem;
+}
+
+.contact-sheet--music .track-seek::-moz-range-track {
+  height: 4.5rem;
+}
+
+.contact-sheet--music .track-seek::-moz-range-thumb {
+  height: 4.5rem;
+}
+
+.contact-sheet--music figcaption label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 0;
+  cursor: pointer;
+}
+
+.contact-sheet--music figcaption input[type="radio"] {
+  accent-color: var(--signal);
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.music-cut-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+}
+
 .contact-sheet figcaption {
   margin-top: var(--space-2);
   font-size: var(--text-sm);

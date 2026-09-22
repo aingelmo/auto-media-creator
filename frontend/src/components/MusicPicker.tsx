@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, fileUrl } from "../api";
 import type { MusicCandidate } from "../types";
+import TrackPlayer from "./TrackPlayer";
 
 function formatOffset(offsetS: number): string {
   const m = Math.floor(offsetS / 60);
@@ -36,34 +37,46 @@ export default function MusicPicker({
         <strong>Pick the music cut</strong> &mdash; preview each candidate and choose the best
         moment, or generate more.
       </p>
-      <div className="contact-sheet">
-        {candidates.map((c, i) => (
-          <figure key={c.path}>
-            <audio controls preload="none" src={fileUrl(name, c.path)} />
-            <figcaption>
-              <label>
-                <input
-                  type="radio"
-                  name="music_offset"
-                  checked={offset === c.offset_s}
-                  onChange={() => setOffset(c.offset_s)}
-                />
-                #{i + 1} &middot; {formatOffset(c.offset_s)}
-                {c.score !== null ? ` · ${c.score.toFixed(2)}` : ""}
-              </label>
-            </figcaption>
-          </figure>
-        ))}
+      <div className="contact-sheet contact-sheet--music" role="radiogroup" aria-label="Music cuts">
+        {candidates.map((c, i) => {
+          const src = fileUrl(name, c.path);
+          const selected = offset === c.offset_s;
+          const label = `Cut ${i + 1} at ${formatOffset(c.offset_s)}`;
+          return (
+            <figure key={c.path} className={selected ? "is-selected" : undefined}>
+              <TrackPlayer src={src} label={label} computePeaks preload="metadata" />
+              <figcaption>
+                <label>
+                  <input
+                    type="radio"
+                    name="music_offset"
+                    checked={selected}
+                    onChange={() => setOffset(c.offset_s)}
+                  />
+                  #{i + 1} &middot; {formatOffset(c.offset_s)}
+                  {c.score !== null ? ` · ${c.score.toFixed(2)}` : ""}
+                </label>
+              </figcaption>
+            </figure>
+          );
+        })}
       </div>
-      <button type="button" className="primary" disabled={busy} onClick={() => submit(true, false)}>
-        Use this cut
-      </button>
-      <button type="button" disabled={busy} onClick={() => submit(true, true)}>
-        Generate 3 more
-      </button>
-      <button type="button" disabled={busy} onClick={() => submit(false, false)}>
-        Cancel run
-      </button>
+      <div className="music-cut-actions">
+        <button
+          type="button"
+          className="primary"
+          disabled={busy}
+          onClick={() => submit(true, false)}
+        >
+          Use this cut
+        </button>
+        <button type="button" disabled={busy} onClick={() => submit(true, true)}>
+          Generate 3 more
+        </button>
+        <button type="button" disabled={busy} onClick={() => submit(false, false)}>
+          Cancel run
+        </button>
+      </div>
     </div>
   );
 }

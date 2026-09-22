@@ -6,8 +6,9 @@ import { formatSecs } from "./mediaMeta";
  *  track pauses any other, so the library never layers two tracks. */
 let activeAudio: HTMLAudioElement | null = null;
 
-/** Extracted peaks per media ref, shared across rows and remounts so
- *  expanding the library never refetches an envelope it already has. */
+/** Extracted peaks per media ref or audio URL, shared across rows and
+ *  remounts so expanding the library never refetches an envelope it
+ *  already has. */
 const peaksCache = new Map<string, number[]>();
 
 /** Peaks from `GET /api/media/peaks`, memoized per ref. Failures cache an
@@ -25,6 +26,40 @@ async function loadPeaks(ref: string): Promise<number[]> {
   }
 }
 
+/** Decode an excerpt URL in the browser and reduce it to a peak
+ *  envelope. Session candidate cuts (`music/candidates/cand_*.wav`) have
+ *  no server-side peaks endpoint (see `routes/waveform.py`), so the picker
+ *  computes them here instead of shipping a flat line. Failures resolve
+ *  to `[]`, which draws the flat fallback. */
+async function decodePeaks(url: string, buckets = 96): Promise<number[]> {
+  const res = await fetch(url);
+  const buf = await res.arrayBuffer();
+  const Ctor =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) return [];
+  const ctx = new Ctor();
+  try {
+    const decoded = await ctx.decodeAudioData(buf);
+    const channel = decoded.getChannelData(0);
+    if (channel.length === 0) return [];
+    const peaks: number[] = [];
+    for (let i = 0; i < buckets; i++) {
+      const lo = Math.floor((channel.length * i) / buckets);
+      const hi = Math.max(lo + 1, Math.floor((channel.length * (i + 1)) / buckets));
+      let top = 0;
+      for (let j = lo; j < hi; j += Math.max(1, Math.floor((hi - lo) / 64))) {
+        const v = Math.abs(channel[j]);
+        if (v > top) top = v;
+      }
+      peaks.push(Math.min(1, top));
+    }
+    return peaks;
+  } finally {
+    void ctx.close().catch(() => {});
+  }
+}
+
 /** Compact track player: play/pause button, time readout, and a waveform
  *  that doubles as the seek control. The waveform fills the row's free
  *  width with the track's actual shape (intro, build, drop), replacing
@@ -32,7 +67,11 @@ async function loadPeaks(ref: string): Promise<number[]> {
  *
  *  With `peaksRef`, peaks load lazily when the row scrolls into view; the
  *  drawn waveform is a scrub surface over an invisible range input, which
- *  keeps keyboard seeking and screen-reader semantics native. */
+ *  keeps keyboard seeking and screen-reader semantics native.
+ *
+ *  With `computePeaks`, the envelope is decoded from `src` in the browser
+ *  instead (for generated excerpts with no server-side peaks). The two
+ *  modes are exclusive: `peaksRef` wins when both are given. */
 export default function TrackPlayer({
   src,
   label,
@@ -40,6 +79,7 @@ export default function TrackPlayer({
   onDuration,
   peaksRef,
   durationHint,
+  computePeaks = false,
 }: {
   src: string;
   label: string;
@@ -47,6 +87,7 @@ export default function TrackPlayer({
   onDuration?: (secs: number | null) => void;
   peaksRef?: string;
   durationHint?: number | null;
+  computePeaks?: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const createdFor = useRef<string | null>(null);
@@ -63,7 +104,7 @@ export default function TrackPlayer({
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [peaks, setPeaks] = useState<number[]>(
-    () => (peaksRef ? peaksCache.get(peaksRef) : undefined) ?? [],
+    () => (peaksRef ? peaksCache.get(peaksRef) : peaksCache.get(src)) ?? [],
   );
 
   /** Element factory shared by all handlers, keyed on `src`: at most one
@@ -119,9 +160,12 @@ export default function TrackPlayer({
 
   // Fetch peaks only once the row is on screen: the dashboard renders up
   // to 200 rows, and decoding every envelope up front would stall paint.
+  // Server peaks (`peaksRef`) win; otherwise `computePeaks` decodes the
+  // excerpt URL locally (candidate cuts have no server endpoint).
   useEffect(() => {
-    if (!peaksRef || peaksCache.has(peaksRef)) {
-      if (peaksRef) setPeaks(peaksCache.get(peaksRef) ?? []);
+    const key = peaksRef ?? (computePeaks ? src : null);
+    if (!key || peaksCache.has(key)) {
+      if (key) setPeaks(peaksCache.get(key) ?? []);
       return;
     }
     const wave = waveRef.current;
@@ -130,7 +174,9 @@ export default function TrackPlayer({
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some((e) => e.isIntersecting)) return;
       observer.disconnect();
-      void loadPeaks(peaksRef).then((loaded) => {
+      const job = peaksRef ? loadPeaks(peaksRef) : decodePeaks(src).catch(() => []);
+      void job.then((loaded) => {
+        peaksCache.set(key, loaded);
         if (!cancelled) setPeaks(loaded);
       });
     });
@@ -139,7 +185,7 @@ export default function TrackPlayer({
       cancelled = true;
       observer.disconnect();
     };
-  }, [peaksRef]);
+  }, [peaksRef, computePeaks, src]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
