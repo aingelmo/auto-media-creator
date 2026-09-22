@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from edl_agent.ingest.probe import ffprobe, post_rotation_dims
 from edl_agent.paths import CACHE_DIR, SESSIONS_DIR
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
+from edl_agent.web import trash
 from edl_agent.web.artifacts import clear_stage_artifacts
 from edl_agent.web.state import jobs
 
@@ -263,7 +264,9 @@ def _evict_meta_cache(abspath_str: str) -> None:
     _save_meta_cache(cache)
 
 
-def _remove_from_manifest(session: str, relpath: str) -> None:
+def _pop_manifest_entry(
+    session: str, relpath: str
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Drop one source/music entry from a session's `manifest.json`, if present.
 
     Args:
@@ -272,43 +275,84 @@ def _remove_from_manifest(session: str, relpath: str) -> None:
             from `sources` (or from `music` when it matches `music.src`).
             A missing `manifest.json` is a no-op; the file is rewritten
             only when an entry was actually removed.
+
+    Returns:
+        `(source_entry, music_entry)` — the removed `sources` entry and the
+        removed `music` entry, each `None` when it was not present. The
+        caller keeps them in the trash record so a restore can re-insert
+        them verbatim.
     """
     manifest_path = SESSIONS_DIR / session / "manifest.json"
+    if not manifest_path.is_file():
+        return None, None
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, ValueError):
+        return None, None
+    sources = manifest.get("sources", [])
+    removed_source = next((s for s in sources if s.get("src") == relpath), None)
+    music = manifest.get("music")
+    removed_music = (
+        music if isinstance(music, dict) and music.get("src") == relpath else None
+    )
+    if removed_source is None and removed_music is None:
+        return None, None
+    manifest["sources"] = [s for s in sources if s.get("src") != relpath]
+    if removed_music is not None:
+        manifest.pop("music", None)
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
+    return removed_source, removed_music
+
+
+def restore_media_manifest(item: dict[str, Any]) -> None:
+    """Re-insert a restored media item's entries into its session manifest.
+
+    Backs `POST /api/trash/{id}/restore` for kind `"media"`: the trash
+    record captured the `sources`/`music` entries at delete time, so a
+    restore puts the session back the way it was. Derived stage artifacts
+    stay cleared and rebuild on the next run.
+
+    Args:
+        item: A media trash record from `web.trash.restore_item`, carrying
+            `session`, `source_entry`, and `music_entry`.
+    """
+    manifest_path = SESSIONS_DIR / str(item.get("session", "")) / "manifest.json"
     if not manifest_path.is_file():
         return
     try:
         manifest = json.loads(manifest_path.read_text())
     except (OSError, ValueError):
         return
-    sources = manifest.get("sources", [])
-    kept = [s for s in sources if s.get("src") != relpath]
-    music = manifest.get("music")
-    if isinstance(music, dict) and music.get("src") == relpath:
-        manifest.pop("music", None)
-    else:
-        music = None
-    if len(kept) == len(sources) and music is None:
-        return
-    manifest["sources"] = kept
+    sources = manifest.setdefault("sources", [])
+    source_entry = item.get("source_entry")
+    if isinstance(source_entry, dict) and not any(
+        s.get("src") == source_entry.get("src") for s in sources
+    ):
+        sources.append(source_entry)
+    music_entry = item.get("music_entry")
+    if isinstance(music_entry, dict):
+        manifest["music"] = music_entry
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
 
 
 @router.delete("/api/media")
 def delete_media(ref: str = Query(...)) -> dict:
-    """Delete one library file (that session copy only) and invalidate downstream.
+    """Move one library file (that session copy only) to the trash.
 
-    Unlinks the file without following symlinks, so a picked ref only drops
-    the link in its own session. Removes the matching derived output
-    (`proxies/<stem>.mp4` / `inputs_norm/<stem>.jpg` for clips,
-    `music/track_cut.wav` for tracks), drops the entry from
-    `manifest.json`, and clears `candidates`-onward artifacts so the next
-    run rebuilds cleanly.
+    Moves the file without following symlinks, so a picked ref only drops
+    the link in its own session while the shared original stays put.
+    Removes the matching derived output (`proxies/<stem>.mp4` /
+    `inputs_norm/<stem>.jpg` for clips, `music/track_cut.wav` for tracks),
+    drops the entry from `manifest.json` (keeping it in the trash record
+    for restore), and clears `candidates`-onward artifacts so the next run
+    rebuilds cleanly. The payload stays restorable from `var/trash` for the
+    retention window.
 
     Args:
         ref: `"{session}/{path}"` library ref from `list_media`.
 
     Returns:
-        Dict with the deleted `ref`.
+        Dict with the trashed `ref` and the trash `item` record.
 
     Raises:
         HTTPException: 400 for a malformed ref, a generated/unsupported
@@ -354,14 +398,19 @@ def delete_media(ref: str = Query(...)) -> dict:
         abspath_str = str(target.resolve())
     except OSError:
         abspath_str = str(target.absolute())
-    target.unlink()
     stem = target.stem
     if subdir == "inputs":
         (session_dir / "proxies" / f"{stem}.mp4").unlink(missing_ok=True)
         (session_dir / "inputs_norm" / f"{stem}.jpg").unlink(missing_ok=True)
     else:
         (session_dir / "music" / "track_cut.wav").unlink(missing_ok=True)
-    _remove_from_manifest(session, relpath)
+    source_entry, music_entry = _pop_manifest_entry(session, relpath)
     clear_stage_artifacts(session_dir, "candidates")
     _evict_meta_cache(abspath_str)
-    return {"ref": ref}
+    item = trash.trash_media(
+        session,
+        relpath,
+        source_entry=source_entry,
+        music_entry=music_entry,
+    )
+    return {"ref": ref, "item": item}

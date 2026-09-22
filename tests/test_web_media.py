@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from edl_agent.web import trash
 from edl_agent.web.routes import media, sessions
 
 
@@ -161,6 +162,8 @@ def _patch_dirs(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(media, "SESSIONS_DIR", tmp_path)
     monkeypatch.setattr(media, "_META_CACHE_PATH", tmp_path / "meta.json")
     monkeypatch.setattr(media, "jobs", {})
+    monkeypatch.setattr(trash, "SESSIONS_DIR", tmp_path)
+    monkeypatch.setattr(trash, "TRASH_DIR", tmp_path / "trash")
 
 
 def test_delete_clip_removes_file_derived_manifest_and_stages(
@@ -171,8 +174,11 @@ def test_delete_clip_removes_file_derived_manifest_and_stages(
 
     out = media.delete_media(ref="s1/inputs/a.mp4")
 
-    assert out == {"ref": "s1/inputs/a.mp4"}
+    assert out["ref"] == "s1/inputs/a.mp4"
+    assert out["item"]["kind"] == "media"
+    # The payload moved into the bin, not unlinked.
     assert not (tmp_path / "s1" / "inputs" / "a.mp4").exists()
+    assert (tmp_path / "trash" / out["item"]["id"] / "payload").is_file()
     assert (tmp_path / "s1" / "inputs" / "b.mp4").exists()
     assert not (tmp_path / "s1" / "proxies" / "a.mp4").exists()
     assert not (tmp_path / "s1" / "inputs_norm" / "a.jpg").exists()
@@ -194,9 +200,12 @@ def test_delete_unlinks_symlink_and_keeps_original(tmp_path, monkeypatch) -> Non
     (sdir2 / "music").mkdir(exist_ok=True)
     (sdir2 / "music" / "track.mp3").write_bytes(b"mmm")
 
-    media.delete_media(ref="s2/inputs/linked.mp4")
+    out = media.delete_media(ref="s2/inputs/linked.mp4")
 
     assert not (sdir2 / "inputs" / "linked.mp4").exists()
+    # The moved payload is still a symlink whose target survives in s1.
+    payload = tmp_path / "trash" / out["item"]["id"] / "payload"
+    assert payload.is_symlink()
     assert (tmp_path / "s1" / "inputs" / "a.mp4").exists()
 
 
@@ -208,9 +217,10 @@ def test_delete_music_drops_track_cut_and_manifest_music(
     (tmp_path / "s1" / "music" / "extra.wav").write_bytes(b"e")
     (tmp_path / "s1" / "music" / "track_cut.wav").write_bytes(b"cut")
 
-    media.delete_media(ref="s1/music/track.mp3")
+    out = media.delete_media(ref="s1/music/track.mp3")
 
     assert not (tmp_path / "s1" / "music" / "track.mp3").exists()
+    assert (tmp_path / "trash" / out["item"]["id"] / "payload").is_file()
     assert not (tmp_path / "s1" / "music" / "track_cut.wav").exists()
     manifest = json.loads((tmp_path / "s1" / "manifest.json").read_text())
     assert "music" not in manifest

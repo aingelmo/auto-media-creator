@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from edl_agent.paths import SESSIONS_DIR
 from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
+from edl_agent.web import trash
 from edl_agent.web.artifacts import clear_stage_artifacts
 from edl_agent.web.pipeline import (
     DEFAULT_MODELS,
@@ -444,3 +445,54 @@ def session_confirm(
     job.more_music = more_music
     job.confirm_event.set()
     return JSONResponse({"name": name})
+
+
+@router.delete("/api/sessions/{name}")
+def delete_session(name: str) -> dict:
+    """Move a whole session into the trash instead of deleting it.
+
+    The directory leaves `SESSIONS_DIR`, so the session drops out of
+    `/api/sessions`, the media library, and stage listing, and its
+    in-memory job record is discarded. Restoring it from `/api/trash` puts
+    the directory back; derived files that symlink into other sessions
+    resolve again.
+
+    Args:
+        name: Session directory name.
+
+    Returns:
+        Dict with the trashed `name` and the trash `item` record.
+
+    Raises:
+        HTTPException: 404 if no such session exists; 409 while the session
+            has a live (not `done`) job.
+    """
+    session_dir = SESSIONS_DIR / name
+    if not session_dir.is_dir():
+        raise HTTPException(status_code=404, detail="no such session")
+    job = jobs.get(name)
+    if job is not None and not job.done:
+        raise HTTPException(
+            status_code=409, detail=f"session {name!r} has a running job"
+        )
+    allowed = VIDEO_EXTS | IMAGE_EXTS
+    inputs = session_dir / "inputs"
+    clip_count = (
+        sum(
+            1
+            for f in inputs.iterdir()
+            if f.is_file() and f.suffix.lower() in allowed
+        )
+        if inputs.is_dir()
+        else 0
+    )
+    meta = {
+        "status": session_status(name),
+        "reel_exists": (session_dir / "reel.mp4").exists(),
+        "clip_count": clip_count,
+        "total_cost_usd": total_cost_usd(name),
+    }
+    item = trash.trash_session(name, meta)
+    with lock:
+        jobs.pop(name, None)
+    return {"name": name, "item": item}
