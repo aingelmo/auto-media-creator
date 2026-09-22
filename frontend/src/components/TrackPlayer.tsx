@@ -39,12 +39,14 @@ export default function TrackPlayer({
   preload = "none",
   onDuration,
   peaksRef,
+  durationHint,
 }: {
   src: string;
   label: string;
   preload?: "none" | "metadata";
   onDuration?: (secs: number | null) => void;
   peaksRef?: string;
+  durationHint?: number | null;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const createdFor = useRef<string | null>(null);
@@ -54,7 +56,7 @@ export default function TrackPlayer({
   }, [onDuration]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const waveRef = useRef<HTMLSpanElement>(null);
-  const pendingRatio = useRef<number | null>(null);
+  const pendingSecs = useRef<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -76,11 +78,11 @@ export default function TrackPlayer({
         const d = Number.isFinite(target.duration) ? target.duration : null;
         setDuration(d ?? 0);
         onDurationRef.current?.(d);
-        const ratio = pendingRatio.current;
-        if (ratio != null && d != null && d > 0) {
-          target.currentTime = ratio * d;
+        const pending = pendingSecs.current;
+        if (pending != null && d != null && d > 0) {
+          target.currentTime = Math.min(pending, d);
           setCurrent(target.currentTime);
-          pendingRatio.current = null;
+          pendingSecs.current = null;
         }
       });
       target.addEventListener("pause", () => {
@@ -222,6 +224,11 @@ export default function TrackPlayer({
     el.currentTime = Math.min(el.duration, Math.max(0, secs));
   }
 
+  /** Duration to lay the seek bar out against: the element's own duration
+   *  once known, else the listing's hint, so a click can be mapped to a
+   *  position before the track has ever been loaded. */
+  const knownDuration = duration > 0 ? duration : (durationHint ?? 0);
+
   return (
     <div className="track-player">
       <button
@@ -247,7 +254,7 @@ export default function TrackPlayer({
         )}
       </button>
       <span className="track-time">
-        {formatSecs(current)} / {duration > 0 ? formatSecs(duration) : "—"}
+        {formatSecs(current)} / {knownDuration > 0 ? formatSecs(knownDuration) : "—"}
       </span>
       <span className="track-wave" ref={waveRef}>
         <canvas ref={canvasRef} aria-hidden="true" />
@@ -255,20 +262,42 @@ export default function TrackPlayer({
           type="range"
           className="track-seek"
           min={0}
-          max={duration > 0 ? duration : 100}
-          step={duration > 0 ? 0.1 : 1}
-          value={duration > 0 ? Math.min(current, duration) : 0}
+          max={knownDuration > 0 ? knownDuration : 100}
+          step={knownDuration > 0 ? 0.1 : 1}
+          value={knownDuration > 0 ? Math.min(current, knownDuration) : 0}
           onChange={(e) => {
-            const raw = Number(e.target.value);
+            const secs = Number(e.target.value);
             if (duration > 0) {
-              seekTo(raw);
+              seekTo(secs);
               return;
             }
-            // Metadata not resolved yet: remember the position as a ratio
-            // and let `loadedmetadata` apply it once the duration lands, so
-            // a click never feels dead before the track has loaded.
-            pendingRatio.current = raw / 100;
-            ensureAudio();
+            // Metadata not resolved yet: remember the target position and
+            // force a metadata load so `loadedmetadata` can apply it. With
+            // `preload="none"` nothing would ever load otherwise, and the
+            // click would silently do nothing.
+            pendingSecs.current = secs;
+            const el = ensureAudio();
+            if (el.preload === "none") {
+              el.preload = "metadata";
+              el.load();
+            }
+          }}
+          onKeyDown={(e) => {
+            // The hidden range's own step is fine-grained for pointer
+            // seeking but useless on a 3-minute track, so arrows jump.
+            const el = audioRef.current ?? ensureAudio();
+            if (!Number.isFinite(el.duration) || el.duration <= 0) return;
+            const jump = e.shiftKey ? 10 : 5;
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+              e.preventDefault();
+              seekTo(el.currentTime + (e.key === "ArrowRight" ? jump : -jump));
+            } else if (e.key === "Home") {
+              e.preventDefault();
+              seekTo(0);
+            } else if (e.key === "End") {
+              e.preventDefault();
+              seekTo(el.duration);
+            }
           }}
           aria-label={`Seek ${label}`}
         />

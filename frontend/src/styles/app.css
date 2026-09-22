@@ -968,16 +968,40 @@ section[aria-label="Library"] h4 {
   width: 100%;
   height: 100%;
   margin: 0;
+  padding: 0;
+  -webkit-appearance: none;
   appearance: none;
   background: transparent;
   cursor: pointer;
 }
 
-.track-seek::-webkit-slider-runnable-track,
-.track-seek::-webkit-slider-thumb,
-.track-seek::-moz-range-track,
+/* Click-to-position needs real track/thumb geometry: with zero-sized
+ * pseudo-elements Chrome maps every click to the start instead of the
+ * pointer's x, so the waveform looked unclickable. */
+.track-seek::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  height: 1.75rem;
+  background: transparent;
+  border: none;
+}
+
+.track-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 2px;
+  height: 1.75rem;
+  background: transparent;
+  border: none;
+}
+
+.track-seek::-moz-range-track {
+  height: 1.75rem;
+  background: transparent;
+  border: none;
+}
+
 .track-seek::-moz-range-thumb {
-  appearance: none;
+  width: 2px;
+  height: 1.75rem;
   background: transparent;
   border: none;
 }

@@ -148,6 +148,7 @@ export default function Index() {
                         src={fileUrl(m.session, m.path)}
                         label={m.filename}
                         peaksRef={`${m.session}/${m.path}`}
+                        durationHint={m.duration_s}
                       />
                     </li>
                   ))}

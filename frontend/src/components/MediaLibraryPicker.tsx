@@ -409,6 +409,7 @@ export default function MediaLibraryPicker({
                       src={fileUrl(m.session, m.path)}
                       label={m.filename}
                       peaksRef={ref}
+                      durationHint={m.duration_s}
                     />
                   </li>
                 );
