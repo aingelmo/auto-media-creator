@@ -136,6 +136,8 @@ def _scan(subdir: str, exts: set[str]) -> list[dict]:
     Capped at `MEDIA_SCAN_LIMIT` entries, each enriched with ffprobe
     metadata (`duration_s`, `w`, `h`, `kind`) served from a disk cache in
     `var/cache/media_meta.json` keyed by absolute path, size, and mtime.
+    The `mtime` (unix seconds) is kept in the output so callers can show
+    recency without an extra stat call.
     """
     if not SESSIONS_DIR.is_dir():
         return []
@@ -182,7 +184,6 @@ def _scan(subdir: str, exts: set[str]) -> list[dict]:
             cache[cache_key] = meta
             dirty = True
         e.update(meta)
-        del e["mtime"]
     if dirty:
         _save_meta_cache(cache)
     return deduped
@@ -195,7 +196,8 @@ def list_media() -> dict:
     Returns:
         Dict with `clips` (from each session's `inputs/`) and `music`
         (from `music/`), each entry carrying `session`, `path`,
-        `filename`, `size`, plus probed `duration_s`, `w`, `h`, `kind`.
+        `filename`, `size`, `mtime` (unix seconds, newest-first), plus
+        probed `duration_s`, `w`, `h`, `kind`.
         Both lists are newest-first and capped at `MEDIA_SCAN_LIMIT`.
     """
     return {

@@ -80,6 +80,7 @@ def test_scan_attaches_probe_meta(tmp_path, monkeypatch) -> None:
     assert entries[0]["w"] == 1080
     assert entries[0]["h"] == 1920
     assert entries[0]["kind"] == "video"
+    assert entries[0]["mtime"] > 0
 
 
 def test_scan_caps_entries_at_limit(tmp_path, monkeypatch) -> None:
