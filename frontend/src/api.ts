@@ -39,6 +39,11 @@ export const api = {
 
   getMedia: () => fetch("/api/media").then((r) => asJson<MediaLibrary>(r)),
 
+  getPeaks: (ref: string) =>
+    fetch(`/api/media/peaks?ref=${encodeURIComponent(ref)}`).then((r) =>
+      asJson<{ peaks: number[] }>(r),
+    ),
+
   getSession: (name: string) =>
     fetch(`/api/sessions/${encodeURIComponent(name)}`).then((r) => asJson<SessionDetail>(r)),
 

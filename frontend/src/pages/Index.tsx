@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, fileUrl, reelUrl } from "../api";
 import LibraryPreview from "../components/LibraryPreview";
+import TrackPlayer from "../components/TrackPlayer";
 import { isDisplayableImage } from "../components/mediaMeta";
 import {
   clipSecs,
@@ -140,11 +141,14 @@ export default function Index() {
                 <ul className="media-list library-tracks">
                   {(allTracks ? music : music.slice(0, TRACK_SHOWN)).map((m) => (
                     <li key={`${m.session}/${m.path}`}>
-                      <span>
-                        {m.filename} · {m.duration_s != null ? formatSecs(m.duration_s) : "—"} ·{" "}
-                        {formatSize(m.size)} · {m.session} · {formatAge(m.mtime)}
+                      <span className="track-meta">
+                        {m.filename} · {formatSize(m.size)} · {m.session} · {formatAge(m.mtime)}
                       </span>
-                      <audio controls preload="none" src={fileUrl(m.session, m.path)} />
+                      <TrackPlayer
+                        src={fileUrl(m.session, m.path)}
+                        label={m.filename}
+                        peaksRef={`${m.session}/${m.path}`}
+                      />
                     </li>
                   ))}
                 </ul>

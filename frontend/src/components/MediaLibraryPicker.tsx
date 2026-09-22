@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fileUrl } from "../api";
 import type { MediaEntry } from "../types";
 import CoverageMeter from "./CoverageMeter";
+import TrackPlayer from "./TrackPlayer";
 import {
   IMAGE_FOOTAGE_S,
   clipSecs,
@@ -371,19 +372,13 @@ export default function MediaLibraryPicker({
           <ul className="media-list">
             <li>
               <label>
-                {uploadedMusic.name} ·{" "}
-                {upMusicDur != null ? `${Math.round(upMusicDur)}s` : formatSize(uploadedMusic.size)}{" "}
-                (uploaded)
+                {uploadedMusic.name} · {formatSize(uploadedMusic.size)} (uploaded)
               </label>
-              <audio
-                controls
-                preload="metadata"
+              <TrackPlayer
                 src={musicUrl}
-                onLoadedMetadata={(e) =>
-                  setUpMusicDur(
-                    Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : null,
-                  )
-                }
+                label={uploadedMusic.name}
+                preload="metadata"
+                onDuration={(d) => setUpMusicDur(d)}
               />
               <button type="button" onClick={() => setMusicFile(null)}>
                 Remove
@@ -408,10 +403,13 @@ export default function MediaLibraryPicker({
                         checked={selectedMusic === ref}
                         onChange={() => pickMusic(ref)}
                       />
-                      {m.filename} · {m.duration_s != null ? `${Math.round(m.duration_s)}s` : "—"} ·{" "}
-                      {formatSize(m.size)}
+                      {m.filename} · {formatSize(m.size)}
                     </label>
-                    <audio controls preload="none" src={fileUrl(m.session, m.path)} />
+                    <TrackPlayer
+                      src={fileUrl(m.session, m.path)}
+                      label={m.filename}
+                      peaksRef={ref}
+                    />
                   </li>
                 );
               })}
