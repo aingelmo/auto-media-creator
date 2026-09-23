@@ -81,8 +81,8 @@ def test_media_peaks_caches_and_reuses_extraction(tmp_path, monkeypatch) -> None
     src.write_bytes(b"x")
     calls = []
 
-    def fake_extract(path):
-        calls.append(path)
+    def fake_extract(path, **kwargs):
+        calls.append((path, kwargs))
         return [0.1, 0.9]
 
     monkeypatch.setattr(route, "extract_peaks", fake_extract)
@@ -90,7 +90,8 @@ def test_media_peaks_caches_and_reuses_extraction(tmp_path, monkeypatch) -> None
     first = route.media_peaks("s1/music/track.mp3")
     second = route.media_peaks("s1/music/track.mp3")
 
-    assert first == second == {"peaks": [0.1, 0.9]}
+    assert first["peaks"] == second["peaks"] == [0.1, 0.9]
+    assert first["start_s"] is None and first["end_s"] is None
     assert len(calls) == 1
 
 
@@ -101,9 +102,103 @@ def test_media_peaks_empty_on_decode_failure(tmp_path, monkeypatch) -> None:
     src.parent.mkdir(parents=True)
     src.write_bytes(b"x")
 
-    def boom(path):
+    def boom(path, **kwargs):
         raise subprocess.CalledProcessError(1, "ffmpeg")
 
     monkeypatch.setattr(route, "extract_peaks", boom)
 
-    assert route.media_peaks("s1/music/broken.mp3") == {"peaks": []}
+    assert route.media_peaks("s1/music/broken.mp3")["peaks"] == []
+
+
+def test_extract_peaks_range_seeks_with_ffmpeg(monkeypatch) -> None:
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        return SimpleNamespace(stdout=_pcm(1000, -2000, 3000, -4000))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    peaks = waveform.extract_peaks(
+        Path("track.mp3"), buckets=2, start_s=10.0, window_s=5.0
+    )
+
+    assert len(peaks) == 2
+    assert "-ss" in seen["cmd"] and "-t" in seen["cmd"]
+    assert seen["cmd"][seen["cmd"].index("-ss") + 1] == "10.0"
+
+
+def test_media_peaks_ranged_request_caches_separately(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(route, "SESSIONS_DIR", tmp_path)
+    monkeypatch.setattr(route, "_PEAKS_CACHE_PATH", tmp_path / "peaks.json")
+    src = tmp_path / "s1" / "music" / "track.mp3"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"x")
+    calls = []
+
+    def fake_extract(path, **kwargs):
+        calls.append(kwargs)
+        return [0.5]
+
+    monkeypatch.setattr(route, "extract_peaks", fake_extract)
+
+    full = route.media_peaks("s1/music/track.mp3")
+    zoom = route.media_peaks("s1/music/track.mp3", buckets=64, start_s=30.0, end_s=45.0)
+
+    assert full["start_s"] is None
+    assert zoom["start_s"] == 30.0 and zoom["end_s"] == 45.0
+    assert calls[1]["buckets"] == 64
+    assert calls[1]["start_s"] == 30.0 and calls[1]["window_s"] == 15.0
+
+
+def test_measure_loudness_parses_volumedetect(monkeypatch) -> None:
+    stderr = (
+        "[Parsed_volumedetect_0] mean_volume: -14.5 dB\n"
+        "[Parsed_volumedetect_0] max_volume: -1.0 dB\n"
+    )
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: SimpleNamespace(stderr=stderr)
+    )
+
+    loud = waveform.measure_loudness(Path("track.mp3"))
+
+    assert loud["mean_volume_db"] == -14.5
+    assert loud["max_volume_db"] == -1.0
+    assert loud["peak"] == pytest.approx(10.0 ** (-1.0 / 20.0), rel=1e-3)
+
+
+def test_measure_loudness_silence_yields_nones(monkeypatch) -> None:
+    stderr = (
+        "[Parsed_volumedetect_0] mean_volume: n/a\n"
+        "[Parsed_volumedetect_0] max_volume: n/a\n"
+    )
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: SimpleNamespace(stderr=stderr)
+    )
+
+    loud = waveform.measure_loudness(Path("silent.mp3"))
+
+    assert loud["mean_volume_db"] is None
+    assert loud["max_volume_db"] is None
+    assert loud["peak"] == 0.0
+
+
+def test_media_loudness_caches_per_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(route, "SESSIONS_DIR", tmp_path)
+    monkeypatch.setattr(route, "_LOUD_CACHE_PATH", tmp_path / "loud.json")
+    src = tmp_path / "s1" / "music" / "track.mp3"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"x")
+    calls = []
+
+    def fake_measure(path):
+        calls.append(path)
+        return {"mean_volume_db": -12.0, "max_volume_db": -2.0, "peak": 0.8}
+
+    monkeypatch.setattr(route, "measure_loudness", fake_measure)
+
+    first = route.media_loudness("s1/music/track.mp3")
+    second = route.media_loudness("s1/music/track.mp3")
+
+    assert first == second
+    assert len(calls) == 1

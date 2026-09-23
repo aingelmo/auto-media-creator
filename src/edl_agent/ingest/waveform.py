@@ -30,6 +30,8 @@ def extract_peaks(
     path: Path,
     buckets: int = PEAK_BUCKETS,
     sample_rate: int = PEAK_SAMPLE_RATE,
+    start_s: float | None = None,
+    window_s: float | None = None,
 ) -> list[float]:
     """Decode a track and return its normalized amplitude envelope.
 
@@ -41,8 +43,13 @@ def extract_peaks(
     Args:
         path: Audio (or audio-bearing container) file to decode.
         buckets: Number of equal-duration slices to reduce to one peak
-            each. Buckets are contiguous and cover the whole track.
+            each. Buckets are contiguous and cover the whole track, or
+            just `[start_s, start_s + window_s]` when a range is given.
         sample_rate: Decode rate in Hz for the intermediate PCM.
+        start_s: Optional range start in seconds (seek before decode,
+            for zoomed windows). `None` decodes from the start.
+        window_s: Optional range length in seconds (limit decode length).
+            `None` decodes to the end of the file.
 
     Returns:
         List of `buckets` floats in `0.0`-`1.0`, where `1.0` is full
@@ -53,24 +60,14 @@ def extract_peaks(
             (unsupported codec, corrupt container, missing input).
         FileNotFoundError: If the `ffmpeg` binary is not on `PATH`.
     """
-    out = subprocess.run(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-i",
-            str(path),
-            "-ac",
-            "1",
-            "-ar",
-            str(sample_rate),
-            "-f",
-            "s16le",
-            "-",
-        ],
-        check=True,
-        capture_output=True,
-    )
+    cmd = ["ffmpeg", "-v", "error"]
+    if start_s is not None and start_s > 0:
+        cmd += ["-ss", str(max(0.0, start_s))]
+    cmd += ["-i", str(path)]
+    if window_s is not None and window_s > 0:
+        cmd += ["-t", str(window_s)]
+    cmd += ["-ac", "1", "-ar", str(sample_rate), "-f", "s16le", "-"]
+    out = subprocess.run(cmd, check=True, capture_output=True)
     raw = out.stdout[: len(out.stdout) // 2 * 2]
     samples = array.array("h")
     samples.frombytes(raw)
@@ -89,3 +86,57 @@ def extract_peaks(
         amplitude = max(high, -low)
         peaks.append(round(amplitude / 32768.0, 3))
     return peaks
+
+
+def measure_loudness(path: Path) -> dict[str, float | None]:
+    """Measure a track's loudness via ffmpeg volumedetect, never raising.
+
+    Args:
+        path: Audio (or audio-bearing container) file to measure.
+
+    Returns:
+        Dict with `mean_volume_db` and `max_volume_db` (`float` or
+        `None` when ffmpeg reports `n/a`, e.g. digital silence), plus
+        `peak` (`0.0`-`1.0` linear peak derived from `max_volume_db`).
+        Any decode failure yields all-`None` (plus `peak` 0.0) so one
+        bad file leaves the surrounding list intact.
+    """
+    try:
+        out = subprocess.run(
+            [
+                "ffmpeg",
+                "-v",
+                "info",
+                "-i",
+                str(path),
+                "-af",
+                "volumedetect",
+                "-f",
+                "null",
+                "/dev/null",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+        return {"mean_volume_db": None, "max_volume_db": None, "peak": 0.0}
+    stderr = out.stderr or ""
+    mean_db: float | None = None
+    max_db: float | None = None
+    for raw_line in stderr.splitlines():
+        line = raw_line.strip()
+        if "mean_volume:" in line:
+            val = line.split("mean_volume:")[-1].split("dB")[0].strip()
+            try:
+                mean_db = float(val)
+            except ValueError:
+                mean_db = None
+        elif "max_volume:" in line:
+            val = line.split("max_volume:")[-1].split("dB")[0].strip()
+            try:
+                max_db = float(val)
+            except ValueError:
+                max_db = None
+    peak = round(10.0 ** (max_db / 20.0), 3) if max_db is not None else 0.0
+    return {"mean_volume_db": mean_db, "max_volume_db": max_db, "peak": peak}
