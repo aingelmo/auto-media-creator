@@ -137,8 +137,11 @@ export default function Index() {
   useEffect(() => {
     if (!sessions) return;
     let live = true;
+    // Skip `status === "new"` sessions: they have no `edl.json` yet,
+    // so `GET .../planner` would 404 and spam the console with
+    // failed requests (caught by `fetchUsage`, but still logged).
     fetchUsage(
-      sessions.map((s) => s.name),
+      sessions.filter((s) => s.status !== "new").map((s) => s.name),
       (name) => api.getPlanner(name),
     ).then((map) => {
       if (live) setUsage(map);

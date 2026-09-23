@@ -100,8 +100,10 @@ export default function MediaLibraryPicker({
     api
       .listSessions()
       .then((sessions) =>
+        // Skip `status === "new"` sessions (no `edl.json` yet):
+        // avoids 404-spam in the console (see Index.tsx).
         fetchUsage(
-          sessions.map((s) => s.name),
+          sessions.filter((s) => s.status !== "new").map((s) => s.name),
           (name) => api.getPlanner(name),
         ),
       )
