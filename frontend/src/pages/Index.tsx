@@ -83,6 +83,32 @@ function hoverTile(tile: HTMLElement, on: boolean): void {
   else stopHoverPreview(v);
 }
 
+/** Clips left after the sort / "unused only" filter: the same list the
+ * grid renders, so "Select all" picks what the user sees. */
+function filteredClips(
+  all: MediaEntry[],
+  usage: UsageMap | null,
+  usageSort: "newest" | "most" | "least",
+  unusedOnly: boolean,
+): MediaEntry[] {
+  const list = [...all];
+  if (unusedOnly) {
+    return list.filter((c) => {
+      const u = usage?.[c.filename] ?? usage?.[basenameOf(c.filename)];
+      return !u;
+    });
+  }
+  if (usageSort === "most" || usageSort === "least") {
+    const countOf = (c: MediaEntry): number => {
+      if (usage == null) return 0;
+      const key = c.filename in usage ? c.filename : basenameOf(c.filename);
+      return usage[key]?.count ?? 0;
+    };
+    list.sort((a, b) => (usageSort === "most" ? countOf(b) - countOf(a) : countOf(a) - countOf(b)));
+  }
+  return list;
+}
+
 export default function Index() {
   const [sessions, setSessions] = useState<SessionListEntry[] | null>(null);
   const [clips, setClips] = useState<MediaEntry[] | null>(null);
@@ -212,7 +238,9 @@ export default function Index() {
   }
 
   function selectAllClips() {
-    setSelected(new Set((clips ?? []).map((c) => entryRef(c))));
+    setSelected(
+      new Set(filteredClips(clips ?? [], usage, usageSort, unusedOnly).map((c) => entryRef(c))),
+    );
   }
 
   async function handleDelete(entry: MediaEntry) {
@@ -359,26 +387,10 @@ export default function Index() {
   const trackCount = music?.length ?? 0;
   const clipCount = clips?.length ?? 0;
 
-  const visibleClips = useMemo(() => {
-    const list = [...(clips ?? [])];
-    if (unusedOnly) {
-      return list.filter((c) => {
-        const u = usage?.[c.filename] ?? usage?.[basenameOf(c.filename)];
-        return !u;
-      });
-    }
-    if (usageSort === "most" || usageSort === "least") {
-      const countOf = (c: MediaEntry): number => {
-        if (usage == null) return 0;
-        const key = c.filename in usage ? c.filename : basenameOf(c.filename);
-        return usage[key]?.count ?? 0;
-      };
-      list.sort((a, b) =>
-        usageSort === "most" ? countOf(b) - countOf(a) : countOf(a) - countOf(b),
-      );
-    }
-    return list;
-  }, [clips, usage, usageSort, unusedOnly]);
+  const visibleClips = useMemo(
+    () => filteredClips(clips ?? [], usage, usageSort, unusedOnly),
+    [clips, usage, usageSort, unusedOnly],
+  );
 
   function toggleSessionSort(key: typeof sessionSortKey) {
     if (key !== sessionSortKey) {

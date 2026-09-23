@@ -55,6 +55,32 @@ function dropFiles(list: FileList | File[], allowed: string[]): File[] {
   return out;
 }
 
+/** Clips left after the sort / "unused only" filter: the same list
+ * the contact-sheet renders, so "Select all" picks what the user sees. */
+function filteredClips(
+  all: MediaEntry[],
+  usage: UsageMap | null,
+  usageSort: "newest" | "most" | "least",
+  unusedOnly: boolean,
+): MediaEntry[] {
+  const list = [...all];
+  if (unusedOnly) {
+    return list.filter((c) => {
+      const u = usage?.[c.filename] ?? usage?.[basenameOf(c.filename)];
+      return !u;
+    });
+  }
+  if (usageSort === "most" || usageSort === "least") {
+    const countOf = (c: MediaEntry): number => {
+      if (usage == null) return 0;
+      const key = c.filename in usage ? c.filename : basenameOf(c.filename);
+      return usage[key]?.count ?? 0;
+    };
+    list.sort((a, b) => (usageSort === "most" ? countOf(b) - countOf(a) : countOf(a) - countOf(b)));
+  }
+  return list;
+}
+
 /** Clips & music for the new-session form: library contact-sheet plus a
  * drag-drop zone for fresh uploads, with a live coverage meter on top. */
 export default function MediaLibraryPicker({
@@ -176,7 +202,7 @@ export default function MediaLibraryPicker({
   }
 
   function selectAllClips() {
-    const next = new Set(clips.map(refOf));
+    const next = new Set(filteredClips(clips, usage, usageSort, unusedOnly).map(refOf));
     setSelectedClips(next);
     onClipsChange([...next]);
   }
@@ -206,26 +232,10 @@ export default function MediaLibraryPicker({
     return n;
   }, [clips, usage]);
 
-  const visibleClips = useMemo(() => {
-    const list = [...clips];
-    if (unusedOnly) {
-      return list.filter((c) => {
-        const u = usage?.[c.filename] ?? usage?.[basenameOf(c.filename)];
-        return !u;
-      });
-    }
-    if (usageSort === "most" || usageSort === "least") {
-      const countOf = (c: MediaEntry): number => {
-        if (usage == null) return 0;
-        const key = c.filename in usage ? c.filename : basenameOf(c.filename);
-        return usage[key]?.count ?? 0;
-      };
-      list.sort((a, b) =>
-        usageSort === "most" ? countOf(b) - countOf(a) : countOf(a) - countOf(b),
-      );
-    }
-    return list;
-  }, [clips, usage, usageSort, unusedOnly]);
+  const visibleClips = useMemo(
+    () => filteredClips(clips, usage, usageSort, unusedOnly),
+    [clips, usage, usageSort, unusedOnly],
+  );
 
   const libClipSecs = [...selectedClips].reduce((acc, r) => {
     const c = byRef.get(r);
