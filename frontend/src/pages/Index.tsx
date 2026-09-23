@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiError, api, fileUrl, reelUrl } from "../api";
+import { ApiError, api, fileUrl, previewUrl, reelUrl } from "../api";
 import { useConfirm } from "../components/confirm";
 import LibraryPreview from "../components/LibraryPreview";
 import TrackPlayer from "../components/TrackPlayer";
@@ -262,11 +262,7 @@ export default function Index() {
             ) : c.kind === "image" ? (
               <img src={fileUrl(c.session, c.path)} alt="" loading="lazy" />
             ) : (
-              <video
-                muted
-                preload={coarsePointer ? "none" : "metadata"}
-                src={fileUrl(c.session, c.path)}
-              />
+              <video muted preload={coarsePointer ? "none" : "metadata"} src={previewUrl(c)} />
             )}
             <span className="library-badge">{durationLabel(c.duration_s, c.kind)}</span>
           </span>

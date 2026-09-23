@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { fileUrl } from "../api";
+import { fileUrl, previewUrl } from "../api";
 import type { MediaEntry } from "../types";
 import {
   dimsLabel,
@@ -53,7 +53,16 @@ export default function LibraryPreview({
           {placeholder ?? "still"}
         </div>
       ) : (
-        <video controls autoPlay src={fileUrl(clip.session, clip.path)} />
+        <video controls autoPlay src={previewUrl(clip)} />
+      )}
+      {clip.kind === "video" && clip.proxy_path && (
+        <p className="library-proxy-note">
+          Proxy preview (silent, low-res)
+          {clip.proxy_verified === false && " · unverified"} ·{" "}
+          <a href={fileUrl(clip.session, clip.path)} download>
+            original {extOf(clip.filename).slice(1).toUpperCase()}
+          </a>
+        </p>
       )}
       <dl className="library-specs">
         <div>

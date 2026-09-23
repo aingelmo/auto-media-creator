@@ -68,6 +68,11 @@ export interface MediaEntry {
   w: number | null;
   h: number | null;
   kind: "video" | "image" | "audio";
+  /** Session-relative H.264 proxy (e.g. `proxies/clip.mp4`), or null/absent
+   * when no proxy file exists on disk. Video-only. */
+  proxy_path?: string | null;
+  /** True when the proxy was verified against the original at ingest. */
+  proxy_verified?: boolean;
 }
 
 export interface MediaLibrary {

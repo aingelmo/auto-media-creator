@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, fileUrl } from "../api";
+import { api, fileUrl, previewUrl } from "../api";
 import type { MediaEntry } from "../types";
 import CoverageMeter from "./CoverageMeter";
 import type { CreateStats } from "./CreateSummary";
@@ -321,7 +321,7 @@ export default function MediaLibraryPicker({
                     ) : c.kind === "image" ? (
                       <img src={fileUrl(c.session, c.path)} alt={c.filename} loading="lazy" />
                     ) : (
-                      <video muted preload="metadata" src={fileUrl(c.session, c.path)} />
+                      <video muted preload="metadata" src={previewUrl(c)} />
                     )}
                     <figcaption>
                       <label>

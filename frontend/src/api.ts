@@ -5,6 +5,7 @@ import type {
   Edl,
   Hooks,
   Manifest,
+  MediaEntry,
   MediaLibrary,
   SelectionPayload,
   SessionDetail,
@@ -191,6 +192,18 @@ export function reelUrl(name: string): string {
 
 export function fileUrl(name: string, path: string): string {
   return `/sessions/${encodeURIComponent(name)}/files/${path}`;
+}
+
+/** Playable preview URL for a library entry: the H.264 proxy when the
+ * backend reports one, else the original file. Originals are often iPhone
+ * HEVC 10-bit MOVs that desktop browsers can't decode (black tiles), while
+ * proxies are plain H.264. Callers needing the original (audio, full
+ * quality) must use fileUrl() directly. */
+export function previewUrl(entry: MediaEntry): string {
+  if (entry.kind === "video" && entry.proxy_path) {
+    return fileUrl(entry.session, entry.proxy_path);
+  }
+  return fileUrl(entry.session, entry.path);
 }
 
 export type { Candidate };
