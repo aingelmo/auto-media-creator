@@ -50,6 +50,8 @@ def run_pipeline_job(
     hook_line_override: str = "",
     brief: str = "",
     audience: str = "prospects",
+    music_offset_s: float | None = None,
+    music_duration_s: float | None = None,
 ) -> None:
     """Run the full ingest->render pipeline for a session, updating `job` along the way.
 
@@ -72,6 +74,9 @@ def run_pipeline_job(
             skips its LLM call.
         brief: Operator-typed session brief from the new-session form.
         audience: `"prospects"` | `"members"`, from the new-session form.
+        music_offset_s: Pinned music window start in seconds from the
+            new-session form, or `None` for the auto-cut pause.
+        music_duration_s: Pinned music window length in seconds, or `None`.
     """
     job.provider = provider
     job.model = model
@@ -80,7 +85,9 @@ def run_pipeline_job(
     job.brief = brief
     job.audience = audience
     try:
-        manifest, slots = _run_ingest_stage(session_dir, job, resume)
+        manifest, slots = _run_ingest_stage(
+            session_dir, job, resume, music_offset_s, music_duration_s
+        )
         candidates, slots = _run_candidates_stage(
             session_dir, job, resume, manifest, slots
         )

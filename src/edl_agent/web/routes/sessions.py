@@ -141,6 +141,8 @@ async def create_session(
     handle: str = Form(""),
     brief: str = Form(""),
     audience: str = Form("prospects"),
+    music_offset: float | None = Form(default=None),
+    music_duration: float | None = Form(default=None),
 ) -> JSONResponse:
     """Save uploaded/picked media (+ optional brand logo), then launch the pipeline.
 
@@ -148,6 +150,30 @@ async def create_session(
     picked from a past session's already-on-disk files (`clip_refs`/
     `music_ref`, each `"{session}/{path}"` from `GET /api/media`) — the two
     are symlinked/copied together into the new session's `inputs`/`music`.
+
+    Args:
+        background_tasks: FastAPI background runner for the pipeline job.
+        name: New session directory name.
+        provider: LLM provider name.
+        theme: Selector prompt theme.
+        clips: Fresh clip/photo uploads.
+        music: Fresh music track upload.
+        clip_refs: Library clip refs to symlink in.
+        music_ref: Library music ref to symlink in.
+        logo: Optional brand logo upload.
+        handle: Optional brand handle for watermark/end card.
+        brief: Operator-typed session brief.
+        audience: `"prospects"` | `"members"`.
+        music_offset: Pinned music window start in seconds, or `None`
+            for the auto-cut pause.
+        music_duration: Pinned music window length in seconds, or `None`.
+
+    Returns:
+        JSON `{"name": name}` once the background job is queued.
+
+    Raises:
+        HTTPException: 400 when provider keys are missing, no clips or
+            no music were supplied.
     """
     key_env = PROVIDER_API_KEY_ENV.get(provider)
     if key_env and not os.environ.get(key_env):
@@ -210,6 +236,8 @@ async def create_session(
         theme=theme,
         brief=brief.strip(),
         audience=audience,
+        music_offset_s=music_offset,
+        music_duration_s=music_duration,
     )
 
     return JSONResponse({"name": name})

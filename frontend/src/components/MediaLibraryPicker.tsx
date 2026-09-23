@@ -5,6 +5,7 @@ import { basenameOf, fetchUsage, type UsageMap } from "./clipUsage";
 import CoverageMeter from "./CoverageMeter";
 import type { CreateStats } from "./CreateSummary";
 import LibraryHoverVideo from "./LibraryHoverVideo";
+import MusicWindowPicker from "./MusicWindowPicker";
 import TrackPlayer from "./TrackPlayer";
 import {
   IMAGE_FOOTAGE_S,
@@ -87,14 +88,20 @@ export default function MediaLibraryPicker({
   onClipsChange,
   onMusicChange,
   onStatsChange,
+  onMusicPinChange,
   initialClips = [],
   initialMusic = "",
+  initialMusicOffset = null,
+  initialMusicDuration = null,
 }: {
   onClipsChange: (refs: string[]) => void;
   onMusicChange: (ref: string) => void;
   onStatsChange?: (stats: CreateStats) => void;
+  onMusicPinChange?: (offsetS: number | null, durationS: number | null) => void;
   initialClips?: string[];
   initialMusic?: string;
+  initialMusicOffset?: number | null;
+  initialMusicDuration?: number | null;
 }) {
   const [clips, setClips] = useState<MediaEntry[]>([]);
   const [music, setMusic] = useState<MediaEntry[]>([]);
@@ -112,6 +119,8 @@ export default function MediaLibraryPicker({
   const [dragClips, setDragClips] = useState(false);
   const [dragMusic, setDragMusic] = useState(false);
   const [dropNotice, setDropNotice] = useState<string | null>(null);
+  const [pinOffset, setPinOffset] = useState<number | null>(initialMusicOffset ?? null);
+  const [pinDuration, setPinDuration] = useState<number | null>(initialMusicDuration ?? null);
   const clipsInput = useRef<HTMLInputElement>(null);
   const musicInput = useRef<HTMLInputElement>(null);
 
@@ -188,6 +197,9 @@ export default function MediaLibraryPicker({
     putInputFiles(musicInput.current, f ? [f] : []);
     setUploadedMusic(f);
     setUpMusicDur(null);
+    setPinOffset(null);
+    setPinDuration(null);
+    onMusicPinChange?.(null, null);
   }
 
   /** Browse handler for clips: the `accept` hint is advisory, so filter
@@ -247,6 +259,21 @@ export default function MediaLibraryPicker({
   function pickMusic(ref: string) {
     setSelectedMusic(ref);
     onMusicChange(ref);
+    setPinOffset(null);
+    setPinDuration(null);
+    onMusicPinChange?.(null, null);
+  }
+
+  function handlePinChange(offsetS: number, durationS: number) {
+    setPinOffset(offsetS);
+    setPinDuration(durationS);
+    onMusicPinChange?.(offsetS, durationS);
+  }
+
+  function clearPin() {
+    setPinOffset(null);
+    setPinDuration(null);
+    onMusicPinChange?.(null, null);
   }
 
   const byRef = useMemo(() => new Map(clips.map((c) => [refOf(c), c])), [clips]);
@@ -640,6 +667,59 @@ export default function MediaLibraryPicker({
             )}
           </>
         )}
+        <details className="advanced-panel">
+          <summary>Pin a section (optional)</summary>
+          {(() => {
+            if (uploadedMusic && musicUrl) {
+              return (
+                <>
+                  <MusicWindowPicker
+                    src={musicUrl}
+                    durationHint={upMusicDur}
+                    initialOffset={pinOffset ?? 0}
+                    initialDuration={pinDuration}
+                    onChange={handlePinChange}
+                    label="Pinned music section"
+                  />
+                  {pinOffset != null && pinDuration != null && (
+                    <p>
+                      <button type="button" onClick={clearPin}>
+                        Clear pin
+                      </button>
+                    </p>
+                  )}
+                </>
+              );
+            }
+            const entry = selectedMusic ? musicByRef.get(selectedMusic) : undefined;
+            if (entry) {
+              return (
+                <>
+                  <MusicWindowPicker
+                    src={fileUrl(entry.session, entry.path)}
+                    peaksRef={refOf(entry)}
+                    durationHint={entry.duration_s}
+                    initialOffset={pinOffset ?? 0}
+                    initialDuration={pinDuration}
+                    onChange={handlePinChange}
+                    label="Pinned music section"
+                  />
+                  {pinOffset != null && pinDuration != null && (
+                    <p>
+                      <button type="button" onClick={clearPin}>
+                        Clear pin
+                      </button>
+                    </p>
+                  )}
+                </>
+              );
+            }
+            return <p className="field-hint">Pick a track above to pin its chorus or drop.</p>;
+          })()}
+          <p className="field-hint">
+            Pinned sections skip the auto-cut picker and drive the reel length.
+          </p>
+        </details>
       </fieldset>
     </div>
   );

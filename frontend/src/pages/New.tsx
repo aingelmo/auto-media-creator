@@ -35,6 +35,12 @@ export default function New() {
   });
   const [clipRefs, setClipRefs] = useState<string[]>(() => loadDraft()?.clipRefs ?? []);
   const [musicRef, setMusicRef] = useState(() => loadDraft()?.musicRef ?? "");
+  const [musicOffset, setMusicOffset] = useState<number | null>(
+    () => loadDraft()?.musicOffset ?? null,
+  );
+  const [musicDuration, setMusicDuration] = useState<number | null>(
+    () => loadDraft()?.musicDuration ?? null,
+  );
   const [name, setName] = useState(() => loadDraft()?.name ?? "");
   const [brief, setBrief] = useState(() => loadDraft()?.brief ?? "");
   const [theme, setTheme] = useState(
@@ -56,7 +62,17 @@ export default function New() {
     if (loadDraft()) setDraftNotice(true);
   }, []);
 
-  useCreateDraft({ name, brief, theme, audience, handle, clipRefs, musicRef });
+  useCreateDraft({
+    name,
+    brief,
+    theme,
+    audience,
+    handle,
+    clipRefs,
+    musicRef,
+    musicOffset,
+    musicDuration,
+  });
 
   function mediaError(): string | null {
     if (!name) return "Give the session a name — or hit Suggest.";
@@ -87,6 +103,8 @@ export default function New() {
     setBrief("");
     setClipRefs([]);
     setMusicRef("");
+    setMusicOffset(null);
+    setMusicDuration(null);
     setHandle(getFormMemory("handle") ?? "");
   }
 
@@ -150,6 +168,10 @@ export default function New() {
     setStatus("Uploading...");
     for (const ref of clipRefs) formData.append("clip_refs", ref);
     formData.set("music_ref", musicRef);
+    if (musicOffset != null && musicDuration != null) {
+      formData.set("music_offset", String(musicOffset));
+      formData.set("music_duration", String(musicDuration));
+    }
     saveFormMemory(formData);
     try {
       const { name: created } = await createSessionWithProgress(formData, (loaded, total) => {
@@ -227,8 +249,14 @@ export default function New() {
               onClipsChange={setClipRefs}
               onMusicChange={setMusicRef}
               onStatsChange={setStats}
+              onMusicPinChange={(o, d) => {
+                setMusicOffset(o);
+                setMusicDuration(d);
+              }}
               initialClips={clipRefs}
               initialMusic={musicRef}
+              initialMusicOffset={musicOffset}
+              initialMusicDuration={musicDuration}
             />
           </section>
 
@@ -292,6 +320,8 @@ export default function New() {
           handle={handle}
           step={step}
           onEdit={goTo}
+          musicOffset={musicOffset}
+          musicDuration={musicDuration}
         />
       </div>
     </>

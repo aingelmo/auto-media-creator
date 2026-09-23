@@ -20,6 +20,32 @@ SHORTEN_ATTEMPTS = 4  # beat detection isn't linear in duration; try progressive
 MUSIC_CANDIDATE_COUNT = 3
 
 
+def clamp_preset_window(
+    track_duration_s: float,
+    offset_s: float,
+    duration_s: float,
+) -> tuple[float, float] | None:
+    """Clamp a pinned music window into the musical range, per #4.3.
+
+    Args:
+        track_duration_s: Full track length in seconds, via ffprobe.
+        offset_s: Pinned window start in seconds, from the new-session form.
+        duration_s: Pinned window length in seconds, from the form.
+
+    Returns:
+        `(offset_s, duration_s)` clamped to `MUSIC_MIN_DURATION_S` to
+        `MUSIC_MAX_DURATION_S` and inside `[0, track_duration_s]`, each
+        rounded to 0.1s; `None` when the track is at most
+        `MUSIC_MAX_DURATION_S` (short tracks bypass the music gate, so a
+        pin carries no information).
+    """
+    if track_duration_s <= MUSIC_MAX_DURATION_S:
+        return None
+    dur = min(MUSIC_MAX_DURATION_S, max(MUSIC_MIN_DURATION_S, duration_s))
+    off = min(max(0.0, offset_s), max(0.0, track_duration_s - dur))
+    return (round(off, 1), round(dur, 1))
+
+
 def _shorten_durations(start_s: float) -> list[float]:
     """Decreasing durations to try when shortening, from `start_s` down to minimum.
 

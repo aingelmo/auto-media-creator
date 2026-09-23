@@ -18,6 +18,8 @@ export default function CreateSummary({
   handle,
   step,
   onEdit,
+  musicOffset = null,
+  musicDuration = null,
 }: {
   stats: CreateStats;
   brief: string;
@@ -26,6 +28,8 @@ export default function CreateSummary({
   handle: string;
   step: number;
   onEdit: (step: number) => void;
+  musicOffset?: number | null;
+  musicDuration?: number | null;
 }) {
   const ready =
     stats.clipCount > 0 &&
@@ -56,6 +60,12 @@ export default function CreateSummary({
               <>
                 {stats.musicName}
                 {stats.musicSecs != null && ` · ${formatSecs(stats.musicSecs)}`}
+                {musicOffset != null && musicDuration != null && (
+                  <>
+                    {" · pinned "}
+                    {formatSecs(musicOffset)}–{formatSecs(musicOffset + musicDuration)}
+                  </>
+                )}
               </>
             ) : (
               <span className="is-empty">No track yet</span>

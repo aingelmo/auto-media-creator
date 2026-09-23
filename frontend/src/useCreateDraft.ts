@@ -8,6 +8,8 @@ export interface CreateDraft {
   handle: string;
   clipRefs: string[];
   musicRef: string;
+  musicOffset: number | null;
+  musicDuration: number | null;
 }
 
 const KEY = "edl-agent:new-draft";
@@ -29,6 +31,8 @@ export function loadDraft(): CreateDraft | null {
       handle: typeof parsed.handle === "string" ? parsed.handle : "",
       clipRefs: Array.isArray(parsed.clipRefs) ? parsed.clipRefs : [],
       musicRef: typeof parsed.musicRef === "string" ? parsed.musicRef : "",
+      musicOffset: typeof parsed.musicOffset === "number" ? parsed.musicOffset : null,
+      musicDuration: typeof parsed.musicDuration === "number" ? parsed.musicDuration : null,
     };
   } catch {
     return null;

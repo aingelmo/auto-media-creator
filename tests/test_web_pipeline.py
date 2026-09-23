@@ -533,3 +533,55 @@ def test_render_stage_single_pass_preview_then_final(tmp_path) -> None:
     assert [suffix for suffix, _ in render_calls] == ["_h0p0"]
     assert result["clips"][0]["slot"] == 0
     assert any(n["kind"] == "effects" for n in job.notices)
+
+
+def test_clamp_preset_window_short_track_returns_none() -> None:
+    from edl_agent.web.stages.music import clamp_preset_window
+
+    assert clamp_preset_window(12.0, 2.0, 10.0) is None
+
+
+def test_clamp_preset_window_clamps_to_musical_range() -> None:
+    from edl_agent.web.stages.music import clamp_preset_window
+
+    assert clamp_preset_window(200.0, 42.0, 20.0) == (42.0, 15.0)
+    assert clamp_preset_window(200.0, 42.0, 5.0) == (42.0, 8.0)
+    assert clamp_preset_window(200.0, 195.0, 15.0) == (185.0, 15.0)
+    assert clamp_preset_window(200.0, -3.0, 10.0) == (0.0, 10.0)
+
+
+def test_ingest_preset_skips_music_pause(tmp_path) -> None:
+    from edl_agent.web.jobs import JobState
+    from edl_agent.web.stages import ingest as ingest_stage
+
+    session_dir = tmp_path
+    (session_dir / "music").mkdir()
+    track = session_dir / "music" / "track.mp3"
+    track.write_bytes(b"x")
+    job = JobState()
+    seen = {}
+
+    def fake_run_ingest(session_dir, threads, music_offset_s, music_max_duration_s,
+                        cache_root):
+        seen["offset"] = music_offset_s
+        seen["duration"] = music_max_duration_s
+        return {"sources": [], "music": {}}
+
+    with (
+        patch.object(ingest_stage, "_find_music_track", return_value=track),
+        patch.object(ingest_stage, "_probe_duration_s", return_value=200.0),
+        patch.object(
+            ingest_stage, "_run_music_choice_pause",
+            side_effect=AssertionError("pause must be skipped"),
+        ),
+        patch.object(ingest_stage, "run_ingest", side_effect=fake_run_ingest),
+        patch.object(ingest_stage, "slots_from_file", return_value={"slots": []}),
+    ):
+        manifest, _slots = ingest_stage._run_ingest_stage(
+            session_dir, job, False, 42.0, 20.0
+        )
+
+    assert seen == {"offset": 42.0, "duration": 15.0}
+    assert manifest == {"sources": [], "music": {}}
+    assert any(n["kind"] == "music_pin" for n in job.notices)
+    assert job.awaiting_confirmation is False
