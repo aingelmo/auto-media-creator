@@ -280,7 +280,7 @@ export default function Index() {
               disabled={bulkDeleting}
               aria-label={`Select ${c.filename}`}
             />
-            {c.filename} · {c.session} · {formatAge(c.mtime)}
+            {c.filename} · {formatAge(c.mtime)}
           </label>
           <button
             type="button"
