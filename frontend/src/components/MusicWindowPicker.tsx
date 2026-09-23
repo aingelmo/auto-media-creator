@@ -144,6 +144,9 @@ export default function MusicWindowPicker({
   // registered once per element and would otherwise close over stale values.
   const winRef = useRef({ offset, winDur });
   winRef.current = { offset, winDur };
+  // One-shot stop point for Shift-click/double-click auditions; null
+  // during normal window playback (see the `timeupdate` listener).
+  const auditionEndRef = useRef<number | null>(null);
   // Playback options for the same once-registered listener.
   const playOptsRef = useRef({ loop, preRoll });
   playOptsRef.current = { loop, preRoll };
@@ -348,9 +351,17 @@ export default function MusicWindowPicker({
       });
       el.addEventListener("timeupdate", () => {
         setPlayhead(el!.currentTime);
-        const end = winRef.current.offset + winRef.current.winDur;
+        // A Shift-click/double-click audition sets its own stop point
+        // and always plays one-shot; window playback uses the cut end
+        // with the Loop toggle.
+        const auditionEnd = auditionEndRef.current;
+        const end = auditionEnd ?? winRef.current.offset + winRef.current.winDur;
         if (el!.currentTime >= end) {
-          if (playOptsRef.current.loop) {
+          if (auditionEnd != null) {
+            auditionEndRef.current = null;
+            el!.pause();
+            setPlaying(false);
+          } else if (playOptsRef.current.loop) {
             const backoff = playOptsRef.current.preRoll ? 1 : 0;
             el!.currentTime = Math.max(0, winRef.current.offset - backoff);
           } else {
@@ -382,10 +393,29 @@ export default function MusicWindowPicker({
 
   function playWindow() {
     const el = ensureAudio();
+    auditionEndRef.current = null;
     const backoff = preRoll ? 1 : 0;
     const start = Math.min(Math.max(0, offset - backoff), Math.max(0, (trackDur || 1e9) - 0.1));
     el.currentTime = start;
     setPlayhead(el.currentTime);
+    void el
+      .play()
+      .then(() => setPlaying(true))
+      .catch(() => setPlaying(false));
+  }
+
+  // Listen from an arbitrary point without moving the cut: plays until
+  // the cut end when starting before it (to hear the entry in context),
+  // else a 5s skim to the track end. Always one-shot.
+  function auditionFrom(secs: number) {
+    const el = ensureAudio();
+    const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : trackDur;
+    if (!(dur > 0)) return;
+    const from = Math.min(Math.max(0, secs), Math.max(0, dur - 0.1));
+    const cutEnd = offset + winDur;
+    auditionEndRef.current = from < cutEnd ? cutEnd : Math.min(dur, from + 5);
+    el.currentTime = from;
+    setPlayhead(from);
     void el
       .play()
       .then(() => setPlaying(true))
@@ -398,6 +428,7 @@ export default function MusicWindowPicker({
   }
 
   function stop() {
+    auditionEndRef.current = null;
     audioRef.current?.pause();
     setPlaying(false);
   }
@@ -416,6 +447,14 @@ export default function MusicWindowPicker({
 
   function onHandlePointerDown(kind: "left" | "right" | "body") {
     return (e: React.PointerEvent) => {
+      // Shift-click anywhere on the wave auditions from that point
+      // without moving the cut (see onWavePointerDown).
+      if (e.shiftKey && trackDur > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        auditionFrom(secsFromClientX(e.clientX));
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -424,12 +463,18 @@ export default function MusicWindowPicker({
   }
 
   function onWavePointerDown(e: React.PointerEvent) {
-    // Clicking the dimmed full-track area jumps the cut there, then starts
-    // a body drag so a click-drag repositions in one gesture. Clicks that
-    // begin inside the highlighted cut are handled by the body grip above.
+    // Clicking the dimmed area jumps the cut there, then starts a body
+    // drag so a click-drag repositions in one gesture. Clicks that begin
+    // inside the highlighted cut are handled by the body grip above.
+    // Shift-click (or double-click) instead auditions from that point
+    // without moving anything.
     if ((e.target as HTMLElement).closest?.(".window-select")) return;
     if (!(trackDur > 0)) return;
     const secs = secsFromClientX(e.clientX);
+    if (e.shiftKey || e.detail >= 2) {
+      auditionFrom(secs);
+      return;
+    }
     const c = clampWindow(trackDur, secs - winDur / 2, winDur, minDuration, maxDuration);
     apply(c.offset, c.duration);
     dragRef.current = { kind: "body", x0: e.clientX, o0: c.offset, d0: c.duration };
@@ -543,6 +588,7 @@ export default function MusicWindowPicker({
       <div
         className="window-wave"
         ref={waveRef}
+        title="Click to move the cut here · Shift-click or double-click to listen from here"
         onPointerDown={onWavePointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}

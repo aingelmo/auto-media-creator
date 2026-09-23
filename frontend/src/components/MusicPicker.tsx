@@ -337,7 +337,8 @@ export default function MusicPicker({
           ) : (
             " "
           )}
-          or fine-tune below. Start and length stay inside {MIN_DUR}–{MAX_DUR}s.
+          or fine-tune below. Shift-click (or double-click) the track to listen from any point
+          without moving the cut. Start and length stay inside {MIN_DUR}–{MAX_DUR}s.
         </p>
         {trackUrl ? (
           <MusicWindowPicker
