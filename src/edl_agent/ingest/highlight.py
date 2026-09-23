@@ -170,8 +170,20 @@ def _rank(track: Path, window_s: float) -> list[dict]:
     ]
     rescored.sort(key=lambda c: c["final"], reverse=True)
 
+    # Several grid anchors can snap to the same downbeat (and get the same
+    # end nudge), yielding identical clips with different open scores.
+    # Drop those collisions (keep the best) before spreading, or the
+    # gap-halving fallback below fills KEEP_TOP with duplicates.
+    dedupe_gap = round(0.5 * frame_rate)
+    deduped = []
+    for c in rescored:
+        if all(
+            abs(c["off_frame"] - k["off_frame"]) >= dedupe_gap for k in deduped
+        ):
+            deduped.append(c)
+
     min_gap_frames = round(max(dur / 10, 1.0) * frame_rate)
-    kept = _suppress_neighbors(rescored, min_gap_frames, key="off_frame")
+    kept = _suppress_neighbors(deduped, min_gap_frames, key="off_frame")
 
     return [
         {
