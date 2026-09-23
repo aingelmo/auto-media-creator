@@ -4,9 +4,11 @@ import type {
   Config,
   Edl,
   Hooks,
+  LoudnessInfo,
   Manifest,
   MediaEntry,
   MediaLibrary,
+  MusicTrackInfo,
   SelectionPayload,
   SessionDetail,
   SessionListEntry,
@@ -69,9 +71,24 @@ export const api = {
   emptyTrash: () =>
     fetch("/api/trash", { method: "DELETE" }).then((r) => asJson<{ removed: number }>(r)),
 
-  getPeaks: (ref: string) =>
-    fetch(`/api/media/peaks?ref=${encodeURIComponent(ref)}`).then((r) =>
-      asJson<{ peaks: number[] }>(r),
+  getPeaks: (ref: string, opts?: { buckets?: number; start_s?: number; end_s?: number }) => {
+    const params = new URLSearchParams({ ref });
+    if (opts?.buckets != null) params.set("buckets", String(opts.buckets));
+    if (opts?.start_s != null) params.set("start_s", String(opts.start_s));
+    if (opts?.end_s != null) params.set("end_s", String(opts.end_s));
+    return fetch(`/api/media/peaks?${params.toString()}`).then((r) =>
+      asJson<{ peaks: number[]; start_s: number | null; end_s: number | null }>(r),
+    );
+  },
+
+  getLoudness: (ref: string) =>
+    fetch(`/api/media/loudness?ref=${encodeURIComponent(ref)}`).then((r) =>
+      asJson<LoudnessInfo>(r),
+    ),
+
+  getMusicTrack: (name: string) =>
+    fetch(`/api/sessions/${encodeURIComponent(name)}/music-track`).then((r) =>
+      asJson<MusicTrackInfo>(r),
     ),
 
   getSession: (name: string) =>

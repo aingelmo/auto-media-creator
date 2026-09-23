@@ -57,6 +57,22 @@ export interface MusicCandidate {
   duration_s: number | null;
   path: string;
   score: number | null;
+  reason?: string | null;
+  close_closure?: number | null;
+  d_close_beat_s?: number | null;
+}
+
+export interface LoudnessInfo {
+  mean_volume_db: number | null;
+  max_volume_db: number | null;
+  peak: number;
+}
+
+export interface MusicTrackInfo {
+  path: string;
+  filename: string;
+  duration_s: number | null;
+  peaks_ref: string;
 }
 
 export interface MediaEntry {

@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
+from edl_agent.ingest.probe import ffprobe
 from edl_agent.paths import SESSIONS_DIR
 from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
@@ -341,6 +342,61 @@ def regenerate_session(
     )
 
     return JSONResponse({"name": name})
+
+
+@router.get("/api/sessions/{name}/music-track")
+def session_music_track(name: str) -> dict:
+    """Return the session's own original music track for the cut picker.
+
+    The picker used to find its full-track waveform via `GET /api/media`
+    (`session == name`), but that listing dedupes by `(filename, size)`
+    across sessions, so a reused or same-named track can resolve to
+    another session and the picker degrades to the numbers-only
+    fallback. This endpoint reads the session directory directly, so
+    the full-track trim always has a source to draw.
+
+    Args:
+        name: Session directory name under `SESSIONS_DIR`.
+
+    Returns:
+        Dict with `path` (session-relative, e.g. `"music/track.mp3"`),
+        `filename`, `duration_s` (`float` or `None` when ffprobe
+        fails), and `peaks_ref` (`"{name}/music/{filename}"` for
+        `GET /api/media/peaks`).
+
+    Raises:
+        HTTPException: 404 when the session or its music directory is
+            missing, or when no original track file remains (generated
+            `track_cut.wav` and the `candidates/` excerpts never count).
+    """
+    session_dir = SESSIONS_DIR / name
+    if not session_dir.is_dir():
+        raise HTTPException(status_code=404, detail="no such session")
+    music_dir = session_dir / "music"
+    if not music_dir.is_dir():
+        raise HTTPException(status_code=404, detail="no music track")
+    tracks = sorted(
+        f
+        for f in music_dir.iterdir()
+        if f.is_file()
+        and f.suffix.lower() in MUSIC_EXTS
+        and f.name != "track_cut.wav"
+    )
+    if not tracks:
+        raise HTTPException(status_code=404, detail="no music track")
+    track = tracks[0]
+    duration_s: float | None
+    try:
+        duration_s = float(ffprobe(track)["format"]["duration"])
+    except Exception:  # noqa: BLE001 - probe failure degrades to None
+        duration_s = None
+    rel = f"music/{track.name}"
+    return {
+        "path": rel,
+        "filename": track.name,
+        "duration_s": duration_s,
+        "peaks_ref": f"{name}/{rel}",
+    }
 
 
 @router.get("/api/sessions/{name}")
