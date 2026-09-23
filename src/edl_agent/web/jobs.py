@@ -125,11 +125,15 @@ class JobState:
         detail: Human-readable sub-step text for whichever stage is
             currently `"running"`, cleared back to `""` each time a
             stage starts or finishes.
-        music_candidates: Candidate music cuts (`{"offset_s", "path", "score"}`)
-            accumulated so far during a `"music_choice"` pause; grows across
-            "generate more" rounds instead of being replaced.
+        music_candidates: Candidate music cuts (`{"offset_s", "duration_s",
+            "path", "score"}`) accumulated so far during a
+            `"music_choice"` pause; grows across "generate more" rounds
+            instead of being replaced.
         music_choice_offset: Operator-picked offset (seconds), set via
             `/sessions/{name}/confirm` during a `"music_choice"` pause.
+        music_choice_duration: Operator-picked cut length (seconds),
+            from the chosen candidate's `duration_s`, clamped to the
+            musical range on confirm.
         more_music: `True` (set via `/sessions/{name}/confirm`) to generate
             another batch of candidate cuts instead of proceeding with the
             picked offset.
@@ -167,6 +171,7 @@ class JobState:
     check_results_b: list[str] = field(default_factory=list)
     music_candidates: list[dict] = field(default_factory=list)
     music_choice_offset: float = 0.0
+    music_choice_duration: float = 15.0
     more_music: bool = False
     notices: list[dict] = field(default_factory=list)
 

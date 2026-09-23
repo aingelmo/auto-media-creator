@@ -7,7 +7,7 @@ import wave
 
 import pytest
 
-from edl_agent.ingest.highlight import CLOSE_BEAT_WINDOW_S, rank_highlights
+from edl_agent.ingest.highlight import rank_highlights
 
 SR = 22050
 
@@ -49,7 +49,7 @@ def test_top_ranked_offset_lands_in_loud_region(tmp_path) -> None:
     assert 0.0 <= top["score"] <= 1.0
 
 
-def test_ranking_reports_close_diagnostics(tmp_path) -> None:
+def test_fixed_window_reports_close_diagnostics(tmp_path) -> None:
     track = tmp_path / "track.wav"
     _synth_track(track)
 
@@ -57,19 +57,33 @@ def test_ranking_reports_close_diagnostics(tmp_path) -> None:
 
     assert ranked
     for cand in ranked[:3]:
+        assert cand["duration_s"] == pytest.approx(15.0, abs=0.02)
         assert cand["end_s"] == pytest.approx(cand["offset_s"] + 15.0, abs=0.02)
-        assert 0.0 <= cand["close_malus"] <= 1.0
+        assert cand["close_closure"] >= 0.0
         assert 0.0 <= cand["score"] <= 1.0
         d_close = cand["d_close_beat_s"]
-        if d_close is None:
-            continue
-        if d_close > CLOSE_BEAT_WINDOW_S:
-            # Full beat malus (weight 0.5) is applied, so the total
-            # malus cannot be below it.
-            assert cand["close_malus"] >= 0.5
-        if d_close == 0.0:
-            # Snapped ends carry no beat malus, only slope/weak (0.5 max).
-            assert cand["close_malus"] <= 0.5
+        assert d_close is None or d_close >= 0.0
+
+
+def test_joint_window_selects_duration_on_beats(tmp_path) -> None:
+    track = tmp_path / "track.wav"
+    _synth_track(track)
+
+    ranked = rank_highlights(track, window_s=15.0, min_window_s=8.0)
+
+    assert ranked
+    pairs = set()
+    for cand in ranked:
+        assert 8.0 <= cand["duration_s"] <= 15.0
+        assert cand["end_s"] == pytest.approx(
+            cand["offset_s"] + cand["duration_s"], abs=0.02
+        )
+        assert cand["close_closure"] >= 0.0
+        assert 0.0 <= cand["score"] <= 1.0
+        pairs.add((cand["offset_s"], cand["end_s"]))
+    # Post-snap collisions share one clip: the ranking must not list the
+    # same (offset, end) twice.
+    assert len(pairs) == len(ranked)
 
 
 def test_ranking_is_cached(tmp_path) -> None:

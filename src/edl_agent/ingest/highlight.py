@@ -1,13 +1,14 @@
-"""Rank candidate 15s music windows by a drop-detection heuristic, per #3.5.
+"""Rank candidate music windows by drop energy plus closing quality, per #3.5.
 
 Scores every window start offset in a track on energy, onset flux, and
 energy contrast (the jump that marks an EDM/trap drop), then snaps the
 best offsets to the track's downbeat so a chosen clip opens on beat 1.
-Because the window length is fixed, every downbeat-snapped open puts the
-window end at the same beat phase, so ends are scored too: the start is
-nudged (at most `END_SNAP_MAX_S`) to land the end on a beat, and any
-remaining off-beat / rising-into-the-cut / weak ending deducts from the
-score via `CLOSE_PENALTY`. Results are cached per-track
+The window length is joint-selected, not fixed: for each snapped open,
+every beat-quantized end between `min_window_s` and `window_s` is scored
+by closure (sustained energy before the boundary times post-boundary
+decay — a phrase ending, not a mid-sustain cutoff), and the best end
+wins. Fixed-window callers pass `min_window_s == window_s` and get the
+single nudged end instead. Results are cached per-track
 (content-addressed, alongside proxy/feature caches) since sessions reuse
 the same music across runs.
 """
@@ -24,7 +25,7 @@ from edl_agent.ingest._common import sha256_file
 from edl_agent.ingest.cache import atomic_write_text, source_cache_dir
 from edl_agent.ingest.media import cut_music
 
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 SAMPLE_RATE = 22050
 HOP_LENGTH = 512
 STEP_S = 0.25  # candidate start offsets are scored every quarter second
@@ -39,75 +40,96 @@ ENERGY_WEIGHT = 0.3
 FLUX_WEIGHT = 0.2
 CONTRAST_WEIGHT = 0.5
 KEEP_TOP = 12
-# Close side: ends cut mid-phrase/off-beat when only the open is scored
-# (fixed window + downbeat-snapped opens = constant end beat phase, so no
-# open re-ranking alone can fix ends). Scores stay open-dominant: the close
-# malus (0..1) deducts at most CLOSE_PENALTY from the open score.
-CLOSE_PENALTY = 0.35
-END_SNAP_MAX_S = 0.15  # max start shift applied to land the end on a beat
-CLOSE_BEAT_WINDOW_S = 0.25  # end-to-beat gap at/above this is full beat malus
-CLOSE_SLOPE_NORM = 0.5  # end energy slope at/above this is full slope malus
-WEAK_CLOSE_RATIO = 0.6  # end-to-window energy ratio below this is a weak end
-MALUS_BEAT_WEIGHT = 0.5
-MALUS_SLOPE_WEIGHT = 0.3
-MALUS_WEAK_WEIGHT = 0.2
-CLOSE_POOL_MULT = 3  # close-rescore this multiple of KEEP_TOP open-ranked
+# Joint (offset, duration) scoring stays open-dominant: the final score
+# blends the open drop score with the normalized closure of the chosen
+# end. Closure covers what the old off-beat/rising/weak malus did —
+# rising-into-the-cut scores ~0 decay, weak passages score low pre-energy
+# — while beat-quantized ends solve alignment structurally.
+OPEN_MIX = 0.65
+END_MIX = 0.35
+END_SNAP_MAX_S = 0.15  # max start shift applied to land a fixed end on a beat
+CLOSE_BEAT_WINDOW_S = 0.25  # fallback end-to-beat gap at/above this is full
+CLOSE_BEAT_PENALTY_W = 0.5  # weight of that gap against a fallback end
+CLOSE_PRE_S = 3.0  # sustained-energy window before a candidate end
+CLOSE_POST_S = 1.0  # decay window after a candidate end
+CLOSE_POOL_MULT = 3  # end-rescore this multiple of KEEP_TOP open-ranked
 
 
 def rank_highlights(
-    track: Path, window_s: float, *, cache_root: Path | None = None
+    track: Path,
+    window_s: float,
+    *,
+    cache_root: Path | None = None,
+    min_window_s: float | None = None,
 ) -> list[dict]:
-    """Rank candidate `window_s` start offsets in `track`, best first.
+    """Rank candidate music windows in `track`, best first, per #3.5.
 
     Args:
         track: Path to the music file.
-        window_s: Length of the highlight window to rank offsets for, in
-            seconds.
+        window_s: Maximum length of the highlight window, in seconds.
         cache_root: If given, cache the ranking under
             `cache_root/<sha256 of track>/music_highlights.json` and reuse
-            it on a later call with the same `track`/`window_s`.
+            it on a later call with the same `track`/`window_s`/
+            `min_window_s`.
+        min_window_s: Minimum window length, in seconds (joint
+            offset/duration selection over `[min_window_s, window_s]`).
+            Defaults to `window_s` (fixed-length ranking).
 
     Returns:
         Ranked list of dicts (best first), each with `offset_s` (float,
-        snapped to the downbeat and nudged by at most `END_SNAP_MAX_S`
-        so the window end lands on a beat), `end_s` (float,
-        `offset_s + window_s`), `score` (float, 0..1, open score minus
-        the close malus), `reason` (str, dominant open component),
-        `d_close_beat_s` (float | None, residual end-to-beat gap after
-        the nudge; `None` when no beats were detected) and
-        `close_malus` (float, 0..1).
+        snapped to the downbeat), `duration_s` (float, joint-selected;
+        `== window_s` when `min_window_s == window_s`), `end_s` (float,
+        `offset_s + duration_s`, on a beat except the fixed-window
+        fallback beyond nudge range), `score` (float, 0..1, open/close
+        blend), `reason` (str, dominant open component),
+        `d_close_beat_s` (float | None, residual end-to-beat gap;
+        `None` when no beats were detected) and `close_closure`
+        (float, raw closure of the chosen end).
     """
+    if min_window_s is None or min_window_s > window_s:
+        min_window_s = window_s
     cache_path = None
     if cache_root is not None:
         cache_path = source_cache_dir(cache_root, sha256_file(track)) / (
             "music_highlights.json"
         )
-        cached = _read_cache(cache_path, window_s)
+        cached = _read_cache(cache_path, window_s, min_window_s)
         if cached is not None:
             return cached
 
-    ranked = _rank(track, window_s)
+    ranked = _rank(track, window_s, min_window_s)
 
     if cache_path is not None:
         atomic_write_text(
             cache_path,
             json.dumps(
-                {"version": CACHE_VERSION, "window_s": window_s, "ranked": ranked}
+                {
+                    "version": CACHE_VERSION,
+                    "window_s": window_s,
+                    "min_window_s": min_window_s,
+                    "ranked": ranked,
+                }
             ),
         )
     return ranked
 
 
-def _read_cache(cache_path: Path, window_s: float) -> list[dict] | None:
+def _read_cache(
+    cache_path: Path, window_s: float, min_window_s: float
+) -> list[dict] | None:
     if not cache_path.exists():
         return None
     data = json.loads(cache_path.read_text())
-    if data.get("version") != CACHE_VERSION or data.get("window_s") != window_s:
+    if (
+        data.get("version") != CACHE_VERSION
+        or data.get("window_s") != window_s
+        or data.get("min_window_s", data.get("window_s")) != min_window_s
+    ):
         return None
     return data["ranked"]
 
 
-def _rank(track: Path, window_s: float) -> list[dict]:
+def _rank(track: Path, window_s: float, min_window_s: float) -> list[dict]:
     import librosa
 
     # librosa's soundfile backend can't decode AAC/MP4 (or other
@@ -162,23 +184,26 @@ def _rank(track: Path, window_s: float) -> list[dict]:
     beat_frames = _beat_frames(y, sr)
     downbeats = _downbeat_frames(beat_frames, onset_env)
     beats_s = sorted(b / frame_rate for b in beat_frames)
+    track_mean = float(np.mean(rms))
 
     pool = candidates[: CLOSE_POOL_MULT * KEEP_TOP]
-    rescored = [
-        _score_close(c, rms, frame_rate, window_s, downbeats, beats_s)
-        for c in pool
-    ]
+    rescored = _rescore_joints(
+        pool, rms, frame_rate, dur, track_mean, window_s, min_window_s,
+        downbeats, beats_s,
+    )
     rescored.sort(key=lambda c: c["final"], reverse=True)
 
-    # Several grid anchors can snap to the same downbeat (and get the same
-    # end nudge), yielding identical clips with different open scores.
-    # Drop those collisions (keep the best) before spreading, or the
-    # gap-halving fallback below fills KEEP_TOP with duplicates.
+    # Several grid anchors can snap to the same downbeat and pick the same
+    # end, yielding identical clips with different open scores. Drop those
+    # collisions (keep the best) before spreading, or the gap-halving
+    # fallback below fills KEEP_TOP with duplicates.
     dedupe_gap = round(0.5 * frame_rate)
     deduped = []
     for c in rescored:
         if all(
-            abs(c["off_frame"] - k["off_frame"]) >= dedupe_gap for k in deduped
+            abs(c["off_frame"] - k["off_frame"]) >= dedupe_gap
+            or abs(c["end_frame"] - k["end_frame"]) >= dedupe_gap
+            for k in deduped
         ):
             deduped.append(c)
 
@@ -188,16 +213,166 @@ def _rank(track: Path, window_s: float) -> list[dict]:
     return [
         {
             "offset_s": round(c["offset_s"], 2),
+            "duration_s": round(c["end_s"] - c["offset_s"], 2),
             "end_s": round(c["end_s"], 2),
             "score": round(c["final"], 3),
             "reason": _reason(c),
             "d_close_beat_s": (
                 round(c["d_close"], 3) if c["d_close"] is not None else None
             ),
-            "close_malus": round(c["malus"], 3),
+            "close_closure": round(c["closure"], 3),
         }
         for c in kept
     ]
+
+
+def _rescore_joints(
+    pool: list[dict],
+    rms: np.ndarray,
+    frame_rate: float,
+    dur: float,
+    track_mean: float,
+    window_s: float,
+    min_window_s: float,
+    downbeats: list[int],
+    beats_s: list[float],
+) -> list[dict]:
+    """Joint-select (offset, end) per open-ranked candidate, per #3.5.
+
+    Snaps each open to its downbeat, scores every beat-quantized end in
+    `[offset + min_window_s, offset + window_s]` by closure, and keeps
+    the best end. Closure is normalized by the pool maximum so the
+    open/close blend compares within one track.
+
+    Args:
+        pool: Open-ranked candidate dicts with `start_frame` and
+            normalized open `energy`/`flux`/`contrast` plus `score`.
+        rms: Full-track RMS envelope at `frame_rate` frames per second.
+        frame_rate: `SAMPLE_RATE / HOP_LENGTH`, in frames per second.
+        dur: Track duration, in seconds.
+        track_mean: Mean RMS over the track (closure loudness reference).
+        window_s: Maximum window length, in seconds.
+        min_window_s: Minimum window length, in seconds.
+        downbeats: Downbeat frames the open snaps to.
+        beats_s: All beat timestamps, in seconds, for end quantization.
+
+    Returns:
+        One dict per pool candidate: the open fields plus `offset_s`,
+        `end_s`, `off_frame`/`end_frame` (ints, for dedupe/spreading),
+        `d_close` (float | None, residual end-to-beat gap, nonzero only
+        on the fixed-window fallback), `closure` (float, raw closure of
+        the chosen end) and `final` (float, open/close blend, floored
+        at 0).
+    """
+    rows: list[dict] = []
+    for c in pool:
+        anchor_s = c["start_frame"] / frame_rate + ANCHOR_SHIFT_S
+        offset_s = max(0.0, _snap_to_downbeat(anchor_s, downbeats))
+        ends = _candidate_ends(offset_s, dur, window_s, min_window_s, beats_s)
+        rows.append({"open": c, "offset_s": offset_s, "ends": ends})
+    raws = [
+        raw
+        for r in rows
+        for e, _ in r["ends"]
+        if (raw := _closure_raw(rms, frame_rate, e, track_mean)) > 0.0
+    ]
+    pool_max = max(raws, default=0.0)
+    pool_max = pool_max if pool_max > 0 else 1e-6
+    finalized = []
+    for r in rows:
+        scored = []
+        for end_s, d_close in r["ends"]:
+            raw = _closure_raw(rms, frame_rate, end_s, track_mean)
+            beat_p = (
+                0.0
+                if d_close is None or d_close == 0.0
+                else CLOSE_BEAT_PENALTY_W
+                * min(d_close / CLOSE_BEAT_WINDOW_S, 1.0)
+            )
+            scored.append((raw / pool_max - beat_p, end_s, d_close, raw))
+        scored.sort(key=lambda p: p[0], reverse=True)
+        quality, end_s, d_close, raw = scored[0]
+        finalized.append(
+            {
+                **r["open"],
+                "offset_s": r["offset_s"],
+                "end_s": end_s,
+                "off_frame": round(r["offset_s"] * frame_rate),
+                "end_frame": round(end_s * frame_rate),
+                "d_close": d_close,
+                "closure": raw,
+                "final": max(
+                    0.0, OPEN_MIX * r["open"]["score"] + END_MIX * quality
+                ),
+            }
+        )
+    return finalized
+
+
+def _candidate_ends(
+    offset_s: float,
+    dur: float,
+    window_s: float,
+    min_window_s: float,
+    beats_s: list[float],
+) -> list[tuple[float, float | None]]:
+    """List scorable `(end_s, d_close)` pairs for one snapped open.
+
+    Ends are detected beats in `[offset + min_window_s, offset +
+    window_s]` needing 0.5 s of post-boundary audio (`d_close = 0.0`).
+    With no usable beat (sparse detection, or `min == max`), falls back
+    to the single `offset + window_s` end nudged onto a beat where
+    possible, carrying its residual gap as `d_close`.
+    """
+    ends: list[tuple[float, float | None]] = [
+        (b, 0.0)
+        for b in beats_s
+        if offset_s + min_window_s <= b <= offset_s + window_s
+        and b + 0.5 <= dur
+    ]
+    if ends:
+        return ends
+    _, end_s, d_close = _snap_end(offset_s, window_s, beats_s)
+    return [(end_s, d_close)]
+
+
+def _closure_raw(
+    rms: np.ndarray, frame_rate: float, end_s: float, track_mean: float
+) -> float:
+    """Score one candidate end as a phrase closing point, per #3.5.
+
+    Loud sustained energy in `CLOSE_PRE_S` before the boundary times the
+    relative decay over `CLOSE_POST_S` after it: phrase endings score
+    high, mid-sustain cutoffs ~0 (no decay), rising cutoffs 0 (negative
+    decay clipped), quiet passages low (little pre-energy).
+
+    Args:
+        rms: Full-track RMS envelope at `frame_rate` frames per second.
+        frame_rate: Frames per second of `rms`.
+        end_s: Candidate boundary timestamp, in seconds.
+        track_mean: Mean RMS over the track (loudness reference).
+
+    Returns:
+        Raw closure (coarse scale, normalized by the pool max in
+        `_rescore_joints`); 0.0 when under 0.5 s of post-boundary audio
+        exists to judge the decay (an unjudgeable end ranks bottom,
+        like a decay-free one).
+    """
+
+    def mean(t0: float, t1: float) -> tuple[float, float]:
+        n = len(rms)
+        a = max(0, min(n, round(t0 * frame_rate)))
+        b = max(a, min(n, round(t1 * frame_rate)))
+        cov = max(0.0, min(t1, len(rms) / frame_rate) - max(t0, 0.0))
+        return (float(np.mean(rms[a:b])) if b > a else 0.0, cov)
+
+    pre, _ = mean(end_s - CLOSE_PRE_S, end_s)
+    post, cov = mean(end_s, end_s + CLOSE_POST_S)
+    if cov < 0.5:
+        return 0.0
+    eps = 1e-6
+    decay = max(0.0, (pre - post) / (pre + eps))
+    return (pre / (track_mean + eps)) * decay
 
 
 def _normalize(candidates: list[dict], key: str) -> None:
@@ -241,60 +416,6 @@ def _reason(candidate: dict) -> str:
     }[dominant]
 
 
-def _score_close(
-    open_cand: dict,
-    rms: np.ndarray,
-    frame_rate: float,
-    window_s: float,
-    downbeats: list[int],
-    beats_s: list[float],
-) -> dict:
-    """Snap one open-ranked candidate and deduct the ending malus, per #3.5.
-
-    Args:
-        open_cand: Candidate dict with `start_frame` and normalized open
-            `energy`/`flux`/`contrast` plus `score` (the open score).
-        rms: Full-track RMS envelope at `frame_rate` frames per second.
-        frame_rate: `SAMPLE_RATE / HOP_LENGTH`, in frames per second.
-        window_s: Highlight window length, in seconds.
-        downbeats: Downbeat frames the open snaps to (see
-            `_downbeat_frames`).
-        beats_s: All beat timestamps, in seconds, for end-snapping.
-
-    Returns:
-        `open_cand` plus `offset_s`/`end_s` (floats, seconds),
-        `off_frame` (int, `offset_s` in frames, for neighbor
-        suppression), `d_close` (float | None, residual end-to-beat gap),
-        `malus` (float, 0..1) and `final` (float, open score minus
-        `CLOSE_PENALTY * malus`, floored at 0).
-    """
-    anchor_s = open_cand["start_frame"] / frame_rate + ANCHOR_SHIFT_S
-    snapped = _snap_to_downbeat(anchor_s, downbeats)
-    offset_s, end_s, d_close = _snap_end(snapped, window_s, beats_s)
-    _win_mean, close_ratio, end_slope = _close_features(
-        rms, frame_rate, offset_s, window_s
-    )
-    beat_m = 0.0 if d_close is None else min(d_close / CLOSE_BEAT_WINDOW_S, 1.0)
-    slope_m = min(max(end_slope, 0.0) / CLOSE_SLOPE_NORM, 1.0)
-    weak_m = min(
-        max(WEAK_CLOSE_RATIO - close_ratio, 0.0) / WEAK_CLOSE_RATIO, 1.0
-    )
-    malus = (
-        MALUS_BEAT_WEIGHT * beat_m
-        + MALUS_SLOPE_WEIGHT * slope_m
-        + MALUS_WEAK_WEIGHT * weak_m
-    )
-    return {
-        **open_cand,
-        "offset_s": offset_s,
-        "end_s": end_s,
-        "off_frame": round(offset_s * frame_rate),
-        "d_close": d_close,
-        "malus": malus,
-        "final": max(0.0, open_cand["score"] - CLOSE_PENALTY * malus),
-    }
-
-
 def _snap_end(
     snapped_s: float, window_s: float, beats_s: list[float]
 ) -> tuple[float, float, float | None]:
@@ -302,7 +423,7 @@ def _snap_end(
 
     Shifts the start by at most `END_SNAP_MAX_S` (a small move that keeps
     the open effectively on the downbeat); larger gaps are left as-is and
-    surface as malus instead. The nudge favors no direction: moving the
+    penalized in `_rescore_joints` instead. The nudge favors no direction: moving the
     start earlier keeps the downbeat transient, moving it later trims up to
     0.15 s of attack, which listening tests may want to revisit.
 
@@ -336,43 +457,8 @@ def _nearest_beat(t: float, beats_s: list[float]) -> float | None:
     return best
 
 
-def _close_features(
-    rms: np.ndarray, frame_rate: float, offset_s: float, window_s: float
-) -> tuple[float, float, float]:
-    """Describe how a window ends from its RMS envelope, per #3.5.
-
-    Args:
-        rms: Full-track RMS envelope at `frame_rate` frames per second.
-        frame_rate: Frames per second of `rms`.
-        offset_s: Window start offset, in seconds.
-        window_s: Window length, in seconds.
-
-    Returns:
-        `(win_mean, close_ratio, end_slope)`: mean RMS over the window,
-        mean RMS over the last 0.5 s relative to the window mean (below
-        `WEAK_CLOSE_RATIO` is a weak ending), and the last-0.5 s mean
-        minus the preceding 1 s mean, relative to the window mean
-        (positive values are still climbing into the cut: abrupt).
-    """
-
-    def mean(t0: float, t1: float) -> float:
-        n = len(rms)
-        a = max(0, min(n, round(t0 * frame_rate)))
-        b = max(a + 1, min(n, round(t1 * frame_rate)))
-        return float(np.mean(rms[a:b]))
-
-    end_s = offset_s + window_s
-    win_mean = mean(offset_s, end_s)
-    close_mean = mean(end_s - 0.5, end_s)
-    pre_mean = mean(end_s - 1.5, end_s - 0.5)
-    eps = 1e-6
-    return win_mean, close_mean / (win_mean + eps), (close_mean - pre_mean) / (
-        win_mean + eps
-    )
-
-
 def _beat_frames(y: np.ndarray, sr: float) -> list[int]:
-    """Detect all beat frames (any beat: used for end-snapping), per #3.5."""
+    """Detect all beat frames (any beat: used for end quantization), per #3.5."""
     import librosa
 
     _, beat_frames = librosa.beat.beat_track(

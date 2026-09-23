@@ -14,6 +14,7 @@ from edl_agent.session._common import MUSIC_EXTS
 
 MUSIC_OFFSET_S = 15.0
 MUSIC_MAX_DURATION_S = 15.0
+MUSIC_MIN_DURATION_S = 8.0
 MIN_SHORTEN_DURATION_S = 5.0
 SHORTEN_ATTEMPTS = 4  # beat detection isn't linear in duration; try progressively
 MUSIC_CANDIDATE_COUNT = 3
@@ -60,20 +61,24 @@ def _generate_music_candidates(
 ) -> list[dict]:
     """Cut the next `count` ranked candidate snippets, after `already` picked ones.
 
-    Ranks every `window_s` offset in `track` by drop-detection heuristic
-    with a close-side malus (see `rank_highlights`), snapped to the
-    nearest downbeat and nudged so the window end lands on a beat, and
-    cuts ranks `[already, already + count)`. Falls back to evenly-spaced
-    offsets if ranking fails or runs out.
+    Ranks joint (offset, duration) windows in `track` by drop energy
+    plus phrase closure (see `rank_highlights`), snapped to the nearest
+    downbeat with beat-quantized ends, and cuts ranks `[already,
+    already + count)`. Falls back to evenly-spaced full-length offsets
+    if ranking fails or runs out.
 
     Returns:
-        New candidate dicts (`{"offset_s", "path", "score"}`, `path`
-        relative to `session_dir`), appended after `already` existing ones.
+        New candidate dicts (`{"offset_s", "duration_s", "path",
+        "score"}`, `path` relative to `session_dir`), appended after
+        `already` existing ones.
     """
     usable = duration_s - MUSIC_MAX_DURATION_S
     try:
         ranked = rank_highlights(
-            track, MUSIC_MAX_DURATION_S, cache_root=cache_root
+            track,
+            MUSIC_MAX_DURATION_S,
+            min_window_s=MUSIC_MIN_DURATION_S,
+            cache_root=cache_root,
         )
     except Exception:  # noqa: BLE001 (any librosa/decode failure -> fallback)
         ranked = []
@@ -82,7 +87,11 @@ def _generate_music_candidates(
         total = already + count
         step = usable / max(total, 1)
         batch += [
-            {"offset_s": round(step * i, 1), "score": None}
+            {
+                "offset_s": round(step * i, 1),
+                "duration_s": MUSIC_MAX_DURATION_S,
+                "score": None,
+            }
             for i in range(already + len(batch), total)
         ]
 
@@ -91,10 +100,11 @@ def _generate_music_candidates(
     for i, cand in enumerate(batch):
         idx = already + i
         path = out_dir / f"cand_{idx}.wav"
-        cut_music(track, path, cand["offset_s"], MUSIC_MAX_DURATION_S)
+        cut_music(track, path, cand["offset_s"], cand["duration_s"])
         results.append(
             {
                 "offset_s": cand["offset_s"],
+                "duration_s": cand["duration_s"],
                 "path": str(path.relative_to(session_dir)),
                 "score": cand.get("score"),
             }
@@ -104,22 +114,25 @@ def _generate_music_candidates(
 
 def _run_music_choice_pause(
     session_dir: Path, job: JobState, track: Path, cache_root: Path | None
-) -> float:
-    """Pause for the operator to pick a music offset, per the `"music_choice"` pause.
+) -> tuple[float, float]:
+    """Pause for the operator to pick a music (offset, duration), per pause.
 
-    Generates batches of `MUSIC_CANDIDATE_COUNT` ranked candidate cuts (best
-    first), accumulating them in `job.music_candidates` across "generate
-    more" rounds so earlier batches stay pickable.
+    Generates batches of `MUSIC_CANDIDATE_COUNT` ranked candidate cuts
+    (best first), accumulating them in `job.music_candidates` across
+    "generate more" rounds so earlier batches stay pickable. Candidates
+    carry joint-selected durations (`MUSIC_MIN_DURATION_S` to
+    `MUSIC_MAX_DURATION_S`), so the reel length follows the music's
+    phrase closure instead of a fixed 15 s.
 
     Returns:
-        The chosen offset, in seconds.
+        `(offset_s, duration_s)` of the chosen cut, in seconds.
 
     Raises:
         _JobCancelledError: If the operator declines the pause.
     """
     duration_s = _probe_duration_s(track)
     if duration_s <= MUSIC_MAX_DURATION_S:
-        return 0.0
+        return 0.0, MUSIC_MAX_DURATION_S
 
     candidates_dir = session_dir / "music" / "candidates"
     job.music_candidates = []
@@ -142,5 +155,5 @@ def _run_music_choice_pause(
         if job.cancelled:
             raise _JobCancelledError
         if not job.more_music:
-            return job.music_choice_offset
+            return job.music_choice_offset, job.music_choice_duration
         job.more_music = False

@@ -22,6 +22,7 @@ from edl_agent.web.pipeline import (
     run_pipeline_job,
 )
 from edl_agent.web.routes.config import save_brand
+from edl_agent.web.stages.music import MUSIC_MAX_DURATION_S, MUSIC_MIN_DURATION_S
 from edl_agent.web.state import (
     PROVIDER_API_KEY_ENV,
     UI_PROVIDERS,
@@ -403,6 +404,7 @@ def session_confirm(
     hook_flash: bool = Form(default=False),
     more: bool = Form(default=False),
     music_offset: float = Form(0.0),
+    music_duration: float = Form(MUSIC_MAX_DURATION_S),
     more_music: bool = Form(default=False),
     punch_in: bool = Form(default=False),
     effects_preview_again: bool = Form(default=False),
@@ -410,8 +412,9 @@ def session_confirm(
     """Unblock a job paused on `awaiting_confirmation` (see `JobState`).
 
     `proceed=False` cancels the run instead of continuing. For a
-    `"music_choice"` pause, `music_offset` picks the candidate cut to use,
-    and `more_music=True` generates another batch of candidates instead of
+    `"music_choice"` pause, `music_offset`/`music_duration` pick the
+    candidate cut to use (duration clamped to the musical range), and
+    `more_music=True` generates another batch of candidates instead of
     proceeding. For a `"verification"` pause, any `exclude` source paths
     (checked on the confirmation form) are dropped from the manifest. For a
     `"low_candidates"` pause, `shorten=True` re-cuts the music to the
@@ -440,6 +443,9 @@ def session_confirm(
         job.more_hooks = more
     job.hook_flash = hook_flash
     job.music_choice_offset = music_offset
+    job.music_choice_duration = min(
+        MUSIC_MAX_DURATION_S, max(MUSIC_MIN_DURATION_S, music_duration)
+    )
     job.punch_in = punch_in
     job.effects_preview_again = effects_preview_again
     job.more_music = more_music

@@ -54,6 +54,7 @@ export interface Hooks {
 
 export interface MusicCandidate {
   offset_s: number;
+  duration_s: number | null;
   path: string;
   score: number | null;
 }

@@ -9,6 +9,11 @@ function formatOffset(offsetS: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+function formatDuration(durationS: number | null): string {
+  if (durationS === null) return "";
+  return ` · ${durationS.toFixed(1)}s`;
+}
+
 export default function MusicPicker({
   name,
   candidates,
@@ -18,14 +23,15 @@ export default function MusicPicker({
   candidates: MusicCandidate[];
   onDone: () => void;
 }) {
-  const [offset, setOffset] = useState(candidates[0]?.offset_s ?? 0);
+  const [selected, setSelected] = useState(0);
   const [busy, setBusy] = useState(false);
 
   async function submit(proceed: boolean, moreMusic: boolean) {
     setBusy(true);
     const form = new FormData();
     form.set("proceed", String(proceed));
-    form.set("music_offset", String(offset));
+    form.set("music_offset", String(candidates[selected]?.offset_s ?? 0));
+    form.set("music_duration", String(candidates[selected]?.duration_s ?? 15));
     form.set("more_music", String(moreMusic));
     await api.confirm(name, form);
     onDone();
@@ -40,20 +46,21 @@ export default function MusicPicker({
       <div className="contact-sheet contact-sheet--music" role="radiogroup" aria-label="Music cuts">
         {candidates.map((c, i) => {
           const src = fileUrl(name, c.path);
-          const selected = offset === c.offset_s;
+          const isSelected = i === selected;
           const label = `Cut ${i + 1} at ${formatOffset(c.offset_s)}`;
           return (
-            <figure key={c.path} className={selected ? "is-selected" : undefined}>
+            <figure key={c.path} className={isSelected ? "is-selected" : undefined}>
               <TrackPlayer src={src} label={label} computePeaks preload="metadata" />
               <figcaption>
                 <label>
                   <input
                     type="radio"
-                    name="music_offset"
-                    checked={selected}
-                    onChange={() => setOffset(c.offset_s)}
+                    name="music_cut"
+                    checked={isSelected}
+                    onChange={() => setSelected(i)}
                   />
                   #{i + 1} &middot; {formatOffset(c.offset_s)}
+                  {formatDuration(c.duration_s)}
                   {c.score !== null ? ` · ${c.score.toFixed(2)}` : ""}
                 </label>
               </figcaption>

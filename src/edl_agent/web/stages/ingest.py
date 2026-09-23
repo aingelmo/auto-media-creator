@@ -44,8 +44,9 @@ def _run_ingest_stage(
 
     track = _find_music_track(session_dir)
     music_offset_s = MUSIC_OFFSET_S
+    music_duration_s = MUSIC_MAX_DURATION_S
     if track is not None:
-        music_offset_s = _run_music_choice_pause(
+        music_offset_s, music_duration_s = _run_music_choice_pause(
             session_dir, job, track, DEFAULT_CACHE_DIR
         )
 
@@ -55,7 +56,7 @@ def _run_ingest_stage(
             session_dir,
             threads=THREADS,
             music_offset_s=music_offset_s,
-            music_max_duration_s=MUSIC_MAX_DURATION_S,
+            music_max_duration_s=music_duration_s,
             cache_root=DEFAULT_CACHE_DIR,
         )
         job.detail["ingest"] = "cutting music, detecting beat slots"
