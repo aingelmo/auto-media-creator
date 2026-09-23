@@ -50,7 +50,14 @@ export default function LibraryHoverVideo({ src, label }: { src: string; label: 
     <video
       ref={(v) => {
         ref.current = v;
-        if (v) v.muted = true;
+        if (v) {
+          // React omits the muted *attribute* on <video> (known
+          // facebook/react#10389), so set property + attribute together:
+          // the property silences playback, the attribute preserves the
+          // muted-in-markup contract for parsers and scrapers.
+          v.muted = true;
+          v.setAttribute("muted", "");
+        }
       }}
       muted
       playsInline
