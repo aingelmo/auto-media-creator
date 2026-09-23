@@ -4,6 +4,7 @@ import { ApiError, api, fileUrl, reelUrl } from "../api";
 import { useConfirm } from "../components/confirm";
 import EffectsPreview from "../components/EffectsPreview";
 import HookPicker from "../components/HookPicker";
+import JobError from "../components/JobError";
 import LowCandidatesPause from "../components/LowCandidatesPause";
 import MusicPicker from "../components/MusicPicker";
 import RegenerateForm from "../components/RegenerateForm";
@@ -285,8 +286,7 @@ export default function Session() {
 
       {!job?.awaiting_confirmation && job?.error && (
         <>
-          <p className="status-failed">Failed</p>
-          <pre>{job.error}</pre>
+          <JobError error={job.error} title="Failed" />
           <form
             onSubmit={async (e) => {
               e.preventDefault();

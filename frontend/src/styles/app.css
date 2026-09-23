@@ -419,6 +419,72 @@ button.primary {
   font-weight: 600;
 }
 
+/* Job failures: headline + plain-language message in normal ink, full
+   traceback collapsed. The dot carries the fail hue so no thick colored
+   edge is needed; pre keeps its global wrap/scroll behavior. */
+.job-error {
+  background: var(--panel);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
+  max-width: var(--measure);
+}
+
+.job-error-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+
+.job-error-title::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--fail);
+}
+
+.job-error-message {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: break-word;
+}
+
+.job-error-kind {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--ink-dim);
+  overflow-wrap: break-word;
+}
+
+.job-error-details {
+  margin-top: var(--space-3);
+}
+
+.job-error-details > summary {
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.job-error-details > summary:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.job-error-details pre {
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: var(--text-xs);
+}
+
 /* Stage rail: the studio call-sheet — one crafted card, wash fills carry
    state, the 4px status bar stays unambiguous. Never shrinks: as a flex
    item in a column shell, overflow:hidden zeroes its automatic minimum

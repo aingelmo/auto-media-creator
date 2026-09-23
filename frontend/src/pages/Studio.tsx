@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, fileUrl, reelUrl } from "../api";
+import JobError from "../components/JobError";
 import MusicPicker from "../components/MusicPicker";
 import StageRail from "../components/StageRail";
 import TimelineStrip from "../components/TimelineStrip";
@@ -317,11 +318,7 @@ export default function Studio() {
           Running&hellip;
         </output>
       )}
-      {job?.error && (
-        <div role="alert">
-          <p className="status-failed">Render failed — {job.error}</p>
-        </div>
-      )}
+      {job?.error && <JobError error={job.error} title="Render failed" />}
     </div>
   );
 }
