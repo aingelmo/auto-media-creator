@@ -126,7 +126,8 @@ class JobState:
             currently `"running"`, cleared back to `""` each time a
             stage starts or finishes.
         music_candidates: Candidate music cuts (`{"offset_s", "duration_s",
-            "path", "score"}`) accumulated so far during a
+            "path", "score", "reason", "close_closure",
+            "d_close_beat_s"}`) accumulated so far during a
             `"music_choice"` pause; grows across "generate more" rounds
             instead of being replaced.
         music_choice_offset: Operator-picked offset (seconds), set via

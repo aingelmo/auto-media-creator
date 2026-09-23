@@ -69,8 +69,8 @@ def _generate_music_candidates(
 
     Returns:
         New candidate dicts (`{"offset_s", "duration_s", "path",
-        "score"}`, `path` relative to `session_dir`), appended after
-        `already` existing ones.
+        "score", "reason", "close_closure", "d_close_beat_s"}`, `path`
+        relative to `session_dir`), appended after `already` existing ones.
     """
     usable = duration_s - MUSIC_MAX_DURATION_S
     try:
@@ -91,6 +91,9 @@ def _generate_music_candidates(
                 "offset_s": round(step * i, 1),
                 "duration_s": MUSIC_MAX_DURATION_S,
                 "score": None,
+                "reason": None,
+                "close_closure": None,
+                "d_close_beat_s": None,
             }
             for i in range(already + len(batch), total)
         ]
@@ -107,6 +110,9 @@ def _generate_music_candidates(
                 "duration_s": cand["duration_s"],
                 "path": str(path.relative_to(session_dir)),
                 "score": cand.get("score"),
+                "reason": cand.get("reason"),
+                "close_closure": cand.get("close_closure"),
+                "d_close_beat_s": cand.get("d_close_beat_s"),
             }
         )
     return results
