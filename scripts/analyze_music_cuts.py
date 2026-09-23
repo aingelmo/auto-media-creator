@@ -16,6 +16,11 @@ from edl_agent.slots import slots_from_file
 
 WINDOWS = [15.0, 11.7, 8.3, 5.0]
 TOP_N = 5
+HEADROOM_MIN_S = 8.0
+HEADROOM_MAX_S = 15.0
+HEADROOM_PRE_S = 3.0
+HEADROOM_POST_S = 1.0
+HEADROOM_GAIN_THRESH = 0.2  # best-in-range minus forced-15s counting as real
 
 
 def find_unique_tracks(var: Path) -> list[dict]:
@@ -105,6 +110,65 @@ def probe_slots(track: Path, offset: float, window: float) -> dict:
     }
 
 
+def headroom_for_track(track: Path, opens: list[float]) -> list[dict]:
+    """Scan beat-quantized ends over 8-15s per open for closure headroom."""
+    import librosa
+    import numpy as np
+
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = cut_music(track, Path(tmp) / "full.wav", 0.0, 1e6)
+        y, sr = librosa.load(wav, sr=22050, mono=True)
+    hop = 512
+    fr = sr / hop
+    rms = librosa.feature.rms(y=y, hop_length=hop)[0]
+    _, beats = librosa.beat.beat_track(y=y, sr=sr, units="time")
+    beats = [float(b) for b in beats]
+    dur = len(y) / sr
+    track_mean = float(np.mean(rms))
+    eps = 1e-6
+
+    def mean(t0: float, t1: float) -> tuple[float, float]:
+        a = max(0, int(t0 * fr))
+        b = min(len(rms), int(t1 * fr))
+        cov = max(0.0, (min(t1, dur) - max(t0, 0.0)))
+        if b <= a:
+            return 0.0, cov
+        return float(np.mean(rms[a:b])), cov
+
+    def closure(e: float) -> float | None:
+        pre, _ = mean(e - HEADROOM_PRE_S, e)
+        post, cov = mean(e, e + HEADROOM_POST_S)
+        if cov < 0.5:
+            return None
+        decay = max(0.0, (pre - post) / (pre + eps))
+        return (pre / (track_mean + eps)) * decay
+
+    rows = []
+    for o in opens:
+        ends = [b for b in beats if o + HEADROOM_MIN_S <= b <= o + HEADROOM_MAX_S]
+        if len(ends) < 3:
+            n = int((HEADROOM_MAX_S - HEADROOM_MIN_S) / 0.25)
+            ends = sorted({o + HEADROOM_MIN_S + i * 0.25 for i in range(n + 1)})
+        scored = [(e, closure(e)) for e in ends if e + 0.5 <= dur]
+        scored = [(e, v) for e, v in scored if v is not None]
+        forced = closure(o + HEADROOM_MAX_S)
+        if not scored or forced is None:
+            rows.append({"offset_s": o, "error": "no scorable ends"})
+            continue
+        best_e, best_v = max(scored, key=lambda p: p[1])
+        rows.append(
+            {
+                "offset_s": o,
+                "forced_15s": round(forced, 3),
+                "best_end_s": round(best_e, 2),
+                "best_dur_s": round(best_e - o, 2),
+                "best_closure": round(best_v, 3),
+                "gain": round(best_v - forced, 3),
+            }
+        )
+    return rows
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--var", type=Path, default=Path("var"))
@@ -143,10 +207,37 @@ def main() -> None:
             row["slots_probe_15s"] = probe_slots(
                 path, top15[0]["offset_s"], 15.0
             )
+            opens = list(dict.fromkeys(c["offset_s"] for c in top15[:TOP_N]))
+            try:
+                row["headroom"] = headroom_for_track(path, opens)
+            except Exception as e:
+                row["headroom"] = {"error": str(e)}
         report_tracks.append(row)
         n15 = len((row["windows"].get("15.0") or {}).get("top", []))
         print(f"  {path.name} dur={row['duration_s']}s top15={n15}")
     (args.out / "results.json").write_text(json.dumps(report_tracks, indent=2))
+    headroom_rows = []
+    for r in report_tracks:
+        top15 = (r["windows"].get("15.0") or {}).get("top") or []
+        top1_off = top15[0]["offset_s"] if top15 else None
+        headroom = r.get("headroom")
+        if not isinstance(headroom, list):
+            continue
+        headroom_rows.extend(
+            {"track": r["name"], "is_top1": h.get("offset_s") == top1_off, **h}
+            for h in headroom
+        )
+    (args.out / "headroom.json").write_text(json.dumps(headroom_rows, indent=2))
+    top1 = [h for h in headroom_rows if h["is_top1"] and "gain" in h]
+    big = [h for h in top1 if h["gain"] >= HEADROOM_GAIN_THRESH]
+    durs = [h["best_dur_s"] for h in headroom_rows if "best_dur_s" in h]
+    print(
+        f"headroom: {len(big)}/{len(top1)} top-1 opens gain >= "
+        f"{HEADROOM_GAIN_THRESH} off-15s; "
+        f"best_dur range: {min(durs):.1f}-{max(durs):.1f}s"
+        if durs
+        else "headroom: no scorable ends"
+    )
     lines = ["# Music open/close calibration — diagnostic report", ""]
     lines.append(f"Tracks: {len(report_tracks)} (unique by sha256).")
     lines.append("Windows profiled: " + ", ".join(map(str, WINDOWS)) + "s.")
