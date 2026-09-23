@@ -111,6 +111,7 @@ export default function MediaLibraryPicker({
   const [unusedOnly, setUnusedOnly] = useState(false);
   const [dragClips, setDragClips] = useState(false);
   const [dragMusic, setDragMusic] = useState(false);
+  const [dropNotice, setDropNotice] = useState<string | null>(null);
   const clipsInput = useRef<HTMLInputElement>(null);
   const musicInput = useRef<HTMLInputElement>(null);
 
@@ -187,6 +188,37 @@ export default function MediaLibraryPicker({
     putInputFiles(musicInput.current, f ? [f] : []);
     setUploadedMusic(f);
     setUpMusicDur(null);
+  }
+
+  /** Browse handler for clips: the `accept` hint is advisory, so filter
+   * here and say what was skipped instead of counting a file the
+   * server will ignore. */
+  function onClipsBrowse(files: FileList | null) {
+    const incoming = Array.from(files ?? []);
+    const kept = dropFiles(incoming, CLIP_EXTS);
+    if (kept.length < incoming.length) {
+      setDropNotice(
+        `Skipped ${incoming.length - kept.length} file(s) — clips accept ${CLIP_EXTS.join(", ")}.`,
+      );
+    } else {
+      setDropNotice(null);
+    }
+    putInputFiles(clipsInput.current, kept);
+    setUploadedClips(kept);
+  }
+
+  /** Browse handler for music: reject unsupported formats at pick time
+   * with the supported list, instead of failing after upload. */
+  function onMusicBrowse(files: FileList | null) {
+    const f = files?.[0] ?? null;
+    if (f && !MUSIC_EXTS.includes(extOf(f.name))) {
+      setDropNotice(
+        `“${f.name}” isn't a supported track — music accepts ${MUSIC_EXTS.join(", ")}.`,
+      );
+      return;
+    }
+    setDropNotice(null);
+    setMusicFile(f);
   }
 
   function recordClipMeta(key: string, dur: number | null, w: number | null, h: number | null) {
@@ -267,6 +299,11 @@ export default function MediaLibraryPicker({
         musicName={uploadedMusic?.name ?? (selectedMusic ? fileName(selectedMusic) : "")}
         musicSecs={musicSecs}
       />
+      {dropNotice && (
+        <p className="warning is-error" role="alert">
+          {dropNotice}
+        </p>
+      )}
 
       <fieldset>
         <legend>
@@ -283,7 +320,16 @@ export default function MediaLibraryPicker({
           onDrop={(e) => {
             e.preventDefault();
             setDragClips(false);
-            mergeClips(dropFiles(e.dataTransfer.files, CLIP_EXTS));
+            const incoming = Array.from(e.dataTransfer.files);
+            const kept = dropFiles(incoming, CLIP_EXTS);
+            if (kept.length < incoming.length) {
+              setDropNotice(
+                `Skipped ${incoming.length - kept.length} file(s) — clips accept ${CLIP_EXTS.join(", ")}.`,
+              );
+            } else {
+              setDropNotice(null);
+            }
+            mergeClips(kept);
           }}
         >
           <div className="dropzone-empty">
@@ -300,7 +346,7 @@ export default function MediaLibraryPicker({
             name="clips"
             multiple
             accept={CLIP_EXTS.join(",")}
-            onChange={(e) => setUploadedClips(Array.from(e.target.files ?? []))}
+            onChange={(e) => onClipsBrowse(e.target.files)}
           />
         </div>
 
@@ -491,7 +537,15 @@ export default function MediaLibraryPicker({
           onDrop={(e) => {
             e.preventDefault();
             setDragMusic(false);
-            const [f] = dropFiles(e.dataTransfer.files, MUSIC_EXTS);
+            const incoming = Array.from(e.dataTransfer.files);
+            const [f] = dropFiles(incoming, MUSIC_EXTS);
+            if (!f && incoming.length > 0) {
+              setDropNotice(
+                `Skipped ${incoming.length} file(s) — music accepts ${MUSIC_EXTS.join(", ")}.`,
+              );
+              return;
+            }
+            setDropNotice(null);
             if (f) setMusicFile(f);
           }}
         >
@@ -541,7 +595,7 @@ export default function MediaLibraryPicker({
             type="file"
             name="music"
             accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
-            onChange={(e) => setMusicFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => onMusicBrowse(e.target.files)}
           />
         </div>
 

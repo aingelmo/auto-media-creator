@@ -115,11 +115,33 @@ export default function New() {
       return;
     }
     const formData = new FormData(formRef.current);
-    const hasClipUpload = (formData.get("clips") as File | null)?.size;
-    const hasMusicUpload = (formData.get("music") as File | null)?.size;
-    if ((clipRefs.length === 0 && !hasClipUpload) || (!musicRef && !hasMusicUpload)) {
+    const hasClipFile = formData
+      .getAll("clips")
+      .some((v) => v instanceof File && v.size > 0 && v.name !== "");
+    const hasMusicFile = formData
+      .getAll("music")
+      .some((v) => v instanceof File && v.size > 0 && v.name !== "");
+    const missingClips = clipRefs.length === 0 && !hasClipFile;
+    const missingMusic = !musicRef && !hasMusicFile;
+    if (missingClips || missingMusic) {
       setStep(0);
-      setError("Pick or upload at least one clip and a music track.");
+      const lostUploads =
+        (missingMusic && stats.musicName !== "") ||
+        (missingClips && stats.clipCount > clipRefs.length);
+      if (lostUploads) {
+        setError(
+          "Your uploaded file(s) didn't reach the form — the browser dropped them. " +
+            "Drop or browse them again on the Media step; library picks are kept.",
+        );
+      } else if (missingClips && missingMusic) {
+        setError(
+          "Add at least one clip or photo and pick a music track — drop files or reuse the library.",
+        );
+      } else if (missingClips) {
+        setError("Add at least one clip or photo — drop files or reuse the library.");
+      } else {
+        setError("Pick a music track — drop one or reuse the library.");
+      }
       return;
     }
 
