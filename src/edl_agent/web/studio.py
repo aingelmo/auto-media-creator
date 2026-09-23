@@ -33,7 +33,10 @@ def timeline_payload(name: str) -> dict:
     Returns:
         Dict with `clips` (each plus `locked`: `True` for hook/close,
         `False` for develop), `reel_exists`, `preview_exists`, and
-        `preview_path` (`reel_preview{suffix}.mp4` if on disk).
+        `preview_path` (`reel_preview{suffix}.mp4` if on disk), plus
+        `prev_reel_exists` and `prev_reel_path` (`reel.prev.mp4` when a
+        studio save or media delete invalidated the render; servable
+        via `/sessions/{name}/files/reel.prev.mp4`).
     """
     edl = load_json(name, "edl.json")
     session_dir = SESSIONS_DIR / name
@@ -45,11 +48,18 @@ def timeline_payload(name: str) -> dict:
     preview_path = ""
     for preview in sorted(session_dir.glob("reel_preview*.mp4")):
         preview_path = preview.name
+    prev_reel_path = (
+        "reel.prev.mp4"
+        if (session_dir / "reel.prev.mp4").is_file()
+        else ""
+    )
     return {
         "clips": sorted(clips, key=lambda c: c["slot"]),
         "reel_exists": reel_exists,
         "preview_exists": bool(preview_path),
         "preview_path": preview_path,
+        "prev_reel_exists": bool(prev_reel_path),
+        "prev_reel_path": prev_reel_path,
     }
 
 

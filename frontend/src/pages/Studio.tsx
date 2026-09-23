@@ -112,7 +112,10 @@ export default function Studio() {
     setError(null);
     try {
       setTimeline(await api.reorderDevelops(name, order));
-      setNotice("Clip order saved.");
+      setNotice(
+        "Clip order saved. Render invalidated — previous kept as " +
+          "reel.prev.mp4; Regenerate from render to rebuild.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Swap failed.");
     } finally {
@@ -125,7 +128,10 @@ export default function Studio() {
     setError(null);
     try {
       setTimeline(await api.setHookText(name, hookText));
-      setNotice("Hook saved.");
+      setNotice(
+        "Hook saved. Render invalidated — previous kept as " +
+          "reel.prev.mp4; Regenerate from render to rebuild.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hook save failed.");
     } finally {
@@ -139,7 +145,10 @@ export default function Studio() {
     try {
       setTimeline(await api.setEffects(name, flash, punch));
       await refresh();
-      setNotice("Effects saved.");
+      setNotice(
+        "Effects saved. Render invalidated — previous kept as " +
+          "reel.prev.mp4; Regenerate from render to rebuild.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Effects save failed.");
     } finally {
@@ -148,6 +157,10 @@ export default function Studio() {
   }
 
   const previewSrc = timeline?.preview_path ? fileUrl(name, timeline.preview_path) : null;
+  const prevReelSrc =
+    timeline?.prev_reel_exists && timeline.prev_reel_path
+      ? fileUrl(name, timeline.prev_reel_path)
+      : null;
 
   return (
     <div className="session-page">
@@ -156,7 +169,9 @@ export default function Studio() {
       </h2>
       <p className="field-hint">
         <Link to={`/sessions/${encodeURIComponent(name)}`}>← Back to session</Link>
-        {" — swaps and saves apply instantly; to render, go back and Regenerate from "}
+        {" — swaps and saves apply instantly and invalidate the rendered reel " +
+          "(previous kept as reel.prev.mp4); to render, go back and " +
+          "Regenerate from "}
         <em>render</em>.
       </p>
       {error && (
@@ -234,6 +249,20 @@ export default function Studio() {
               src={previewSrc}
               aria-label="Draft preview"
             />
+          ) : prevReelSrc ? (
+            <>
+              <video
+                className="reel-player studio-preview-video"
+                controls
+                preload="metadata"
+                src={prevReelSrc}
+                aria-label="Previous render (stale)"
+              />
+              <p className="field-hint">
+                Showing the previous render — it no longer matches the timeline. Regenerate from{" "}
+                <em>render</em> to rebuild.
+              </p>
+            </>
           ) : (
             <p>{running ? "Rendering preview…" : "Preview appears here."}</p>
           )}
@@ -265,7 +294,8 @@ export default function Studio() {
             Save effects
           </button>
           <p className="field-hint">
-            Hook and close stay locked to the LLM pick; only develop slots swap.
+            Hook and close stay locked to the LLM pick; only develop slots swap. Saving invalidates
+            the rendered reel (previous kept as reel.prev.mp4).
           </p>
         </section>
       </div>

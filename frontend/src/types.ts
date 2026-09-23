@@ -144,6 +144,10 @@ export interface TimelinePayload {
   reel_exists: boolean;
   preview_exists: boolean;
   preview_path: string;
+  /** True when a previous render backup (`reel.prev.mp4`) exists. */
+  prev_reel_exists: boolean;
+  /** Session-relative path of the previous render backup, or "". */
+  prev_reel_path: string;
 }
 
 export interface HistoryEntry {
