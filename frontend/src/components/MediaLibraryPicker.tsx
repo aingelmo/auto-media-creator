@@ -4,6 +4,7 @@ import type { MediaEntry } from "../types";
 import { basenameOf, fetchUsage, type UsageMap } from "./clipUsage";
 import CoverageMeter from "./CoverageMeter";
 import type { CreateStats } from "./CreateSummary";
+import LibraryHoverVideo from "./LibraryHoverVideo";
 import TrackPlayer from "./TrackPlayer";
 import {
   IMAGE_FOOTAGE_S,
@@ -410,7 +411,7 @@ export default function MediaLibraryPicker({
                     ) : c.kind === "image" ? (
                       <img src={fileUrl(c.session, c.path)} alt={c.filename} loading="lazy" />
                     ) : (
-                      <video muted preload="metadata" src={previewUrl(c)} />
+                      <LibraryHoverVideo src={previewUrl(c)} label={c.filename} />
                     )}
                     <figcaption>
                       <label>
