@@ -547,8 +547,10 @@ button.primary {
 
 /* Contact sheet: the studio light-table. Warm mat, soft shadow, true-black
    wells so color still judges against neutral. auto-fit (not auto-fill)
-   collapses trailing empty tracks so a half-full last row stretches to
-   fill the bed instead of leaving a blank slab on wide screens. */
+   collapses fully-empty tracks so a short library stretches across the
+   bed; whole-row alignment for longer libraries comes from the page-size
+   hook in Index.tsx, since auto-fit cannot collapse a partial last row
+   whose tracks are shared with full rows above. */
 .contact-sheet {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, api, fileUrl, reelUrl } from "../api";
 import { useConfirm } from "../components/confirm";
@@ -18,29 +18,38 @@ import type { MediaEntry, SessionListEntry } from "../types";
 
 const TRACK_SHOWN = 4;
 
-/**Clips preview page size that always fills whole grid rows: measures the
- * grid bed and fits two rows of tiles, so no half-empty trailing row or
- * blank slab survives a viewport change. Clamped to 4–12 tiles. */
-function useClipPageSize(gridRef: React.RefObject<HTMLDivElement | null>): number {
-  const [page, setPage] = useState(8);
-  useEffect(() => {
+const CLIP_CAP = 12;
+
+/**Tiles shown in the Clips preview bed: always whole grid rows. Column
+ * capacity comes from the grid's live geometry (content width and column
+ * gap from computed style, tile minimum from the same breakpoints as
+ * CSS), so the count stays a multiple of the real column count at any
+ * viewport width. Overflow waits behind "Browse all N clips". */
+function useClipPageSize(gridRef: React.RefObject<HTMLDivElement | null>, total: number): number {
+  const [shown, setShown] = useState(Math.min(total, 8));
+  useLayoutEffect(() => {
     const el = gridRef.current;
-    if (!el) return;
+    if (!el || total <= 0) return;
     const compute = () => {
-      const gap = 12;
-      const minTile = window.innerWidth >= 1400 ? 132 : window.innerWidth <= 640 ? 96 : 110;
-      const bed = el.clientWidth - 32;
-      const cols = Math.max(2, Math.floor((bed + gap) / (minTile + gap)));
-      // Two full rows when they fit in the 12-tile cap, else one full row —
-      // never a half-filled row leaving a blank slab.
-      setPage(cols * 2 <= 12 ? Math.max(4, cols * 2) : Math.max(4, cols));
+      const cs = getComputedStyle(el);
+      const gap = parseFloat(cs.columnGap) || 0;
+      const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+      const content = Math.max(0, el.clientWidth - pad);
+      const vw = window.innerWidth;
+      const minTile = vw >= 1400 ? 132 : vw <= 640 ? 96 : 110;
+      const cols = Math.max(1, Math.floor((content + gap) / (minTile + gap)));
+      // Whole rows only, so no half-filled trailing row leaves a blank
+      // slab. Fewer clips than columns fill one auto-fit-stretched row.
+      setShown(
+        total <= cols ? total : Math.max(1, Math.floor(Math.min(total, CLIP_CAP) / cols)) * cols,
+      );
     };
     compute();
     const ro = new ResizeObserver(compute);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [gridRef]);
-  return page;
+  }, [gridRef, total]);
+  return shown;
 }
 
 /**True on touch-first screens: clip tiles defer video bytes until tapped. */
@@ -82,7 +91,7 @@ export default function Index() {
   const [libError, setLibError] = useState<string | null>(null);
   const clipsDialogRef = useRef<HTMLDialogElement>(null);
   const clipsGridRef = useRef<HTMLDivElement>(null);
-  const clipShown = useClipPageSize(clipsGridRef);
+  const clipShown = useClipPageSize(clipsGridRef, clips?.length ?? 0);
   const coarsePointer = useCoarsePointer();
   const confirm = useConfirm();
 
