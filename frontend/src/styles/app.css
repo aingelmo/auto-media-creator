@@ -546,10 +546,12 @@ button.primary {
 }
 
 /* Contact sheet: the studio light-table. Warm mat, soft shadow, true-black
-   wells so color still judges against neutral. */
+   wells so color still judges against neutral. auto-fit (not auto-fill)
+   collapses trailing empty tracks so a half-full last row stretches to
+   fill the bed instead of leaving a blank slab on wide screens. */
 .contact-sheet {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: var(--space-4);
   margin: var(--space-4) 0;
   background: rgb(0 0 0 / 0.14);
@@ -594,7 +596,7 @@ button.primary {
    legible; the selected card carries the Signal wash instead of a new
    accent edge, matching the card-options picked vocabulary. */
 .contact-sheet--music {
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
 .contact-sheet--music figure {
@@ -721,8 +723,27 @@ figure:focus-within .tile-delete,
 }
 
 .contact-sheet.contact-sheet--compact {
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: var(--space-3);
+}
+
+/* Content-driven density: tighter tiles on phones so two full columns
+   always fit, roomier minimums on very wide beds so tiles never stretch
+   into slabs. The grid stays fluid between these pins via auto-fit. */
+@media (max-width: 640px) {
+  .contact-sheet {
+    padding: var(--space-3);
+  }
+
+  .contact-sheet.contact-sheet--compact {
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  }
+}
+
+@media (min-width: 1400px) {
+  .contact-sheet.contact-sheet--compact {
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  }
 }
 
 .media-list {

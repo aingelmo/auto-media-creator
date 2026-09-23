@@ -16,8 +16,46 @@ import {
 import { notifyTrashChanged } from "../trash";
 import type { MediaEntry, SessionListEntry } from "../types";
 
-const CLIP_SHOWN = 10;
 const TRACK_SHOWN = 4;
+
+/**Clips preview page size that always fills whole grid rows: measures the
+ * grid bed and fits two rows of tiles, so no half-empty trailing row or
+ * blank slab survives a viewport change. Clamped to 4–12 tiles. */
+function useClipPageSize(gridRef: React.RefObject<HTMLDivElement | null>): number {
+  const [page, setPage] = useState(8);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const compute = () => {
+      const gap = 12;
+      const minTile = window.innerWidth >= 1400 ? 132 : window.innerWidth <= 640 ? 96 : 110;
+      const bed = el.clientWidth - 32;
+      const cols = Math.max(2, Math.floor((bed + gap) / (minTile + gap)));
+      // Two full rows when they fit in the 12-tile cap, else one full row —
+      // never a half-filled row leaving a blank slab.
+      setPage(cols * 2 <= 12 ? Math.max(4, cols * 2) : Math.max(4, cols));
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [gridRef]);
+  return page;
+}
+
+/**True on touch-first screens: clip tiles defer video bytes until tapped. */
+function useCoarsePointer(): boolean {
+  const [coarse, setCoarse] = useState(
+    () => window.matchMedia?.("(pointer: coarse)").matches ?? false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: coarse)");
+    const onChange = () => setCoarse(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return coarse;
+}
 
 function newestOf(clips: MediaEntry[], music: MediaEntry[]): MediaEntry | null {
   const c = clips[0] ?? null;
@@ -43,6 +81,9 @@ export default function Index() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [libError, setLibError] = useState<string | null>(null);
   const clipsDialogRef = useRef<HTMLDialogElement>(null);
+  const clipsGridRef = useRef<HTMLDivElement>(null);
+  const clipShown = useClipPageSize(clipsGridRef);
+  const coarsePointer = useCoarsePointer();
   const confirm = useConfirm();
 
   useEffect(() => {
@@ -212,7 +253,11 @@ export default function Index() {
             ) : c.kind === "image" ? (
               <img src={fileUrl(c.session, c.path)} alt="" loading="lazy" />
             ) : (
-              <video muted preload="metadata" src={fileUrl(c.session, c.path)} />
+              <video
+                muted
+                preload={coarsePointer ? "none" : "metadata"}
+                src={fileUrl(c.session, c.path)}
+              />
             )}
             <span className="library-badge">{durationLabel(c.duration_s, c.kind)}</span>
           </span>
@@ -312,10 +357,10 @@ export default function Index() {
             {clips.length > 0 && (
               <>
                 <h4>Clips</h4>
-                <div className="contact-sheet contact-sheet--compact">
-                  {clips.slice(0, CLIP_SHOWN).map((c) => renderClipTile(c))}
+                <div ref={clipsGridRef} className="contact-sheet contact-sheet--compact">
+                  {clips.slice(0, clipShown).map((c) => renderClipTile(c))}
                 </div>
-                {clips.length > CLIP_SHOWN && (
+                {clips.length > clipShown && (
                   <p>
                     <button type="button" className="primary" onClick={() => setClipsOpen(true)}>
                       {`Browse all ${clips.length} clips`}
