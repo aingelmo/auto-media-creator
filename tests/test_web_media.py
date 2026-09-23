@@ -309,3 +309,46 @@ def test_delete_rejects_generated_and_traversal(tmp_path, monkeypatch) -> None:
     with pytest.raises(HTTPException) as exc:
         media.delete_media(ref="s1/inputs/missing.mp4")
     assert exc.value.status_code == 404
+
+
+def test_music_track_returns_session_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(sessions, "SESSIONS_DIR", tmp_path)
+    monkeypatch.setattr(
+        sessions, "ffprobe", lambda path: {"format": {"duration": "187.3"}}
+    )
+    music = tmp_path / "s1" / "music"
+    music.mkdir(parents=True)
+    (music / "track.mp3").write_bytes(b"x")
+    (music / "track_cut.wav").write_bytes(b"cut")
+    (music / "candidates").mkdir(exist_ok=True)
+    (music / "candidates" / "cand_0.wav").write_bytes(b"c")
+
+    out = sessions.session_music_track("s1")
+
+    assert out["path"] == "music/track.mp3"
+    assert out["filename"] == "track.mp3"
+    assert out["duration_s"] == 187.3
+    assert out["peaks_ref"] == "s1/music/track.mp3"
+
+
+def test_music_track_missing_or_probe_failure(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(sessions, "SESSIONS_DIR", tmp_path)
+    with pytest.raises(HTTPException) as exc:
+        sessions.session_music_track("nope")
+    assert exc.value.status_code == 404
+
+    sdir = tmp_path / "s1" / "music"
+    sdir.mkdir(parents=True)
+    (sdir / "track_cut.wav").write_bytes(b"cut")
+    with pytest.raises(HTTPException) as exc:
+        sessions.session_music_track("s1")
+    assert exc.value.status_code == 404
+
+    (sdir / "track.mp3").write_bytes(b"x")
+
+    def boom(path):
+        raise OSError
+
+    monkeypatch.setattr(sessions, "ffprobe", boom)
+    out = sessions.session_music_track("s1")
+    assert out["duration_s"] is None
