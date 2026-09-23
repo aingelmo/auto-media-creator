@@ -93,7 +93,8 @@ measured_I={input_i}:measured_TP={input_tp}:measured_LRA={input_lra}:measured_th
 aresample=48000,aformat=channel_layouts=stereo[m];
     [2:a]volume={sfx0.gain_db}dB,aresample=48000,aformat=channel_layouts=stereo,adelay={sfx0.delay_ms}:all=1[s0];
     ...
-    [m][s0]...amix=inputs={N+1}:duration=first:normalize=0,afade=t=out:st={duration_s - fade_out_s}:d={fade_out_s}[a]" \
+    [m][s0]...amix=inputs={N+1}:duration=first:normalize=0,afade=t=out:st={fade_end - fade_out_s}:d={fade_out_s}[a]" \
+  <!-- fade_end = duration_s - outro_s (24f/0.8s C0, §6.8) para que el logo aparezca en silencio; sin outro, fade_end = duration_s -->
   -map 0:v -map "[a]" -c:v copy \
   -c:a aac -b:a 192k -ar 48000 -threads {threads} -movflags +faststart reel.mp4 2> loudnorm_2.log
 # parsear el JSON de loudnorm_2.log → edl.audio.loudnorm_applied (debe traer normalization_type)

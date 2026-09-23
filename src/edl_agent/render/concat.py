@@ -23,6 +23,65 @@ def _parse_loudnorm_json(stderr: str) -> dict:
     return json.loads(match.group(0))
 
 
+def _outro_s(edl: dict) -> float:
+    """Outro tail length in seconds (#6.8, #10.4).
+
+    The C0 brand sign-off is burned into the close clip's tail, so the
+    music must already be silent when it appears. Reads the last
+    clip's `effect_params["outro_frames"]` (frames at 30 fps); legacy
+    `effect == "end_card"` EDLs report the whole synthetic card.
+
+    Args:
+        edl: EDL dict, as returned by `edl.build_edl`. Reads
+            `clips[-1]["effect_params"]["outro_frames"]` (int) or
+            `clips[-1]["effect"]`/`n_frames` for the legacy card.
+
+    Returns:
+        Outro duration in seconds, or `0.0` when the reel has no
+        brand sign-off.
+    """
+    clips = edl.get("clips") or []
+    if not clips:
+        return 0.0
+    last = clips[-1]
+    params = last.get("effect_params") or {}
+    if params.get("outro_frames"):
+        return float(params["outro_frames"]) / 30
+    if last.get("effect") == "end_card":
+        return float(last.get("n_frames", 0)) / 30
+    return 0.0
+
+
+def _fade_window(
+    duration_s: float, fade_out_s: float, outro_s: float
+) -> tuple[float, float]:
+    """`(st, d)` for the closing `afade=t=out` (#10.4).
+
+    The fade completes exactly when the outro starts (`duration_s -
+    outro_s`), so the brand image appears over silence; without an
+    outro it completes at the reel end, as before. Clamped so short
+    reels never produce a negative start.
+
+    Args:
+        duration_s: Total reel duration in seconds
+            (`target.duration_f / 30`).
+        fade_out_s: Configured fade length in seconds
+            (`audio.fade_out_s`).
+        outro_s: Outro tail in seconds (see `_outro_s`).
+
+    Returns:
+        `(st, d)` seconds for `afade=t=out:st={st}:d={d}`; `d == 0.0`
+        when there is nothing to fade (`fade_out_s <= 0` or the fade
+        end is at 0).
+    """
+    if fade_out_s <= 0:
+        return duration_s, 0.0
+    fade_end = duration_s - outro_s if outro_s > 0 else duration_s
+    fade_end = max(0.0, min(fade_end, duration_s))
+    start = max(0.0, fade_end - fade_out_s)
+    return start, fade_end - start
+
+
 def _sfx_chain(entry: dict) -> str:
     """Build ffmpeg audio filter chain for one `audio.sfx[]` entry (#10.4, #5).
 
@@ -55,7 +114,9 @@ def concat_and_audio(
     If no music track is set, segments are concatenated stream-copied with
     no audio. Otherwise, ffmpeg's `loudnorm` filter is run once in
     measurement mode and once in linear-correction mode using the measured
-    values, per ffmpeg's two-pass loudnorm recipe.
+    values, per ffmpeg's two-pass loudnorm recipe. The closing `afade`
+    completes when the C0 outro starts (#6.8), so the brand image
+    appears over silence; without an outro it completes at the reel end.
 
     Args:
         edl: EDL dict, as returned by `edl.build_edl`. Reads `audio`
@@ -155,9 +216,17 @@ def concat_and_audio(
         sfx_labels.append(label)
         graph += f"[{i + 2}:a]{_sfx_chain(entry)}[{label}];"
     mix_inputs = "".join(f"[{label}]" for label in sfx_labels)
+    fade_st, fade_d = _fade_window(
+        duration_s, float(audio["fade_out_s"]), _outro_s(edl)
+    )
+    tail = (
+        f"afade=t=out:st={fade_st}:d={fade_d}"
+        if fade_d > 0
+        else "anull"
+    )
     graph += (
         f"[m]{mix_inputs}amix=inputs={len(sfx) + 1}:duration=first:normalize=0,"
-        f"afade=t=out:st={duration_s - audio['fade_out_s']}:d={audio['fade_out_s']}[a]"
+        f"{tail}[a]"
     )
     render_cmd = [
         "ffmpeg",

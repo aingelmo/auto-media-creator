@@ -430,6 +430,19 @@ def test_sfx_chain_ramp_vs_plain() -> None:
     assert "concat=" not in _sfx_chain(plain_entry)
 
 
+def test_fade_completes_when_outro_starts() -> None:
+    from edl_agent.render.concat import _fade_window, _outro_s
+
+    edl = {"clips": [{"effect_params": {"outro_frames": 24}}]}
+    assert _outro_s(edl) == pytest.approx(0.8)
+    # 2.5s reel, 0.5s fade: ends at 1.7s == outro start, silent under logo.
+    assert _fade_window(2.5, 0.5, _outro_s(edl)) == pytest.approx((1.2, 0.5))
+    # No outro: unchanged behaviour, fade ends at the reel end.
+    assert _fade_window(2.5, 0.5, 0.0) == pytest.approx((2.0, 0.5))
+    # Reel shorter than outro+fade: clamped, never negative.
+    assert _fade_window(0.5, 0.5, 0.8) == (0.0, 0.0)
+
+
 def test_drawtext_escape_survives_both_ffmpeg_parsers() -> None:
     from edl_agent.render._common import _drawtext_escape
 
