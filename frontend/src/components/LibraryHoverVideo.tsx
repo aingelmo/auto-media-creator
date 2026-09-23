@@ -1,33 +1,5 @@
 import { useEffect, useRef } from "react";
-
-/** Currently playing hover preview across all tiles. Module-level so
- * entering one tile pauses any other without prop drilling (#4.3). */
-let activePreview: HTMLVideoElement | null = null;
-
-function reducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
-
-function playPreview(video: HTMLVideoElement): void {
-  if (reducedMotion()) return;
-  if (activePreview && activePreview !== video) {
-    activePreview.pause();
-    activePreview.currentTime = 0;
-  }
-  activePreview = video;
-  const attempt = video.play();
-  if (attempt) attempt.catch(() => {});
-}
-
-function stopPreview(video: HTMLVideoElement): void {
-  video.pause();
-  video.currentTime = 0;
-  if (activePreview === video) activePreview = null;
-}
+import { playHoverPreview, stopHoverPreview } from "./hoverPreview";
 
 /** Inline hover-play preview for a library contact-sheet tile. Muted +
  * playsInline + preload="metadata"; plays on hover/focus, resets to the
@@ -38,10 +10,7 @@ export default function LibraryHoverVideo({ src, label }: { src: string; label: 
 
   useEffect(
     () => () => {
-      if (ref.current && activePreview === ref.current) {
-        ref.current.pause();
-        activePreview = null;
-      }
+      if (ref.current) stopHoverPreview(ref.current);
     },
     [],
   );
@@ -67,14 +36,14 @@ export default function LibraryHoverVideo({ src, label }: { src: string; label: 
       src={src}
       tabIndex={0}
       aria-label={`Preview ${label}`}
-      onMouseEnter={(e) => playPreview(e.currentTarget)}
-      onMouseLeave={(e) => stopPreview(e.currentTarget)}
-      onFocus={(e) => playPreview(e.currentTarget)}
-      onBlur={(e) => stopPreview(e.currentTarget)}
+      onMouseEnter={(e) => playHoverPreview(e.currentTarget)}
+      onMouseLeave={(e) => stopHoverPreview(e.currentTarget)}
+      onFocus={(e) => playHoverPreview(e.currentTarget)}
+      onBlur={(e) => stopHoverPreview(e.currentTarget)}
       onClick={(e) => {
         const v = e.currentTarget;
-        if (v.paused) playPreview(v);
-        else stopPreview(v);
+        if (v.paused) playHoverPreview(v);
+        else stopHoverPreview(v);
       }}
     />
   );

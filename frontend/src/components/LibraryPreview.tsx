@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { fileUrl, previewUrl } from "../api";
 import type { MediaEntry } from "../types";
+import { playHoverPreview, stopHoverPreview } from "./hoverPreview";
 import {
   dimsLabel,
   durationLabel,
@@ -57,7 +58,17 @@ export default function LibraryPreview({
           {placeholder ?? "still"}
         </div>
       ) : (
-        <video controls autoPlay src={previewUrl(clip)} />
+        <video
+          controls
+          playsInline
+          preload="metadata"
+          src={previewUrl(clip)}
+          aria-label={`Preview ${clip.filename}`}
+          onMouseEnter={(e) => playHoverPreview(e.currentTarget)}
+          onMouseLeave={(e) => stopHoverPreview(e.currentTarget)}
+          onFocus={(e) => playHoverPreview(e.currentTarget)}
+          onBlur={(e) => stopHoverPreview(e.currentTarget)}
+        />
       )}
       {clip.kind === "video" && clip.proxy_path && (
         <p className="library-proxy-note">

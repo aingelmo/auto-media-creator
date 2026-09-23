@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ApiError, api, fileUrl, previewUrl, reelUrl } from "../api";
 import { useConfirm } from "../components/confirm";
 import LibraryPreview from "../components/LibraryPreview";
+import { playHoverPreview, stopHoverPreview } from "../components/hoverPreview";
 import TrackPlayer from "../components/TrackPlayer";
 import { basenameOf, fetchUsage, type UsageMap } from "../components/clipUsage";
 import { isDisplayableImage } from "../components/mediaMeta";
@@ -69,6 +70,17 @@ function useCoarsePointer(): boolean {
 
 function entryRef(e: MediaEntry): string {
   return `${e.session}/${e.path}`;
+}
+
+/** Hover playback for a / library tile button: the tile's inner video
+ * (still tiles have none) plays on hover/focus and resets on leave/blur,
+ * sharing the single-active handoff with the other grids. Click still
+ * opens the preview modal, which stays the touch path. */
+function hoverTile(tile: HTMLElement, on: boolean): void {
+  const v = tile.querySelector("video");
+  if (!v) return;
+  if (on) playHoverPreview(v);
+  else stopHoverPreview(v);
 }
 
 export default function Index() {
@@ -274,6 +286,10 @@ export default function Index() {
           type="button"
           className="library-tile"
           onClick={() => setPreview(c)}
+          onMouseEnter={(e) => hoverTile(e.currentTarget, true)}
+          onMouseLeave={(e) => hoverTile(e.currentTarget, false)}
+          onFocus={(e) => hoverTile(e.currentTarget, true)}
+          onBlur={(e) => hoverTile(e.currentTarget, false)}
           aria-label={`Preview ${c.filename}`}
         >
           <span className="library-thumb" aria-hidden="true">
@@ -284,7 +300,21 @@ export default function Index() {
             ) : c.kind === "image" ? (
               <img src={fileUrl(c.session, c.path)} alt="" loading="lazy" />
             ) : (
-              <video muted preload={coarsePointer ? "none" : "metadata"} src={previewUrl(c)} />
+              <video
+                muted
+                playsInline
+                disablePictureInPicture
+                preload={coarsePointer ? "none" : "metadata"}
+                src={previewUrl(c)}
+                ref={(v) => {
+                  // React omits the muted *attribute* on <video>
+                  // (facebook/react#10389): set property + attribute.
+                  if (v) {
+                    v.muted = true;
+                    v.setAttribute("muted", "");
+                  }
+                }}
+              />
             )}
             <span className="library-badge">{durationLabel(c.duration_s, c.kind)}</span>
             <span
