@@ -87,6 +87,47 @@ def test_scan_attaches_probe_meta(tmp_path, monkeypatch) -> None:
     assert entries[0]["mtime"] > 0
 
 
+def test_scan_attaches_proxy_path(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(media, "SESSIONS_DIR", tmp_path)
+    monkeypatch.setattr(media, "_META_CACHE_PATH", tmp_path / "meta.json")
+    monkeypatch.setattr(
+        media,
+        "_probe_file",
+        lambda path, audio_only=False: {
+            "duration_s": 10.0,
+            "w": 720,
+            "h": 1280,
+            "kind": "video",
+        },
+    )
+    d = tmp_path / "s1" / "inputs"
+    d.mkdir(parents=True)
+    (d / "clip.MOV").write_bytes(b"x")
+    (tmp_path / "s1" / "proxies").mkdir(parents=True)
+    (tmp_path / "s1" / "proxies" / "clip.mp4").write_bytes(b"p")
+    (tmp_path / "s1" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {
+                        "src": "inputs/clip.MOV",
+                        "proxy": "proxies/clip.mp4",
+                        "proxy_verified": True,
+                    }
+                ]
+            }
+        )
+    )
+    (tmp_path / "s1" / "inputs" / "bare.MOV").write_bytes(b"y")
+
+    entries = {e["filename"]: e for e in media._scan("inputs", {".mov"})}
+
+    assert entries["clip.MOV"]["proxy_path"] == "proxies/clip.mp4"
+    assert entries["clip.MOV"]["proxy_verified"] is True
+    assert entries["bare.MOV"]["proxy_path"] is None
+    assert entries["bare.MOV"]["proxy_verified"] is False
+
+
 def test_scan_caps_entries_at_limit(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(media, "SESSIONS_DIR", tmp_path)
     monkeypatch.setattr(media, "_META_CACHE_PATH", tmp_path / "meta.json")

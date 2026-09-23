@@ -131,6 +131,41 @@ def _probe_file(path: Path, audio_only: bool = False) -> dict[str, Any]:
         return {"duration_s": duration_s, "w": w, "h": h, "kind": kind}
 
 
+def _manifest_proxies(session: str) -> dict[str, dict[str, Any]]:
+    """Map `inputs/` relpath to its proxy info for one session, best-effort.
+
+    Args:
+        session: Session directory name under `SESSIONS_DIR`.
+
+    Returns:
+        Mapping of source `src` (e.g. `"inputs/clip.MOV"`) to dict with
+        `proxy` (session-relative path or `None`) and `proxy_verified`
+        (`bool`). Missing/unreadable `manifest.json` yields `{}` so the
+        library listing never fails because of one bad manifest.
+    """
+    manifest_path = SESSIONS_DIR / session / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, ValueError):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    sources = manifest.get("sources", [])
+    if not isinstance(sources, list):
+        return {}
+    for s in sources:
+        if not isinstance(s, dict):
+            continue
+        src = s.get("src")
+        if not isinstance(src, str) or not src:
+            continue
+        proxy = s.get("proxy")
+        out[src] = {
+            "proxy": proxy if isinstance(proxy, str) and proxy else None,
+            "proxy_verified": bool(s.get("proxy_verified", False)),
+        }
+    return out
+
+
 def _scan(subdir: str, exts: set[str]) -> list[dict]:
     """Session-relative files under `{session}/{subdir}/`, newest first.
 
@@ -140,7 +175,11 @@ def _scan(subdir: str, exts: set[str]) -> list[dict]:
     metadata (`duration_s`, `w`, `h`, `kind`) served from a disk cache in
     `var/cache/media_meta.json` keyed by absolute path, size, and mtime.
     The `mtime` (unix seconds) is kept in the output so callers can show
-    recency without an extra stat call.
+    recency without an extra stat call. Clip entries (`subdir == "inputs"`)
+    also carry `proxy_path` (session-relative H.264 proxy, or `None` when
+    absent) and `proxy_verified` (`bool`): browsers often cannot decode
+    the originals (e.g. iPhone HEVC 10-bit/Dolby Vision MOV), while the
+    proxies are plain H.264 — see `#3.3`.
     """
     if not SESSIONS_DIR.is_dir():
         return []
@@ -178,6 +217,7 @@ def _scan(subdir: str, exts: set[str]) -> list[dict]:
     cache = _load_meta_cache()
     dirty = False
     audio_only = subdir == "music"
+    proxy_maps: dict[str, dict[str, dict[str, Any]]] = {}
     for e in deduped:
         abspath = (SESSIONS_DIR / e["session"] / e["path"]).resolve()
         cache_key = f"{abspath}:{e['size']}:{e['mtime']}"
@@ -187,6 +227,23 @@ def _scan(subdir: str, exts: set[str]) -> list[dict]:
             cache[cache_key] = meta
             dirty = True
         e.update(meta)
+        if subdir == "inputs" and e.get("kind") == "video":
+            session = str(e["session"])
+            if session not in proxy_maps:
+                proxy_maps[session] = _manifest_proxies(session)
+            info = proxy_maps[session].get(str(e["path"]), {})
+            proxy = info.get("proxy")
+            verified = bool(info.get("proxy_verified", False))
+            if not proxy:
+                fallback = f"proxies/{abspath.stem}.mp4"
+                if (SESSIONS_DIR / session / fallback).is_file():
+                    proxy = fallback
+            if proxy and (SESSIONS_DIR / session / proxy).is_file():
+                e["proxy_path"] = proxy
+                e["proxy_verified"] = verified
+            else:
+                e["proxy_path"] = None
+                e["proxy_verified"] = False
     if dirty:
         _save_meta_cache(cache)
     return deduped
@@ -200,7 +257,9 @@ def list_media() -> dict:
         Dict with `clips` (from each session's `inputs/`) and `music`
         (from `music/`), each entry carrying `session`, `path`,
         `filename`, `size`, `mtime` (unix seconds, newest-first), plus
-        probed `duration_s`, `w`, `h`, `kind`.
+        probed `duration_s`, `w`, `h`, `kind`. Clip entries with
+        `kind == "video"` also carry `proxy_path` (session-relative H.264
+        proxy or `None`) and `proxy_verified` (`bool`).
         Both lists are newest-first and capped at `MEDIA_SCAN_LIMIT`.
     """
     return {
