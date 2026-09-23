@@ -743,6 +743,82 @@ button.primary {
   text-wrap: pretty;
 }
 
+/* Clip tiles: duration badge carries length so the caption stays a
+   two-line scan — truncated name, then size in mono. Resolution and
+   orientation live in the title tooltip; the thumbnail shows shape. */
+.contact-sheet figure.is-selected {
+  border-color: var(--signal-border);
+  background: var(--signal-wash);
+}
+
+.clip-thumb {
+  position: relative;
+  display: block;
+}
+
+.clip-dur {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 1;
+  background: rgb(0 0 0 / 0.78);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 0.3rem 0.45rem;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+.clip-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 0;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.clip-pick input[type="checkbox"] {
+  accent-color: var(--signal);
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+}
+
+.clip-name {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.clip-meta {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.clip-pick + .clip-meta {
+  margin-left: calc(1.05rem + var(--space-2));
+}
+
+.clip-remove {
+  margin-top: var(--space-2);
+  padding: 0.15rem 0;
+  font-size: var(--text-xs);
+}
+
 /* Destructive tile action: overlay chip in the thumbnail corner, revealed
    on hover or keyboard focus so the caption stays a quiet spec row. Forced
    visible on touch (no hover) and while a delete is running. */
@@ -1534,6 +1610,125 @@ figure:focus-within .tile-delete,
   background: var(--signal-wash);
 }
 
+/* Native file inputs stay in the form for submit/keyboard but never
+   paint: the UA button+filename row ignores width/padding and bleeds
+   past the dashed chrome (see track-upload margins bug). */
+.dropzone-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+}
+
+.dropzone:has(.dropzone-input:focus-visible) {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.dropzone-empty {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.dropzone-hint {
+  margin: 0;
+  flex: 1 1 16rem;
+  min-width: 0;
+  color: var(--ink-dim);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.dropzone-browse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-4);
+  background: var(--panel-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
+  transition: border-color 120ms ease;
+}
+
+.dropzone-browse:hover {
+  border-color: var(--signal-border);
+}
+
+/* Filled track dropzone: the uploaded song lives inside the dashed
+   chrome, so picking audio never adds a second card below it. Bottom
+   margin keeps a breathing gap to the first library track row. */
+.dropzone--track {
+  margin-bottom: var(--space-4);
+}
+
+.dropzone--track.is-filled {
+  border-style: solid;
+  border-color: var(--signal-border);
+  background: var(--signal-wash);
+}
+
+.drop-track {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.drop-track-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.drop-track-meta {
+  flex: 1 1 12rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+/* Inside the vertical drop-track the shared row flex-basis (240px/16rem
+   wide in library rows) would become height, ballooning the mint box.
+   Opt out: natural content height, full width. Specificity beats the
+   later `.media-library-picker .track-player` row rule. */
+.media-library-picker .drop-track .track-player {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.drop-track-remove {
+  margin: 0;
+}
+
+.dropzone-empty .dropzone-browse {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.drop-track-head .dropzone-browse {
+  margin: 0 0 0 auto;
+  min-height: 2.5rem;
+  flex-shrink: 0;
+}
+
 .dropzone label {
   margin-top: 0;
 }
@@ -1750,11 +1945,39 @@ section[aria-label="Sessions"] h3 {
 }
 
 /* Fixed metadata column in the picker so every play button and waveform
- * starts on the same x, instead of drifting right with longer filenames. */
-.media-library-picker .media-list label {
-  flex: 0 0 15rem;
+ * starts on the same x, instead of drifting right with longer filenames.
+ * Rows wrap instead of forcing the card wider than its column. */
+.media-library-picker .media-list li {
+  flex-wrap: wrap;
   min-width: 0;
+}
+
+.media-library-picker .media-list label {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 100%;
   overflow-wrap: anywhere;
+}
+
+.media-library-picker .media-list li > button {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.media-library-picker .track-player {
+  flex: 2 1 16rem;
+  min-width: min(100%, 12rem);
+}
+
+@media (max-width: 640px) {
+  .media-library-picker .media-list li {
+    align-items: stretch;
+  }
+
+  .media-library-picker .media-list label,
+  .media-library-picker .track-player {
+    flex-basis: 100%;
+  }
 }
 
 .library-tracks .track-meta {

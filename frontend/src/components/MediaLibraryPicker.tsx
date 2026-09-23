@@ -276,18 +276,22 @@ export default function MediaLibraryPicker({
             mergeClips(dropFiles(e.dataTransfer.files, CLIP_EXTS));
           }}
         >
-          <label htmlFor="new-clips">
-            Drop clips / photos here or browse
-            <input
-              id="new-clips"
-              ref={clipsInput}
-              type="file"
-              name="clips"
-              multiple
-              accept={CLIP_EXTS.join(",")}
-              onChange={(e) => setUploadedClips(Array.from(e.target.files ?? []))}
-            />
-          </label>
+          <div className="dropzone-empty">
+            <p className="dropzone-hint">Drop clips / photos here or browse</p>
+            <label className="dropzone-browse" htmlFor="new-clips">
+              Browse files
+            </label>
+          </div>
+          <input
+            id="new-clips"
+            ref={clipsInput}
+            className="dropzone-input"
+            type="file"
+            name="clips"
+            multiple
+            accept={CLIP_EXTS.join(",")}
+            onChange={(e) => setUploadedClips(Array.from(e.target.files ?? []))}
+          />
         </div>
 
         {uploadedClips.length > 0 && (
@@ -297,49 +301,54 @@ export default function MediaLibraryPicker({
               const m = upMeta[key];
               const isImg = IMAGE_EXTS.includes(extOf(f.name));
               const showImg = isImg && isDisplayableImage(f.name);
+              const badge = m?.dur != null ? `${Math.round(m.dur)}s` : isImg ? "STILL" : "…";
+              const dims = m && dimsLabel(m.w, m.h);
+              const tip = `${f.name}${m?.dur != null ? ` · ${Math.round(m.dur)}s` : isImg ? " · still" : ""}${dims ? ` · ${dims}` : ""} · ${formatSize(f.size)}`;
               return (
                 <figure key={key}>
-                  {showImg ? (
-                    <img
-                      src={clipUrls.get(key)}
-                      alt={f.name}
-                      onLoad={(e) =>
-                        recordClipMeta(
-                          key,
-                          null,
-                          e.currentTarget.naturalWidth || null,
-                          e.currentTarget.naturalHeight || null,
-                        )
-                      }
-                    />
-                  ) : isImg ? (
-                    <div className="media-placeholder" aria-hidden="true">
-                      {extOf(f.name).slice(1).toUpperCase()} still
-                    </div>
-                  ) : (
-                    <video
-                      muted
-                      preload="metadata"
-                      src={clipUrls.get(key)}
-                      onLoadedMetadata={(e) =>
-                        recordClipMeta(
-                          key,
-                          Number.isFinite(e.currentTarget.duration)
-                            ? e.currentTarget.duration
-                            : null,
-                          e.currentTarget.videoWidth || null,
-                          e.currentTarget.videoHeight || null,
-                        )
-                      }
-                    />
-                  )}
-                  <figcaption>
-                    {f.name} ·{" "}
-                    {m
-                      ? `${m.dur != null ? `${Math.round(m.dur)}s` : "still"}${dimsLabel(m.w, m.h) ? ` · ${dimsLabel(m.w, m.h)}` : ""}`
-                      : formatSize(f.size)}
-                    <br />
-                    <button type="button" onClick={() => removeClip(i)}>
+                  <span className="clip-thumb">
+                    {showImg ? (
+                      <img
+                        src={clipUrls.get(key)}
+                        alt={f.name}
+                        onLoad={(e) =>
+                          recordClipMeta(
+                            key,
+                            null,
+                            e.currentTarget.naturalWidth || null,
+                            e.currentTarget.naturalHeight || null,
+                          )
+                        }
+                      />
+                    ) : isImg ? (
+                      <div className="media-placeholder" aria-hidden="true">
+                        {extOf(f.name).slice(1).toUpperCase()} still
+                      </div>
+                    ) : (
+                      <video
+                        muted
+                        preload="metadata"
+                        src={clipUrls.get(key)}
+                        onLoadedMetadata={(e) =>
+                          recordClipMeta(
+                            key,
+                            Number.isFinite(e.currentTarget.duration)
+                              ? e.currentTarget.duration
+                              : null,
+                            e.currentTarget.videoWidth || null,
+                            e.currentTarget.videoHeight || null,
+                          )
+                        }
+                      />
+                    )}
+                    <span className="clip-dur" aria-hidden="true">
+                      {badge}
+                    </span>
+                  </span>
+                  <figcaption title={tip}>
+                    <span className="clip-name">{f.name}</span>
+                    <span className="clip-meta">{formatSize(f.size)}</span>
+                    <button type="button" className="clip-remove" onClick={() => removeClip(i)}>
                       Remove
                     </button>
                   </figcaption>
@@ -404,27 +413,35 @@ export default function MediaLibraryPicker({
             <div className="contact-sheet contact-sheet--compact">
               {(allClips ? visibleClips : visibleClips.slice(0, CLIP_PAGE)).map((c) => {
                 const ref = refOf(c);
+                const dur = c.kind === "image" ? "STILL" : durationLabel(c.duration_s, c.kind);
+                const dims = dimsLabel(c.w, c.h);
+                const tip = `${c.filename} · ${durationLabel(c.duration_s, c.kind)}${dims ? ` · ${dims}` : ""} · ${formatSize(c.size)}`;
                 return (
-                  <figure key={ref}>
-                    {c.kind === "image" && !isDisplayableImage(c.filename) ? (
-                      <div className="media-placeholder" aria-hidden="true">
-                        {extOf(c.filename).slice(1).toUpperCase()} still
-                      </div>
-                    ) : c.kind === "image" ? (
-                      <img src={fileUrl(c.session, c.path)} alt={c.filename} loading="lazy" />
-                    ) : (
-                      <LibraryHoverVideo src={previewUrl(c)} label={c.filename} />
-                    )}
-                    <figcaption>
-                      <label>
+                  <figure key={ref} className={selectedClips.has(ref) ? "is-selected" : undefined}>
+                    <span className="clip-thumb">
+                      {c.kind === "image" && !isDisplayableImage(c.filename) ? (
+                        <div className="media-placeholder" aria-hidden="true">
+                          {extOf(c.filename).slice(1).toUpperCase()} still
+                        </div>
+                      ) : c.kind === "image" ? (
+                        <img src={fileUrl(c.session, c.path)} alt={c.filename} loading="lazy" />
+                      ) : (
+                        <LibraryHoverVideo src={previewUrl(c)} label={c.filename} />
+                      )}
+                      <span className="clip-dur" aria-hidden="true">
+                        {dur}
+                      </span>
+                    </span>
+                    <figcaption title={tip}>
+                      <label className="clip-pick">
                         <input
                           type="checkbox"
                           checked={selectedClips.has(ref)}
                           onChange={() => toggleClip(ref)}
                         />
-                        {c.filename} · {durationLabel(c.duration_s, c.kind)}
-                        {dimsLabel(c.w, c.h) && ` · ${dimsLabel(c.w, c.h)}`} · {formatSize(c.size)}
+                        <span className="clip-name">{c.filename}</span>
                       </label>
+                      <span className="clip-meta">{formatSize(c.size)}</span>
                     </figcaption>
                   </figure>
                 );
@@ -455,7 +472,7 @@ export default function MediaLibraryPicker({
               : "(none chosen)"}
         </legend>
         <div
-          className={`dropzone${dragMusic ? " is-dragging" : ""}`}
+          className={`dropzone dropzone--track${dragMusic ? " is-dragging" : ""}${uploadedMusic ? " is-filled" : ""}`}
           onDragOver={(e) => {
             e.preventDefault();
             setDragMusic(true);
@@ -468,37 +485,55 @@ export default function MediaLibraryPicker({
             if (f) setMusicFile(f);
           }}
         >
-          <label htmlFor="new-music">
-            Drop a track here or browse (mp3, wav, or mp4/m4a)
-            <input
-              id="new-music"
-              ref={musicInput}
-              type="file"
-              name="music"
-              accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
-              onChange={(e) => setMusicFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
-        </div>
-
-        {uploadedMusic && musicUrl && (
-          <ul className="media-list">
-            <li>
-              <label>
-                {uploadedMusic.name} · {formatSize(uploadedMusic.size)} (uploaded)
-              </label>
+          {uploadedMusic && musicUrl ? (
+            <div className="drop-track">
+              <div className="drop-track-head">
+                <span
+                  className="drop-track-meta"
+                  title={`${uploadedMusic.name} · ${formatSize(uploadedMusic.size)}`}
+                >
+                  <span className="clip-name">{uploadedMusic.name}</span>
+                  <span className="clip-meta">
+                    {formatSize(uploadedMusic.size)} · uploaded — drop to replace
+                  </span>
+                </span>
+                <label className="dropzone-browse" htmlFor="new-music">
+                  Replace
+                </label>
+                <button
+                  type="button"
+                  className="drop-track-remove"
+                  onClick={() => setMusicFile(null)}
+                >
+                  Remove
+                </button>
+              </div>
               <TrackPlayer
                 src={musicUrl}
                 label={uploadedMusic.name}
                 preload="metadata"
+                computePeaks
                 onDuration={(d) => setUpMusicDur(d)}
               />
-              <button type="button" onClick={() => setMusicFile(null)}>
-                Remove
-              </button>
-            </li>
-          </ul>
-        )}
+            </div>
+          ) : (
+            <div className="dropzone-empty">
+              <p className="dropzone-hint">Drop a track here or browse (mp3, wav, or mp4/m4a)</p>
+              <label className="dropzone-browse" htmlFor="new-music">
+                Browse files
+              </label>
+            </div>
+          )}
+          <input
+            id="new-music"
+            ref={musicInput}
+            className="dropzone-input"
+            type="file"
+            name="music"
+            accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
+            onChange={(e) => setMusicFile(e.target.files?.[0] ?? null)}
+          />
+        </div>
 
         {music.length === 0 ? (
           <p>No music from past sessions yet — drop a track above.</p>
