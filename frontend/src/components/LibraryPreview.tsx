@@ -15,9 +15,13 @@ import {
  *  row that answers "what is this video about / can I cut with it". */
 export default function LibraryPreview({
   clip,
+  usage,
+  usageLoading,
   onClose,
 }: {
   clip: MediaEntry;
+  usage?: { count: number; sessions: string[] } | null;
+  usageLoading?: boolean;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -83,6 +87,16 @@ export default function LibraryPreview({
           <dt>Size</dt>
           <dd>
             {formatSize(clip.size)} · {extOf(clip.filename).slice(1).toUpperCase() || "—"}
+          </dd>
+        </div>
+        <div>
+          <dt>Reused</dt>
+          <dd>
+            {usageLoading
+              ? "…"
+              : usage
+                ? `×${usage.count} · ${usage.sessions.join(", ")}`
+                : "unused in any final reel yet"}
           </dd>
         </div>
       </dl>

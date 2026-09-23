@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fileUrl, previewUrl } from "../api";
 import type { MediaEntry } from "../types";
+import { basenameOf, fetchUsage, type UsageMap } from "./clipUsage";
 import CoverageMeter from "./CoverageMeter";
 import type { CreateStats } from "./CreateSummary";
 import TrackPlayer from "./TrackPlayer";
@@ -76,8 +77,11 @@ export default function MediaLibraryPicker({
   const [uploadedMusic, setUploadedMusic] = useState<File | null>(null);
   const [upMeta, setUpMeta] = useState<Record<string, UpMeta>>({});
   const [upMusicDur, setUpMusicDur] = useState<number | null>(null);
-  const [visibleClips, setVisibleClips] = useState(CLIP_PAGE);
-  const [visibleMusic, setVisibleMusic] = useState(MUSIC_PAGE);
+  const [allClips, setAllClips] = useState(false);
+  const [allMusic, setAllMusic] = useState(false);
+  const [usage, setUsage] = useState<UsageMap | null>(null);
+  const [usageSort, setUsageSort] = useState<"newest" | "most" | "least">("newest");
+  const [unusedOnly, setUnusedOnly] = useState(false);
   const [dragClips, setDragClips] = useState(false);
   const [dragMusic, setDragMusic] = useState(false);
   const clipsInput = useRef<HTMLInputElement>(null);
@@ -91,6 +95,22 @@ export default function MediaLibraryPicker({
         setMusic(lib.music);
       })
       .catch(() => {});
+    let live = true;
+    api
+      .listSessions()
+      .then((sessions) =>
+        fetchUsage(
+          sessions.map((s) => s.name),
+          (name) => api.getPlanner(name),
+        ),
+      )
+      .then((map) => {
+        if (live) setUsage(map);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
   }, []);
 
   const clipUrls = useMemo(() => {
@@ -170,6 +190,39 @@ export default function MediaLibraryPicker({
 
   const byRef = useMemo(() => new Map(clips.map((c) => [refOf(c), c])), [clips]);
   const musicByRef = useMemo(() => new Map(music.map((m) => [refOf(m), m])), [music]);
+
+  const videoCount = clips.filter((c) => c.kind === "video").length;
+  const stillCount = clips.filter((c) => c.kind === "image").length;
+
+  const usedCount = useMemo(() => {
+    if (usage == null) return null;
+    let n = 0;
+    for (const c of clips) {
+      if (usage[c.filename] ?? usage[basenameOf(c.filename)]) n += 1;
+    }
+    return n;
+  }, [clips, usage]);
+
+  const visibleClips = useMemo(() => {
+    const list = [...clips];
+    if (unusedOnly) {
+      return list.filter((c) => {
+        const u = usage?.[c.filename] ?? usage?.[basenameOf(c.filename)];
+        return !u;
+      });
+    }
+    if (usageSort === "most" || usageSort === "least") {
+      const countOf = (c: MediaEntry): number => {
+        if (usage == null) return 0;
+        const key = c.filename in usage ? c.filename : basenameOf(c.filename);
+        return usage[key]?.count ?? 0;
+      };
+      list.sort((a, b) =>
+        usageSort === "most" ? countOf(b) - countOf(a) : countOf(a) - countOf(b),
+      );
+    }
+    return list;
+  }, [clips, usage, usageSort, unusedOnly]);
 
   const libClipSecs = [...selectedClips].reduce((acc, r) => {
     const c = byRef.get(r);
@@ -293,6 +346,40 @@ export default function MediaLibraryPicker({
           </div>
         )}
 
+        <div className="library-clips-header">
+          <span
+            className="library-count"
+            title={`${videoCount} videos + ${stillCount} stills${usedCount !== null ? ` · ${usedCount} of ${clips.length} used in final reels` : ""}`}
+            aria-live="polite"
+          >
+            {clips.length} in library · {videoCount} videos + {stillCount} stills
+            {usedCount !== null && ` · ${usedCount} used · ${clips.length - usedCount} unused`}
+          </span>
+          {clips.length > 0 && (
+            <div className="library-clips-tools">
+              <label>
+                Sort
+                <select
+                  value={usageSort}
+                  onChange={(e) => setUsageSort(e.target.value as "newest" | "most" | "least")}
+                  aria-label="Sort library clips by reuse"
+                >
+                  <option value="newest">newest</option>
+                  <option value="most">most used</option>
+                  <option value="least">least used</option>
+                </select>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={unusedOnly}
+                  onChange={(e) => setUnusedOnly(e.target.checked)}
+                />
+                unused only
+              </label>
+            </div>
+          )}
+        </div>
         <p>
           {clips.length > 0 && (
             <>
@@ -307,10 +394,12 @@ export default function MediaLibraryPicker({
         </p>
         {clips.length === 0 ? (
           <p>No clips from past sessions yet — drop some above.</p>
+        ) : visibleClips.length === 0 ? (
+          <p>Every clip has a final reel credit — clear “unused only” to browse all.</p>
         ) : (
           <>
             <div className="contact-sheet contact-sheet--compact">
-              {clips.slice(0, visibleClips).map((c) => {
+              {(allClips ? visibleClips : visibleClips.slice(0, CLIP_PAGE)).map((c) => {
                 const ref = refOf(c);
                 return (
                   <figure key={ref}>
@@ -338,10 +427,14 @@ export default function MediaLibraryPicker({
                 );
               })}
             </div>
-            {visibleClips < clips.length && (
-              <p>
-                <button type="button" onClick={() => setVisibleClips((v) => v + CLIP_PAGE)}>
-                  Show more ({clips.length - visibleClips} left)
+            {visibleClips.length > CLIP_PAGE && (
+              <p className="library-more">
+                <button
+                  type="button"
+                  onClick={() => setAllClips((v) => !v)}
+                  aria-expanded={allClips}
+                >
+                  {allClips ? "Show less" : `Show all ${visibleClips.length} clips`}
                 </button>
               </p>
             )}
@@ -409,7 +502,7 @@ export default function MediaLibraryPicker({
         ) : (
           <>
             <ul className="media-list">
-              {music.slice(0, visibleMusic).map((m) => {
+              {(allMusic ? music : music.slice(0, MUSIC_PAGE)).map((m) => {
                 const ref = refOf(m);
                 return (
                   <li key={ref}>
@@ -432,10 +525,14 @@ export default function MediaLibraryPicker({
                 );
               })}
             </ul>
-            {visibleMusic < music.length && (
-              <p>
-                <button type="button" onClick={() => setVisibleMusic((v) => v + MUSIC_PAGE)}>
-                  Show more ({music.length - visibleMusic} left)
+            {music.length > MUSIC_PAGE && (
+              <p className="library-more">
+                <button
+                  type="button"
+                  onClick={() => setAllMusic((v) => !v)}
+                  aria-expanded={allMusic}
+                >
+                  {allMusic ? "Show less" : `Show all ${music.length} tracks`}
                 </button>
               </p>
             )}

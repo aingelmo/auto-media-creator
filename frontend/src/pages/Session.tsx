@@ -302,7 +302,9 @@ export default function Session() {
       )}
 
       {!job?.awaiting_confirmation && job && !job.done && !job.error && (
-        <output className="status-running" aria-live="polite">Running&hellip;</output>
+        <output className="status-running" aria-live="polite">
+          Running&hellip;
+        </output>
       )}
     </div>
   );

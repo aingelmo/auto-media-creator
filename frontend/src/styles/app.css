@@ -119,8 +119,6 @@ code,
 .track-time,
 .timeline-pos,
 .library-badge,
-.dashboard-stats,
-.library-summary,
 .trash-summary,
 .coverage-meter,
 .render-checks pre,
@@ -215,6 +213,7 @@ label {
 }
 
 input[type="text"],
+input[type="search"],
 input[type="file"],
 select {
   display: block;
@@ -231,8 +230,14 @@ select {
 }
 
 input[type="text"]:hover,
+input[type="search"]:hover,
 select:hover {
   border-color: var(--ink-faint);
+}
+
+input::placeholder {
+  color: var(--ink-faint);
+  opacity: 1;
 }
 
 /* Two-column form layout: cuts vertical scroll on forms with many fields
@@ -1373,21 +1378,56 @@ figure:focus-within .tile-delete,
 
 /* Intake dashboard + dropzones: warm panel chrome, Signal/Fail only
    via the shared status-* text colors and the 4px notice edge. */
-.dashboard-stats {
-  font-size: var(--text-sm);
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
-  background: var(--panel);
-  border: 1px solid var(--rule-soft);
-  border-radius: var(--radius-pill);
-  padding: var(--space-2) var(--space-4);
-  display: inline-block;
-  box-shadow: var(--shadow-card);
+.dashboard-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  max-width: 44rem;
 }
 
-.dashboard-stats a {
-  white-space: nowrap;
+.dashboard-card {
+  background: var(--panel);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dashboard-card-value {
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.dashboard-card-label {
+  font-size: var(--text-xs);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+}
+
+.dashboard-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--signal-dim);
+  border: 1px solid var(--signal-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-3) var(--space-4);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.dashboard-new:hover {
+  border-color: var(--signal);
 }
 
 .media-placeholder {
@@ -1451,16 +1491,10 @@ figure:focus-within .tile-delete,
   border-left-color: var(--rule);
 }
 
-/* Dashboard library: readiness summary plus previewable tiles/tracks. */
-.library-summary {
-  font-size: var(--text-sm);
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
-}
+/* Dashboard library: previewable tiles/tracks. */
 
-section[aria-label="Library"] h4,
-section[aria-label="Sessions"] h3,
-section[aria-label="Library"] h3 {
+section[aria-label="Library"] h3,
+section[aria-label="Sessions"] h3 {
   font-family: var(--font-body);
   font-size: var(--text-xs);
   font-weight: 700;
@@ -1520,6 +1554,129 @@ section[aria-label="Library"] h3 {
   font-variant-numeric: tabular-nums;
   padding: 1px 8px;
   border-radius: var(--radius-pill);
+}
+
+.library-badge--usage {
+  left: auto;
+  right: var(--space-1);
+}
+
+.library-badge--unused {
+  opacity: 0.75;
+  font-weight: 400;
+}
+
+.library-clips-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-6) 0 0;
+  padding-inline: var(--space-1);
+}
+
+.library-clips-header h3 {
+  margin: 0;
+}
+
+.library-count {
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Secondary bulk row: quiet text-size actions under the header so
+   selection management never competes with the title or view tools. */
+.library-bulk-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: var(--space-1) 0 var(--space-3);
+  padding-inline: var(--space-1);
+}
+
+.library-bulk-bar > button:not(.danger-text) {
+  margin: 0;
+  min-height: 2rem;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--ink-dim);
+}
+
+.library-bulk-bar > button:not(.danger-text):hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--rule);
+  transform: none;
+}
+
+.library-bulk-bar > .danger-text {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+/* Shared disclosure row under clips/tracks lists: one wrapper so the
+   "Show all N …" / "Show less" buttons share spacing on the dashboard
+   and in the new-session picker. Buttons keep the default secondary
+   style — disclosure is not a forward action, so never .primary. */
+.library-more {
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+.library-more > button {
+  margin: 0;
+}
+
+/* Trailing toolbar: one group so Sort + filter read as a single
+   unit pinned right, instead of scattered flex items. */
+.library-clips-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-left: auto;
+}
+
+.library-clips-header label,
+.library-modal-tools label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.library-clips-header label select,
+.library-modal-tools label select {
+  display: inline-block;
+  width: auto;
+  margin-top: 0;
+  min-height: 2.5rem;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.library-clips-header input[type="checkbox"],
+.library-modal-tools input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--signal);
+}
+
+@media (max-width: 640px) {
+  .library-clips-tools {
+    margin-left: 0;
+  }
 }
 
 .library-tracks li {
@@ -1682,6 +1839,23 @@ section[aria-label="Library"] h3 {
 .library-modal-header form {
   margin: 0;
   flex-shrink: 0;
+}
+
+.library-modal-tools {
+  margin-bottom: var(--space-3);
+}
+
+.library-modal-tools .library-clips-tools {
+  margin-left: 0;
+}
+
+.library-modal--wide .library-modal-tools {
+  position: sticky;
+  top: calc(var(--space-4) * -1);
+  z-index: 1;
+  background: var(--panel);
+  padding-block: var(--space-2);
+  border-bottom: 1px solid var(--rule-soft);
 }
 
 .library-modal video,
@@ -2150,5 +2324,172 @@ button.danger {
 @media (prefers-reduced-motion: reduce) {
   .session-trash {
     transition: none;
+  }
+}
+
+/* Sessions table toolbar: search + status + reel filter read as one unit
+   pinned right of the heading, same quiet vocabulary as the clips tools. */
+.sessions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  margin: var(--space-6) 0 var(--space-4);
+  padding-inline: var(--space-1);
+}
+
+.sessions-header h3 {
+  margin: 0;
+}
+
+.sessions-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  margin-left: auto;
+}
+
+.sessions-tools label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.sessions-tools label select {
+  display: inline-block;
+  width: auto;
+  margin-top: 0;
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.sessions-tools input[type="search"] {
+  display: inline-block;
+  width: 12rem;
+  max-width: 60vw;
+  margin-top: 0;
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.sessions-tools input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--signal);
+}
+
+.sessions-tools > button {
+  margin: 0;
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--ink-dim);
+}
+
+.sessions-tools > button:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--rule);
+  transform: none;
+}
+
+.sessions-count {
+  margin: var(--space-2) 0 var(--space-3);
+  padding-inline: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sortable column headers: text buttons inherit the micro-header type so
+   the table keeps its quiet ledger voice; the mark is a CSS triangle so
+   no glyph stands in for an icon. */
+.th-sort {
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.th-sort:hover:not(:disabled) {
+  color: var(--ink);
+  transform: none;
+  border-color: transparent;
+}
+
+.th-sort--num {
+  float: right;
+}
+
+.sort-mark {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  opacity: 0;
+}
+
+th:hover .sort-mark,
+.th-sort:focus-visible .sort-mark,
+.sort-mark.is-active {
+  opacity: 1;
+}
+
+.sort-mark.is-active {
+  border-top: 5px solid var(--ink-dim);
+  border-bottom: none;
+}
+
+.sort-mark.is-active.is-desc {
+  border-top: none;
+  border-bottom: 5px solid var(--ink-dim);
+}
+
+th:hover .sort-mark:not(.is-active) {
+  border-top: 5px solid var(--rule);
+  border-bottom: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .sessions-tools {
+    margin-left: 0;
+  }
+
+  .sessions-tools input[type="search"] {
+    width: 100%;
+    max-width: none;
   }
 }
