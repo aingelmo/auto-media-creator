@@ -414,7 +414,7 @@ export default function Index() {
                             disabled={bulkDeleting}
                             aria-label={`Select ${m.filename}`}
                           />
-                          {m.filename} · {formatSize(m.size)} · {m.session} · {formatAge(m.mtime)}
+                          {m.filename} · {formatSize(m.size)} · {formatAge(m.mtime)}
                         </label>
                       </span>
                       <TrackPlayer
