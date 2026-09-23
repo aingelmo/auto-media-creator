@@ -5,7 +5,9 @@ from __future__ import annotations
 import math
 import wave
 
-from edl_agent.ingest.highlight import rank_highlights
+import pytest
+
+from edl_agent.ingest.highlight import CLOSE_BEAT_WINDOW_S, rank_highlights
 
 SR = 22050
 
@@ -45,6 +47,29 @@ def test_top_ranked_offset_lands_in_loud_region(tmp_path) -> None:
     top = ranked[0]
     assert 18.0 <= top["offset_s"] <= 35.0
     assert 0.0 <= top["score"] <= 1.0
+
+
+def test_ranking_reports_close_diagnostics(tmp_path) -> None:
+    track = tmp_path / "track.wav"
+    _synth_track(track)
+
+    ranked = rank_highlights(track, window_s=15.0)
+
+    assert ranked
+    for cand in ranked[:3]:
+        assert cand["end_s"] == pytest.approx(cand["offset_s"] + 15.0, abs=0.02)
+        assert 0.0 <= cand["close_malus"] <= 1.0
+        assert 0.0 <= cand["score"] <= 1.0
+        d_close = cand["d_close_beat_s"]
+        if d_close is None:
+            continue
+        if d_close > CLOSE_BEAT_WINDOW_S:
+            # Full beat malus (weight 0.5) is applied, so the total
+            # malus cannot be below it.
+            assert cand["close_malus"] >= 0.5
+        if d_close == 0.0:
+            # Snapped ends carry no beat malus, only slope/weak (0.5 max).
+            assert cand["close_malus"] <= 0.5
 
 
 def test_ranking_is_cached(tmp_path) -> None:

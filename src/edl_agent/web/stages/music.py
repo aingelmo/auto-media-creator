@@ -61,9 +61,10 @@ def _generate_music_candidates(
     """Cut the next `count` ranked candidate snippets, after `already` picked ones.
 
     Ranks every `window_s` offset in `track` by drop-detection heuristic
-    (see `rank_highlights`), snapped to the nearest downbeat, and cuts ranks
-    `[already, already + count)`. Falls back to evenly-spaced offsets if
-    ranking fails or runs out.
+    with a close-side malus (see `rank_highlights`), snapped to the
+    nearest downbeat and nudged so the window end lands on a beat, and
+    cuts ranks `[already, already + count)`. Falls back to evenly-spaced
+    offsets if ranking fails or runs out.
 
     Returns:
         New candidate dicts (`{"offset_s", "path", "score"}`, `path`
