@@ -9,6 +9,10 @@ candidate selection → planning (LLM-assisted) → render.
 uv sync
 ```
 
+Requires a full-featured `ffmpeg`/`ffprobe` on `PATH` (`zscale`,
+`drawtext`, `ass` filters — Homebrew/apt builds omit some; see
+[docs/deployment.md](docs/deployment.md), which also covers Docker).
+
 ## Web UI (recommended)
 
 ```bash
