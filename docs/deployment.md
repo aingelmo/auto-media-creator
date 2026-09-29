@@ -152,3 +152,22 @@ Notes:
   `medium` preset.
 - To pin ffmpeg instead of tracking `latest`, copy the dated asset
   URL and its `sha256` line from the BtbN release page.
+
+### Updating the static build
+
+BtbN rebuilds `latest` regularly (monthly or better). Updating is
+just overwriting the two files — each pipeline stage spawns a fresh
+process, so even a running server picks the new binary up on the
+next job (restart it anyway so the cached filter probe refreshes):
+
+```bash
+ffmpeg -version 2>&1 | head -1  # current build date
+cd /tmp/ffdl
+curl -sLO https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+curl -sL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256 \
+  | grep "linux64-gpl.tar.xz" | sha256sum -c -
+tar xf ffmpeg-master-latest-linux64-gpl.tar.xz
+cp ffmpeg-master-latest-linux64-gpl/bin/{ffmpeg,ffprobe} ~/.local/bin/
+ffmpeg -hide_banner -filters | awk \
+  '$2=="zscale"||$2=="drawtext"||$2=="ass"||$2=="tonemap"||$2=="colorspace"{print $2}'
+```
