@@ -226,8 +226,56 @@ export const UPLOAD_CHUNK_RETRIES = 3;
 /** Base delay for per-chunk exponential backoff (doubled per attempt). */
 const UPLOAD_RETRY_BASE_MS = 800;
 
+/** Aborts a chunk PUT that produces no response within this long: a
+ * stalled stream (open TCP, zero bytes) never settles `fetch`, so
+ * without a deadline one hung PUT freezes the whole sequential upload
+ * with no error and no retry. 2 MB at even 100 KB/s takes ~20 s. */
+const UPLOAD_CHUNK_TIMEOUT_MS = 60_000;
+
+/** Deadline for the small control calls (init/status/complete). */
+const UPLOAD_CONTROL_TIMEOUT_MS = 30_000;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** `fetch` with a response deadline: aborts (DOMException AbortError,
+ * surfaced here as a plain Error) when the server takes longer than
+ * `timeoutMs` to answer. Callers treat it like any network error. */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s: ${url}`, { cause: err });
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Rejects login-page HTML with a session-expired error: when the
+ * Authelia session dies mid-upload, chunk PUTs 303-redirect to the
+ * login page, which `fetch` follows to a 200 HTML body. Without this
+ * guard that 200 would parse as (empty) JSON and advance progress
+ * without uploading a single byte. */
+async function asUploadJson<T>(res: Response, url: string): Promise<T> {
+  const ctype = res.headers.get("content-type") ?? "";
+  if (!ctype.includes("application/json")) {
+    throw new ApiError(
+      401,
+      `Upload session expired (got ${ctype || "unknown content"} from ${url}) — ` +
+        "reload the page, log in again, and press Start to resume.",
+    );
+  }
+  return asJson<T>(res);
 }
 
 /** Total payload above this uses the chunked path instead of one multipart POST. */
@@ -255,8 +303,9 @@ export interface UploadStatus {
 
 /** Authoritative resume point for an in-progress upload. */
 export async function getUploadStatus(upload_id: string): Promise<UploadStatus> {
-  const res = await fetch(`/api/uploads/${encodeURIComponent(upload_id)}/status`);
-  return asJson<UploadStatus>(res);
+  const url = `/api/uploads/${encodeURIComponent(upload_id)}/status`;
+  const res = await fetchWithTimeout(url, {}, UPLOAD_CONTROL_TIMEOUT_MS);
+  return asUploadJson<UploadStatus>(res, url);
 }
 
 async function initChunkedUpload(
@@ -264,20 +313,25 @@ async function initChunkedUpload(
   kind: UploadKind,
   sessionName: string,
 ): Promise<string> {
+  const url = "/api/uploads/init";
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= UPLOAD_CHUNK_RETRIES; attempt++) {
     if (attempt > 0) await sleep(UPLOAD_RETRY_BASE_MS * 2 ** (attempt - 1));
     try {
-      const initRes = await fetch("/api/uploads/init", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_name: sessionName,
-          kind,
-          filename: file.name,
-          size: file.size,
-        }),
-      });
+      const initRes = await fetchWithTimeout(
+        url,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_name: sessionName,
+            kind,
+            filename: file.name,
+            size: file.size,
+          }),
+        },
+        UPLOAD_CONTROL_TIMEOUT_MS,
+      );
       if (initRes.status >= 500 || initRes.status === 429) {
         lastErr = new ApiError(initRes.status, initRes.statusText);
         continue;
@@ -286,10 +340,10 @@ async function initChunkedUpload(
         const body = await initRes.json().catch(() => ({}));
         throw new ApiError(initRes.status, body.detail ?? initRes.statusText);
       }
-      const { upload_id } = (await initRes.json()) as {
-        upload_id: string;
-        chunk_size: number;
-      };
+      const { upload_id } = await asUploadJson<{ upload_id: string; chunk_size: number }>(
+        initRes,
+        url,
+      );
       return upload_id;
     } catch (err) {
       if (err instanceof ApiError) throw err;
@@ -300,13 +354,12 @@ async function initChunkedUpload(
 }
 
 async function completeChunkedUpload(upload_id: string): Promise<ChunkedUploadRef> {
+  const url = `/api/uploads/${encodeURIComponent(upload_id)}/complete`;
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= UPLOAD_CHUNK_RETRIES; attempt++) {
     if (attempt > 0) await sleep(UPLOAD_RETRY_BASE_MS * 2 ** (attempt - 1));
     try {
-      const doneRes = await fetch(`/api/uploads/${encodeURIComponent(upload_id)}/complete`, {
-        method: "POST",
-      });
+      const doneRes = await fetchWithTimeout(url, { method: "POST" }, UPLOAD_CONTROL_TIMEOUT_MS);
       if (doneRes.status >= 500 || doneRes.status === 429) {
         lastErr = new ApiError(doneRes.status, doneRes.statusText);
         continue;
@@ -315,7 +368,7 @@ async function completeChunkedUpload(upload_id: string): Promise<ChunkedUploadRe
         const body = await doneRes.json().catch(() => ({}));
         throw new ApiError(doneRes.status, body.detail ?? doneRes.statusText);
       }
-      return (await doneRes.json()) as ChunkedUploadRef;
+      return await asUploadJson<ChunkedUploadRef>(doneRes, url);
     } catch (err) {
       if (err instanceof ApiError) throw err;
       lastErr = err;
@@ -329,12 +382,16 @@ async function completeChunkedUpload(upload_id: string): Promise<ChunkedUploadRe
  * through a 100 MB-capped reverse proxy (Cloudflare free/pro returns
  * 413 for bigger single bodies before the app is reached) and each
  * PUT stays small enough to move through a tunnel with tiny host
- * QUIC buffers. Every chunk is retried (exp backoff); a 409
- * offset-mismatch (or a network error that may have landed
- * server-side) refetches `GET status` and continues from the
- * authoritative `received` count instead of failing. Passing a
- * previous `opts.uploadId` for the same file resumes that staging
- * dir instead of orphaning it with a fresh init.
+ * QUIC buffers. Every chunk carries a 60 s response deadline (a
+ * stalled stream never settles `fetch`, so without it one hung PUT
+ * would freeze the whole sequential upload with no error) and is
+ * retried with exp backoff; a 409 offset-mismatch (or a network
+ * error/timeout that may have landed server-side) refetches
+ * `GET status` and continues from the authoritative `received`
+ * count instead of failing. Login-page HTML (expired Authelia
+ * session) is rejected instead of mistaken for a JSON success.
+ * Passing a previous `opts.uploadId` for the same file resumes that
+ * staging dir instead of orphaning it with a fresh init.
  */
 export async function uploadFileChunked(
   file: File,
@@ -371,13 +428,18 @@ export async function uploadFileChunked(
   while (offset < file.size) {
     const slice = file.slice(offset, offset + UPLOAD_CHUNK_SIZE);
     const params = new URLSearchParams({ index: String(seq), offset: String(offset) });
+    const url = `/api/uploads/${encodeURIComponent(upload_id)}/chunk?${params}`;
     let putRes: Response | null = null;
     try {
-      putRes = await fetch(`/api/uploads/${encodeURIComponent(upload_id)}/chunk?${params}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: slice,
-      });
+      putRes = await fetchWithTimeout(
+        url,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: slice,
+        },
+        UPLOAD_CHUNK_TIMEOUT_MS,
+      );
     } catch (err) {
       // Network error: the chunk may still have landed, so refetch the
       // authoritative offset before retrying instead of resending blind.
@@ -400,10 +462,8 @@ export async function uploadFileChunked(
       throw err instanceof Error ? err : new Error("Upload failed (network error).");
     }
     if (putRes.ok) {
-      const body = (await putRes.json().catch(() => null)) as {
-        received: number;
-      } | null;
-      offset = body?.received ?? offset + slice.size;
+      const body = await asUploadJson<{ received: number }>(putRes, url);
+      offset = body.received;
       seq += 1;
       onProgress?.(offset, file.size);
       continue;
