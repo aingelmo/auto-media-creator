@@ -38,6 +38,21 @@ app.include_router(media.router)
 app.include_router(trash.router)
 app.include_router(waveform.router)
 
+
+@app.get("/health", include_in_schema=False)
+def health() -> dict[str, str]:
+    """Liveness probe for container orchestrators and reverse proxies.
+
+    Must stay dependency-free (no ffmpeg/LLM/filesystem checks) so it
+    answers 200 within the homelab probe's start window even while a
+    pipeline job is running. Defined before the SPA catch-all below so
+    the `/{full_path:path}` route can't shadow it.
+
+    Returns:
+        Dict with a single `status` key set to `"ok"`.
+    """
+    return {"status": "ok"}
+
 # Mounted at /assets (not "/") so it can't shadow the /api and /sessions
 # routes above; the catch-all route below serves index.html for every other
 # GET so the SPA's client-side router (react-router) handles deep links.
