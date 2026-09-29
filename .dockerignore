@@ -1,0 +1,17 @@
+# Keep the build context lean and secret-free.
+.git
+.github
+.venv
+.nyc_output
+.pytest_cache
+.ruff_cache
+.serena
+.claude
+.impeccable
+var
+.env
+frontend/node_modules
+frontend/dist
+src/edl_agent/web/static
+__pycache__
+*.pyc

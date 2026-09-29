@@ -1,0 +1,57 @@
+# Builds the linux/arm64 deploy image and publishes it to GHCR, where the
+# homelab wrapper (apps/edl-agent) pulls it for the OCI Ampere A1 VM.
+# Native ARM runner (no qemu): dependency install + ffmpeg fetch run at
+# full speed. Triggered on main pushes touching the image inputs, or
+# manually via workflow_dispatch.
+
+name: docker-arm64
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "src/**"
+      - "scripts/**"
+      - "frontend/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/docker-arm64.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest-linuxarm64-gpl
+            type=sha,prefix=,suffix=-linuxarm64-gpl,format=short
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
