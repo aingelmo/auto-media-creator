@@ -35,6 +35,10 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=_default_port())
     parser.add_argument("--no-reload", action="store_true", help="disable autoreload")
     args = parser.parse_args()
+    from edl_agent.startup import ensure_runtime_dirs, ensure_vendor_cache_env
+
+    ensure_vendor_cache_env()
+    ensure_runtime_dirs()
     uvicorn.run(
         "edl_agent.web.app:app",
         host=args.host,

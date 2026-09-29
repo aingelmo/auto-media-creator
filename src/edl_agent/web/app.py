@@ -9,12 +9,15 @@ routers this app mounts. The browser UI is a React SPA built into
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from edl_agent.startup import ensure_runtime_dirs, ensure_vendor_cache_env
 from edl_agent.web.routes import (
     config,
     files,
@@ -29,7 +32,20 @@ from edl_agent.web.routes import (
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="edl-agent")
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Pin vendor caches and verify the data volume before serving."""
+    ensure_vendor_cache_env()
+    ensure_runtime_dirs()
+    yield
+
+
+app = FastAPI(title="edl-agent", lifespan=lifespan)
 app.include_router(sessions.router)
 app.include_router(files.router)
 app.include_router(stages.router)
