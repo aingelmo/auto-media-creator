@@ -18,6 +18,14 @@ Web UI caveats (from `README.md`): single-process, no auth, job
 progress lives in memory and is lost on restart. Don't expose it
 beyond your own machine/LAN without a reverse proxy adding auth/TLS.
 
+Reverse-proxy body-size limits are safe: session files upload in
+≤8 MB chunks (`POST /api/uploads/init`, `PUT .../chunk`,
+`POST .../complete`; staged under `CACHE_DIR/uploads`, so in-progress
+bytes also live on the `EDL_AGENT_VAR` volume), and only upload-ids
+plus form text cross `POST /api/sessions`. Any proxy cap ≥ ~10 MB
+works — including Cloudflare free/pro's 100 MB cap, which used to
+413 large single-POST sessions before they reached the app.
+
 ## 2. ffmpeg: use a full static build
 
 The pipeline needs filters that distro and Homebrew builds routinely
