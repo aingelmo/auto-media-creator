@@ -114,12 +114,18 @@ static ffmpeg (§2) with checksum verification plus a build-time assert
 that `--enable-gpl` and all five filters (`zscale`, `drawtext`, `ass`,
 `tonemap`, `colorspace`) are present. CI
 (`.github/workflows/docker-arm64.yml`, native `ubuntu-24.04-arm`
-runner, no qemu) builds `linux/arm64` and pushes to GHCR on every
-`main` push touching the image inputs:
+runner, no qemu) builds `linux/arm64` and pushes to GHCR **only on
+GitHub Releases** (pinned semver, e.g. `v0.1.0`) or manual
+`workflow_dispatch` — `main` pushes publish nothing, so every tag is a
+deliberate promotion:
 
-- `ghcr.io/aingelmo/auto-media-creator:latest-linuxarm64-gpl` (moving)
-- `ghcr.io/aingelmo/auto-media-creator:<shortsha>-linuxarm64-gpl`
-  (pinned — use this in deploy manifests)
+- `ghcr.io/aingelmo/auto-media-creator:vX.Y.Z` (pinned — use this in
+  deploy manifests; no `latest`/moving tags exist by design)
+
+Release checklist: bump `pyproject.toml` to match the tag, publish the
+GitHub Release, wait for the `verify` job to go green, then copy its
+reported size/RSS into the homelab notes and bump `edl_agent_image`
+there. Rollback is re-pinning the previous `vX.Y.Z`.
 
 Reproduce from a clean checkout:
 
@@ -146,16 +152,16 @@ Container contract (what the homelab wrapper relies on):
 | torch | CPU-only on linux/aarch64 (`torch==<lock>+cpu` from the PyTorch CPU index, forked in `uv.lock` via `[tool.uv.sources]`; every other platform keeps PyPI) — the target has no NVIDIA GPU, so the PyPI CUDA userspace never enters the ARM image |
 | opencv | `opencv-python-headless` only; the GUI `opencv-python` that `ultralytics`/`scenedetect` pull in is evicted at build time (it was the `libxcb.so.1` crash-loop). The `libgl1`/`libglib2.0-0`/`libxcb1` apt libs stay as belt-and-braces |
 
-Every push that rebuilds the image also cold-boots the pinned tag
+Every release also cold-boots the published tag
 on native ARM (`verify` job) and asserts the contract above —
 `/health` within 120s, `PORT` honored, `id -u` == 1000,
 `EDL_AGENT_VAR` honored, `TZ` honored, `import cv2`, CPU-only
 torch, GPL/`aarch64` ffmpeg buildconf — and prints the
-uncompressed image size plus PID 1 `VmHWM`/`VmRSS`. Use the pinned
-`<shortsha>-linuxarm64-gpl` tag from a green run in deploy
+uncompressed image size plus PID 1 `VmHWM`/`VmRSS`. Use the release
+tag from a green run in deploy
 manifests, and copy its reported size/RSS into the homelab notes.
 
-Measured 2026-09-29 (`428d7d6-linuxarm64-gpl`, native ARM verify):
+Measured 2026-09-29 (`428d7d6`, pre-semver SHA tag, native ARM verify):
 uncompressed **2.40 GB**; cold-boot `/health` 200 on the first
 probe seconds after start; idle PID 1 `VmHWM`/`VmRSS` **~163 MB**
 (`cv2` 5.0.0, `torch` 2.14.0+cpu, `ffmpeg` `--enable-gpl`
@@ -166,7 +172,7 @@ fits a single flight, don't run concurrent sessions.
 Acceptance (run on ARM, not x86 emulation):
 
 ```bash
-REF=ghcr.io/aingelmo/auto-media-creator:<shortsha>-linuxarm64-gpl
+REF=ghcr.io/aingelmo/auto-media-creator:vX.Y.Z
 docker run -d --platform linux/arm64 --name edl \
   -e EDL_AGENT_VAR=/tmp/x -v /tmp/x:/tmp/x "$REF"
 sleep 120; curl -sf localhost:8000/health

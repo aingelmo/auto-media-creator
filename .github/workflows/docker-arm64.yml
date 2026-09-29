@@ -1,23 +1,15 @@
 # Builds the linux/arm64 deploy image and publishes it to GHCR, where the
 # homelab wrapper (apps/edl-agent) pulls it for the OCI Ampere A1 VM.
 # Native ARM runner (no qemu): dependency install + ffmpeg fetch run at
-# full speed. Triggered on main pushes touching the image inputs, or
-# manually via workflow_dispatch.
+# full speed. Published only on GitHub Releases (pinned semver, e.g.
+# v0.1.0) or manually via workflow_dispatch — main pushes build nothing,
+# so every published tag is a deliberate promotion.
 
 name: docker-arm64
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "Dockerfile"
-      - ".dockerignore"
-      - "src/**"
-      - "scripts/**"
-      - "frontend/**"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/docker-arm64.yml"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -42,9 +34,12 @@ jobs:
         id: meta
         with:
           images: ghcr.io/${{ github.repository }}
+          # Pinned semver only (the release name verbatim, e.g. v0.1.0):
+          # no `latest`/moving tags, so deploys never float. Per-push
+          # SHA tags are gone for the same reason — traceability comes
+          # from the release itself.
           tags: |
-            type=raw,value=latest-linuxarm64-gpl
-            type=sha,prefix=,suffix=-linuxarm64-gpl,format=short
+            type=raw,value=${{ github.ref_name }}
 
       - uses: docker/build-push-action@v6
         with:
@@ -80,7 +75,7 @@ jobs:
 
       - name: Resolve pinned image ref
         run: |
-          echo "REF=ghcr.io/${{ github.repository }}:${GITHUB_SHA:0:7}-linuxarm64-gpl" >> "$GITHUB_ENV"
+          echo "REF=ghcr.io/${{ github.repository }}:${{ github.ref_name }}" >> "$GITHUB_ENV"
 
       - name: Pull pinned image and report uncompressed size
         run: |
