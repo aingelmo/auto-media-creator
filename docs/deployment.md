@@ -105,53 +105,56 @@ non-linearised HLG input crushes midtones (Y~57 vs ~110 SDR
 reference; mobius ~117, checked visually 2026-09-29).
 Prefer a full build anyway: the fallback is uncalibrated.
 
-## 5. Cloud (Docker)
+## 5. Cloud (Docker, linux/arm64)
 
-```dockerfile
-# ---- frontend build ----
-FROM node:22-slim AS frontend
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend/ ./
-RUN npm run build  # writes to ../src/edl_agent/web/static/
+The repo-root `Dockerfile` is the single build definition: node stage
+builds the web UI, `python:3.14-slim` runtime stage installs deps via
+`uv sync --frozen --no-dev` and fetches the BtbN `linuxarm64-gpl`
+static ffmpeg (§2) with checksum verification plus a build-time assert
+that `--enable-gpl` and all five filters (`zscale`, `drawtext`, `ass`,
+`tonemap`, `colorspace`) are present. CI
+(`.github/workflows/docker-arm64.yml`, native `ubuntu-24.04-arm`
+runner, no qemu) builds `linux/arm64` and pushes to GHCR on every
+`main` push touching the image inputs:
 
-# ---- runtime ----
-FROM python:3.14-slim
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl xz-utils ca-certificates && rm -rf /var/lib/apt/lists
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
-COPY src/ ./src/
-COPY scripts/ ./scripts/
-COPY --from=frontend /app/src/edl_agent/web/static/ ./src/edl_agent/web/static/
-# full static ffmpeg (see §2); pin + verify checksum
-RUN mkdir -p /tmp/ffdl /usr/local/bin && cd /tmp/ffdl \
- && curl -sLO https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz \
- && curl -sL https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256 \
-  | grep "linux64-gpl.tar.xz" | sha256sum -c - \
- && tar xf ffmpeg-master-latest-linux64-gpl.tar.xz \
- && cp ffmpeg-master-latest-linux64-gpl/bin/ffmpeg* /usr/local/bin/ \
- && rm -rf /tmp/ffdl
-ENV EDL_AGENT_VAR=/data
-VOLUME /data
-EXPOSE 8000
-CMD ["uv", "run", "scripts/run_web.py", "--host", "0.0.0.0", "--port", "8000"]
+- `ghcr.io/aingelmo/auto-media-creator:latest-linuxarm64-gpl` (moving)
+- `ghcr.io/aingelmo/auto-media-creator:<shortsha>-linuxarm64-gpl`
+  (pinned — use this in deploy manifests)
+
+Reproduce from a clean checkout:
+
+```bash
+docker buildx build --platform linux/arm64 -t edl-agent:dev .
 ```
+
+An amd64 build also works (it embeds the `linux64-gpl` asset instead)
+for Dockerfile smoke tests on x86 hosts; only arm64 is published.
+Pin ffmpeg to a dated release with
+`--build-arg FFMPEG_TAG=<date>` instead of tracking `latest`.
+
+Container contract (what the homelab wrapper relies on):
+
+| Item | Value |
+|---|---|
+| Port | 8000; `scripts/run_web.py` honors `PORT` when set |
+| Health | `GET /health` → 200 `{"status": "ok"}`, dependency-free so it answers mid-job; allow a 120s start window (also the image `HEALTHCHECK` start period) |
+| Data dir | `EDL_AGENT_VAR`, image default `/data/edl-agent` (bind mount, survives restarts); local default `./var` |
+| User | UID 1000 (`appuser`, rootless); the bind mount must be owned by (or writable for) UID 1000 |
+| TZ | Honored for log timestamps (tzdata installed; OS-level, no code support needed) |
+| Secrets | None baked in (`.env` is `.dockerignore`d); pass `ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` with `-e` (full list in `.env.example`) |
+| Networking | No host-port assumptions; Traefik routes to :8000 internally |
 
 Notes:
 
-- First run downloads the pose model into `$EDL_AGENT_VAR`; keep
-  `/data` persistent or it re-downloads every deploy.
-- Pass LLM keys with `-e` (`ANTHROPIC_API_KEY`, …). No Ollama in
-  the image; use API providers.
-- Threads default to CPU count (`web/jobs.py` `THREADS`); size the
-  container's CPU for it — preview render is `ultrafast`, final is
-  `medium` preset.
-- To pin ffmpeg instead of tracking `latest`, copy the dated asset
-  URL and its `sha256` line from the BtbN release page.
+- First run downloads the pose model into `$EDL_AGENT_VAR`; keep the
+  bind mount persistent or it re-downloads every deploy.
+- No Ollama in the image; use API providers.
+- Sizing: measured no-cache run peaks at **~4.6 GB** process-tree RSS
+  (render-only ~1.4 GB), so the homelab's 8 GB cap fits a single
+  flight — don't run concurrent sessions. 2 vCPUs work but slowly
+  (baseline ~13 min on 8 cores); `THREADS` defaults to 4
+  (`web/jobs.py`), which oversubscribes 2 vCPUs without breaking.
+  See `docs/light-device-optimizations.md` for the full analysis.
 
 ### Updating the static build
 
