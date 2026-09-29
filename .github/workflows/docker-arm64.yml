@@ -98,10 +98,11 @@ jobs:
       - name: Contract checks inside the running container
         run: |
           set -eux
+          VENV=/app/.venv/bin/python
           test "$(docker exec edl id -u)" = 1000
-          docker exec edl python -c "import cv2; print(cv2.__version__)"
-          docker exec edl python -c "import torch; assert not torch.cuda.is_available(); print(torch.__version__)"
-          docker exec edl python -c "from edl_agent.paths import VAR; assert str(VAR) == '/tmp/x', VAR"
+          docker exec edl "$VENV" -c "import cv2; print(cv2.__version__)"
+          docker exec edl "$VENV" -c "import torch; assert not torch.cuda.is_available(); print(torch.__version__)"
+          docker exec edl "$VENV" -c "from edl_agent.paths import VAR; assert str(VAR) == '/tmp/x', VAR"
           docker exec edl ffmpeg -hide_banner -buildconf | grep -i -E "gpl|aarch64"
           docker exec edl date +%Z | grep -iE 'nz(st|dt)'
           docker exec edl cat /proc/1/status | grep -E 'VmHWM|VmRSS'
