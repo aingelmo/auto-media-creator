@@ -53,8 +53,16 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Registry (not GHA) cache: the image is multi-GB and would
+          # thrash the 10 GB shared GHA cache budget + LRU itself away.
+          # mode=max caches intermediate stages (the locked-deps layer
+          # is what makes src-only pushes fast).
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
+          # The homelab consumes no attestations; skip the extra
+          # manifest push + compute per build.
+          provenance: "false"
+          sbom: "false"
 
   # Cold-boot the just-pushed image on native ARM and prove the
   # homelab container contract (port, /health, EDL_AGENT_VAR, UID,
