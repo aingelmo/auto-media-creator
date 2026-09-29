@@ -155,6 +155,14 @@ uncompressed image size plus PID 1 `VmHWM`/`VmRSS`. Use the pinned
 `<shortsha>-linuxarm64-gpl` tag from a green run in deploy
 manifests, and copy its reported size/RSS into the homelab notes.
 
+Measured 2026-09-29 (`4e9e1c0-linuxarm64-gpl`, native ARM verify):
+uncompressed **2.40 GB**; cold-boot `/health` 200 on the first
+probe seconds after start; idle PID 1 `VmHWM`/`VmRSS` **~163 MB**
+(`cv2` 5.0.0, `torch` 2.14.0+cpu, `ffmpeg` `--enable-gpl`
+`aarch64`). Render-time peak is workload-dependent — see the
+~4.6 GB process-tree figure in the notes below; the 8 GB cap still
+fits a single flight, don't run concurrent sessions.
+
 Acceptance (run on ARM, not x86 emulation):
 
 ```bash
