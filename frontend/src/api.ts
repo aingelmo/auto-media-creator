@@ -4,6 +4,8 @@ import type {
   Config,
   Edl,
   Hooks,
+  KeyStatus,
+  KeysStatus,
   LoudnessInfo,
   Manifest,
   MediaEntry,
@@ -42,6 +44,20 @@ export const api = {
   listSessions: () => fetch("/api/sessions").then((r) => asJson<SessionListEntry[]>(r)),
 
   getConfig: () => fetch("/api/config").then((r) => asJson<Config>(r)),
+
+  getKeysStatus: () => fetch("/api/settings/keys").then((r) => asJson<KeysStatus>(r)),
+
+  saveApiKey: (provider: string, api_key: string) =>
+    fetch("/api/settings/keys", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, api_key }),
+    }).then((r) => asJson<{ provider: string } & KeyStatus>(r)),
+
+  deleteApiKey: (provider: string) =>
+    fetch(`/api/settings/keys/${encodeURIComponent(provider)}`, {
+      method: "DELETE",
+    }).then((r) => asJson<{ provider: string } & KeyStatus>(r)),
 
   getMedia: () => fetch("/api/media").then((r) => asJson<MediaLibrary>(r)),
 

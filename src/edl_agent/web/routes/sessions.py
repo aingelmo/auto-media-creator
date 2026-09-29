@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from edl_agent.ingest.probe import ffprobe
+from edl_agent.keys import resolve_api_key
 from edl_agent.paths import SESSIONS_DIR
 from edl_agent.selection.s_checks import clean_hook_line
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
@@ -177,11 +178,12 @@ async def create_session(
             no music were supplied.
     """
     key_env = PROVIDER_API_KEY_ENV.get(provider)
-    if key_env and not os.environ.get(key_env):
+    if provider in PROVIDER_API_KEY_ENV and resolve_api_key(provider) is None:
         raise HTTPException(
             status_code=400,
-            detail=f"{key_env} is not set in the server's environment. "
-            f"Export it and restart the web server before running {provider}.",
+            detail=f"{key_env} is not set. Enter it once in Settings "
+            f"(persisted in the data volume) or export it in the server's "
+            f"environment and restart before running {provider}.",
         )
 
     session_dir = SESSIONS_DIR / name

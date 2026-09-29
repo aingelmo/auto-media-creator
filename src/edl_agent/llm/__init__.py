@@ -19,7 +19,9 @@ def get_client(provider: str, **kwargs: Any) -> Any:  # noqa: ANN401 (duck-typed
         provider: One of `PROVIDERS`.
         **kwargs: Passed through to the provider's client constructor
             (e.g. `api_key` for `"anthropic"`/`"deepseek"`, `base_url` for
-            `"ollama"`).
+            `"ollama"`). An omitted/`None` `api_key` falls back to
+            `edl_agent.keys.resolve_api_key` (explicit > env > the
+            UI-persisted file), so CLI and web runs share one resolution.
 
     Returns:
         A client exposing `.interactions.create(...)` and `.sdk_version`.
@@ -27,6 +29,17 @@ def get_client(provider: str, **kwargs: Any) -> Any:  # noqa: ANN401 (duck-typed
     Raises:
         ValueError: If `provider` isn't one of `PROVIDERS`.
     """
+    if kwargs.get("api_key") is None:
+        from edl_agent.keys import resolve_api_key
+
+        resolved = resolve_api_key(provider)
+        if resolved is not None:
+            kwargs["api_key"] = resolved
+        else:
+            # Never hand an explicit `None` down: ctors that take no
+            # `api_key` (e.g. `OllamaClient`) would raise `TypeError`,
+            # and SDK-default env fallback only triggers on absence.
+            kwargs.pop("api_key", None)
     if provider == "gemini":
         from google import genai
 

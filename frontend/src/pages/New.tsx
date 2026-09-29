@@ -9,6 +9,7 @@ import BrandFieldset from "../components/BrandFieldset";
 import { useConfirm } from "../components/confirm";
 import CreateSummary, { type CreateStats } from "../components/CreateSummary";
 import DescribeFields from "../components/DescribeFields";
+import ApiKeyHint from "../components/ApiKeyHint";
 import FormSteps from "../components/FormSteps";
 import MediaLibraryPicker from "../components/MediaLibraryPicker";
 import ProviderModelFields from "../components/ProviderModelFields";
@@ -286,6 +287,7 @@ export default function New() {
               <p className="field-hint">
                 The model plans the cut. Defaults are fine — change only if you know why.
               </p>
+              <ApiKeyHint />
             </details>
           </section>
 

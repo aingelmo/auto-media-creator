@@ -13,8 +13,14 @@ from typing import Any
 
 from fastapi import HTTPException
 
+# Re-exported here so existing importers (`web/routes/sessions.py`) keep
+# working; the canonical definition lives in `edl_agent.keys` next to the
+# resolver that honours env + the persisted file.
+from edl_agent.keys import PROVIDER_API_KEY_ENV
 from edl_agent.paths import SESSIONS_DIR
 from edl_agent.web.jobs import STAGES, JobState
+
+__all__ = ["PROVIDER_API_KEY_ENV", "UI_PROVIDERS"]
 
 # Providers offered in the UI dropdown, deepseek first so it's the default
 # selection; anthropic/gemini stay usable via PROVIDERS for non-UI callers
@@ -23,13 +29,6 @@ from edl_agent.web.jobs import STAGES, JobState
 # adding a provider here needs the frontend type widened plus
 # `npm run build` refreshed into `web/static/` (gitignored).
 UI_PROVIDERS = ("deepseek", "ollama")
-
-# Provider -> env var read by edl_agent.llm.get_client; gemini/ollama use
-# SDK-default/no-auth flows not worth preflighting here.
-PROVIDER_API_KEY_ENV = {
-    "anthropic": "ANTHROPIC_API_KEY",
-    "deepseek": "DEEPSEEK_API_KEY",
-}
 
 # session name -> JobState, for runs started by this process.
 jobs: dict[str, JobState] = {}

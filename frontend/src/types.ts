@@ -28,6 +28,15 @@ export interface Config {
   default_models: Record<string, string>;
 }
 
+export type KeySource = "env" | "server" | "none";
+
+export interface KeyStatus {
+  configured: boolean;
+  source: KeySource;
+}
+
+export type KeysStatus = Record<string, KeyStatus>;
+
 export interface SessionListEntry {
   name: string;
   status: "new" | "running" | "done" | "failed";

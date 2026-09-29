@@ -10,6 +10,7 @@ import New from "./pages/New";
 import Planner from "./pages/Planner";
 import Selection from "./pages/Selection";
 import Session from "./pages/Session";
+import Settings from "./pages/Settings";
 import Studio from "./pages/Studio";
 import Trash from "./pages/Trash";
 
@@ -46,6 +47,9 @@ export default function App() {
           </Link>
           <div className="app-header-actions">
             <TrashLink />
+            <button type="button" onClick={() => navigate("/settings")}>
+              Settings
+            </button>
             <button type="button" onClick={() => navigate("/new")}>
               New session
             </button>
@@ -56,6 +60,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/new" element={<New />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/trash" element={<Trash />} />
             <Route path="/sessions/:name" element={<Session />} />
             <Route path="/studio/:name" element={<Studio />} />
