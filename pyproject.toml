@@ -21,6 +21,13 @@ dependencies = [
     "pyarrow>=25.0.1",
     "python-multipart>=0.0.32",
     "scenedetect>=0.7.1",
+    # Promoted to direct (exact-pinned) deps so the `[tool.uv.sources]`
+    # CPU-torch fork below applies: source overrides only fork the
+    # lock for directly-required packages, not transitive ones.
+    # Keep the pair in sync (torchvision+cpu pairs with torch+cpu);
+    # ultralytics/scenedetect accept these via their `torch>=` ranges.
+    "torch==2.14.0",
+    "torchvision==0.29.0",
     "ultralytics>=8.4.147",
     "uvicorn>=0.52.4",
 ]
@@ -28,6 +35,23 @@ dependencies = [
 [build-system]
 requires = ["uv_build>=0.12.13,<0.13.0"]
 build-backend = "uv_build"
+
+# CPU-only torch on linux/aarch64 (the ARM deploy target has no
+# NVIDIA GPU): the PyPI torch pulls a multi-GB CUDA userspace with
+# no arch guard. Every other platform keeps resolving PyPI, so x86
+# dev machines with CUDA GPUs are unaffected.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" },
+]
+torchvision = [
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" },
+]
 
 [dependency-groups]
 dev = [

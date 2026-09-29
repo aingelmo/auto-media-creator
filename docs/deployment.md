@@ -143,7 +143,7 @@ Container contract (what the homelab wrapper relies on):
 | TZ | Honored for log timestamps (tzdata installed; OS-level, no code support needed) |
 | Secrets | None baked in (`.env` is `.dockerignore`d); pass `ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` with `-e` (full list in `.env.example`) |
 | Networking | No host-port assumptions; Traefik routes to :8000 internally |
-| torch | CPU-only (`torch==<lock>+cpu` from the PyTorch CPU index, same version as `uv.lock`); the PyPI CUDA torch plus its `cuda-*`/`nvidia-*` userspace is evicted at build time — the target has no NVIDIA GPU |
+| torch | CPU-only on linux/aarch64 (`torch==<lock>+cpu` from the PyTorch CPU index, forked in `uv.lock` via `[tool.uv.sources]`; every other platform keeps PyPI) — the target has no NVIDIA GPU, so the PyPI CUDA userspace never enters the ARM image |
 | opencv | `opencv-python-headless` only; the GUI `opencv-python` that `ultralytics`/`scenedetect` pull in is evicted at build time (it was the `libxcb.so.1` crash-loop). The `libgl1`/`libglib2.0-0`/`libxcb1` apt libs stay as belt-and-braces |
 
 Every push that rebuilds the image also cold-boots the pinned tag
