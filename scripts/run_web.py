@@ -1,11 +1,16 @@
 """Launch the local edl-agent web UI.
 
 Usage: uv run scripts/run_web.py [--host HOST] [--port PORT]
+
+`PORT` and `EDL_AGENT_HOST` env vars provide the defaults, so the
+container image honors them without extra flags. Explicit CLI flags
+always win over the env vars.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -14,10 +19,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import uvicorn
 
 
+def _default_port() -> int:
+    try:
+        return int(os.environ.get("PORT", "") or 8000)
+    except ValueError:
+        return 8000
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("EDL_AGENT_HOST", "127.0.0.1"),
+    )
+    parser.add_argument("--port", type=int, default=_default_port())
     parser.add_argument("--no-reload", action="store_true", help="disable autoreload")
     args = parser.parse_args()
     uvicorn.run(
