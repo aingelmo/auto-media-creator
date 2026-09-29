@@ -16,6 +16,8 @@ from pathlib import Path
 import imagehash
 from PIL import Image
 
+from edl_agent.ffmpeg import ffmpeg_bin
+
 FRAME_OFFSETS = (-2, -1, 0, 1, 2)  # proxy frames to compare, at 30 fps
 D0_MAX = 6  # threshold [validate margin] per #4.4
 # Margin between d0 and the neighbors' minimum: in static/slow-motion scenes,
@@ -75,7 +77,7 @@ def _frame_seek_time(t: float, fps: float) -> float:
 
 def _extract_frame(cmd_extra: list[str], src: str, t: float, out_path: Path) -> None:
     cmd = [
-        "ffmpeg",
+        ffmpeg_bin(),
         "-y",
         "-ss",
         str(max(t, 0.0)),

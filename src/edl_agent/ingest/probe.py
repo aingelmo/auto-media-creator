@@ -7,6 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from edl_agent.ffmpeg import ffprobe_bin
 from edl_agent.ingest._common import IngestError, sha256_file
 
 if TYPE_CHECKING:
@@ -29,7 +30,7 @@ def ffprobe(path: Path) -> dict:
     """
     out = subprocess.run(
         [
-            "ffprobe",
+            ffprobe_bin(),
             "-v",
             "quiet",
             "-print_format",

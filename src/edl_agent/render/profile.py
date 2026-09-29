@@ -7,6 +7,7 @@ import json
 import subprocess
 from pathlib import Path
 
+from edl_agent.ffmpeg import ffmpeg_bin
 from edl_agent.render._common import (
     COLOR_FIX_FILTER_TEMPLATE,
     END_CARD_FILTER_TEMPLATE,
@@ -43,7 +44,7 @@ def _dpkg_version(package_prefix: str) -> str | None:
 
 def _ffmpeg_version_info() -> dict:
     out = subprocess.run(
-        ["ffmpeg", "-version"], check=True, capture_output=True, text=True
+        [ffmpeg_bin(), "-version"], check=True, capture_output=True, text=True
     ).stdout
     lines = out.splitlines()
     version = lines[0].split(" ")[2]

@@ -22,6 +22,7 @@ from edl_agent.candidates._common import (
     bbox_area,
     window_bbox,
 )
+from edl_agent.ffmpeg import ffmpeg_bin
 
 
 def _window_iou(a: list[float], b: list[float]) -> float:
@@ -73,7 +74,7 @@ def suppress_peak_windows(windows: list[dict], features: dict) -> list[dict]:
 def _probe_frame(proxy_path: str, t: float, out_path: Path) -> None:
     """Extract one small low-cost JPEG at `t`, for pHash comparison only."""
     cmd = [
-        "ffmpeg",
+        ffmpeg_bin(),
         "-y",
         "-ss",
         str(max(t, 0.0)),

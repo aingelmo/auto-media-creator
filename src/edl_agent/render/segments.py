@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from typing import TYPE_CHECKING
 
+from edl_agent.ffmpeg import ffmpeg_bin
 from edl_agent.render._common import (
     COLOR_ARGS,
     FINAL_TARGET,
@@ -35,7 +36,7 @@ def _run(
 ) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
-        "ffmpeg",
+        ffmpeg_bin(),
         "-y",
         *inputs,
         "-filter_complex",

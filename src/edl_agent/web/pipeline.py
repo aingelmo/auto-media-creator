@@ -10,6 +10,7 @@ from __future__ import annotations
 import traceback
 from typing import TYPE_CHECKING
 
+from edl_agent.ffmpeg import REQUIRED_FILTERS, require_filters
 from edl_agent.session import tonemap_chain_for_manifest
 from edl_agent.web.artifacts import clear_stage_artifacts
 from edl_agent.web.jobs import DISPLAY_STAGES, STAGES, JobState, _JobCancelledError
@@ -85,6 +86,9 @@ def run_pipeline_job(
     job.brief = brief
     job.audience = audience
     try:
+        # Fail fast on a minimal ffmpeg (e.g. brew-first PATH shadowing
+        # a full static build) instead of dying with `exit 8` mid-stage.
+        require_filters(REQUIRED_FILTERS)
         manifest, slots = _run_ingest_stage(
             session_dir, job, resume, music_offset_s, music_duration_s
         )

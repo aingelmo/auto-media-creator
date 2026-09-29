@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from edl_agent.features import free_torch_memory, yolo_pose_detector
+from edl_agent.ffmpeg import REQUIRED_FILTERS, require_filters
 from edl_agent.llm import PROVIDERS, get_client
 from edl_agent.paths import CACHE_DIR, MODELS_DIR
 from edl_agent.render import (
@@ -111,6 +112,7 @@ def _load_json(path: Path) -> dict:
 
 def main() -> None:
     args = parse_args()
+    require_filters(REQUIRED_FILTERS)
     session = args.session
     resume = args.resume
 

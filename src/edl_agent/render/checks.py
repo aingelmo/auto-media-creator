@@ -11,6 +11,8 @@ from pathlib import Path
 import imagehash
 from PIL import Image
 
+from edl_agent.ffmpeg import ffmpeg_bin, ffprobe_bin
+
 
 @dataclass
 class CheckResult:
@@ -24,7 +26,7 @@ class CheckResult:
 def _nb_read_frames(path: Path) -> int:
     out = subprocess.run(
         [
-            "ffprobe",
+            ffprobe_bin(),
             "-v",
             "quiet",
             "-count_frames",
@@ -65,7 +67,7 @@ def _phash_frame(path: Path, frame_index: int, tmp_dir: Path) -> imagehash.Image
     out_png = tmp_dir / f"{path.stem}_{frame_index}.png"
     subprocess.run(
         [
-            "ffmpeg",
+            ffmpeg_bin(),
             "-y",
             "-i",
             str(path),
@@ -145,7 +147,7 @@ def check_r3_reel_duration(reel_path: Path, duration_f: int) -> CheckResult:
     probe = json.loads(
         subprocess.run(
             [
-                "ffprobe",
+                ffprobe_bin(),
                 "-v",
                 "quiet",
                 "-print_format",
@@ -191,7 +193,7 @@ def check_r4_color(path: Path) -> CheckResult:
     stream = json.loads(
         subprocess.run(
             [
-                "ffprobe",
+                ffprobe_bin(),
                 "-v",
                 "quiet",
                 "-print_format",
@@ -268,7 +270,7 @@ def check_r6_monotonic_dts(reel_path: Path) -> CheckResult:
     """
     out = subprocess.run(
         [
-            "ffprobe",
+            ffprobe_bin(),
             "-v",
             "quiet",
             "-select_streams",

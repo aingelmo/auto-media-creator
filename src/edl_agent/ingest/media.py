@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 import pillow_heif
 from PIL import Image, ImageOps
 
+from edl_agent.ffmpeg import ffmpeg_bin
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -54,7 +56,7 @@ def cut_music(
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
-        "ffmpeg",
+        ffmpeg_bin(),
         "-y",
         "-ss",
         str(offset_s),

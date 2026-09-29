@@ -7,6 +7,8 @@ from pathlib import Path
 
 from PIL import ImageFont
 
+from edl_agent.ffmpeg import ffmpeg_bin, has_filter
+
 FINAL_TARGET = {"w": 1080, "h": 1920}
 PREVIEW_TARGET = {"w": 540, "h": 960}
 
@@ -178,6 +180,12 @@ def hook_text_filter(clip: dict, out_path: Path) -> str:
     p = clip.get("effect_params", {})
     if not p.get("text"):
         return ""
+    if not has_filter("ass"):
+        msg = (
+            "hook text needs the ffmpeg `ass` filter, missing from "
+            f"{ffmpeg_bin()} (see docs/deployment.md #2)"
+        )
+        raise RenderError(msg)
     size = p["font_size"]
     outline = max(3, round(size * 0.065))
     shadow = max(2, round(outline * 0.5))

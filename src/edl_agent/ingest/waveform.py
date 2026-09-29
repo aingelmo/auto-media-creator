@@ -13,6 +13,8 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 
+from edl_agent.ffmpeg import ffmpeg_bin
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -60,7 +62,7 @@ def extract_peaks(
             (unsupported codec, corrupt container, missing input).
         FileNotFoundError: If the `ffmpeg` binary is not on `PATH`.
     """
-    cmd = ["ffmpeg", "-v", "error"]
+    cmd = [ffmpeg_bin(), "-v", "error"]
     if start_s is not None and start_s > 0:
         cmd += ["-ss", str(max(0.0, start_s))]
     cmd += ["-i", str(path)]
@@ -104,7 +106,7 @@ def measure_loudness(path: Path) -> dict[str, float | None]:
     try:
         out = subprocess.run(
             [
-                "ffmpeg",
+                ffmpeg_bin(),
                 "-v",
                 "info",
                 "-i",

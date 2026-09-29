@@ -7,6 +7,8 @@ import statistics
 import subprocess
 from typing import TYPE_CHECKING
 
+from edl_agent.ffmpeg import ffprobe_bin
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -29,7 +31,7 @@ def measure_clip_color(path: str, in_s: float, dur_s: float) -> dict:
     """
     entries = ",".join(f"lavfi.signalstats.{k}" for k in _KEYS.values())
     cmd = [
-        "ffprobe",
+        ffprobe_bin(),
         "-v",
         "error",
         "-f",

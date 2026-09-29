@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import functools
 import subprocess
 from typing import TYPE_CHECKING
 
+from edl_agent.ffmpeg import ffmpeg_bin, has_filter
 from edl_agent.ingest._common import IngestError
 
 if TYPE_CHECKING:
@@ -34,26 +34,9 @@ TONEMAP_CHAIN_HLG = (
 TONEMAP_CHAIN_HLG_BASIC = "tonemap=mobius:desat=0,colorspace=all=bt709:iall=bt2020"
 
 
-@functools.lru_cache(maxsize=1)
 def _has_zscale() -> bool:
-    """Check whether this machine's ffmpeg provides the `zscale` filter.
-
-    Note: `ffmpeg -h filter=<unknown>` still exits 0, so the return
-    code is useless here; parse the `-filters` listing instead.
-    """
-    try:
-        proc = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-filters"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return False
-    return any(
-        line.split()[1:2] == ["zscale"]
-        for line in (proc.stdout or "").splitlines()
-    )
+    """Check whether this machine's ffmpeg provides the `zscale` filter."""
+    return has_filter("zscale")
 
 
 def tonemap_chain_hlg() -> str:
@@ -107,7 +90,7 @@ def build_proxy(info: VideoSourceInfo, out_path: Path, threads: int = 4) -> Path
         raise IngestError(msg)
 
     cmd = [
-        "ffmpeg",
+        ffmpeg_bin(),
         "-y",
         "-i",
         info.src,

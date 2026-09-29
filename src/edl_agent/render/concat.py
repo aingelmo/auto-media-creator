@@ -7,6 +7,7 @@ import re
 import subprocess
 from typing import TYPE_CHECKING
 
+from edl_agent.ffmpeg import ffmpeg_bin
 from edl_agent.render._common import SFX_FILTER_TEMPLATE, RenderError
 
 if TYPE_CHECKING:
@@ -155,7 +156,7 @@ def concat_and_audio(
 
     if audio["music_cut_path"] is None:
         cmd = [
-            "ffmpeg",
+            ffmpeg_bin(),
             "-y",
             "-f",
             "concat",
@@ -176,7 +177,7 @@ def concat_and_audio(
     music_path = session_dir / audio["music_cut_path"]
 
     measure_cmd = [
-        "ffmpeg",
+        ffmpeg_bin(),
         "-t",
         str(duration_s),
         "-i",
@@ -229,7 +230,7 @@ def concat_and_audio(
         f"{tail}[a]"
     )
     render_cmd = [
-        "ffmpeg",
+        ffmpeg_bin(),
         "-y",
         "-f",
         "concat",

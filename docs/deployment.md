@@ -44,6 +44,25 @@ cp ffmpeg-master-latest-linux64-gpl/bin/{ffmpeg,ffprobe} ~/.local/bin/
 Ensure the install dir precedes any brew/apt ffmpeg in `PATH`.
 This dev machine uses `~/.local/bin`, which already shadows linuxbrew.
 
+### PATH pitfalls and the `EDL_AGENT_FFMPEG` override
+
+Every stage resolves the binary through a shared helper
+(`edl_agent.ffmpeg`), but it still starts from the **server
+process's** `PATH` — which can differ from your shell (e.g. a
+brew-first login shell), silently picking the minimal build. Two
+guardrails cover this:
+
+- Set `EDL_AGENT_FFMPEG=/path/to/ffmpeg` to pin the binary
+  explicitly (`ffprobe` is resolved as its sibling when present,
+  else via `PATH`). Recommended whenever `which ffmpeg` disagrees
+  between shells.
+- Every job (web pipeline and `scripts/run_e2e.py`) runs a
+  preflight first: if the resolved binary lacks a filter the
+  graphs need (`drawtext`, `ass`, `tonemap`, `colorspace` —
+  `zscale` is exempt, the fallback chain covers it), the job fails
+  immediately naming the binary and the missing filters instead of
+  dying with `exit 8` mid-render.
+
 ## 3. Required filters (preflight)
 
 Every stage resolves `ffmpeg` from `PATH`. After installing, assert:
