@@ -134,7 +134,7 @@ def test_rotation_read_from_display_matrix_side_data() -> None:
 
 
 def test_hlg_classified_and_proxy_verifies(session_dir) -> None:
-    from edl_agent.ingest import TONEMAP_CHAIN_HLG
+    from edl_agent.ingest import tonemap_chain_hlg
 
     clip = session_dir / "inputs" / "hlg.mp4"
     _make_clip(clip, w=1280, h=720, hlg=True, duration=2)
@@ -143,7 +143,9 @@ def test_hlg_classified_and_proxy_verifies(session_dir) -> None:
 
     proxy = session_dir / "proxies" / "hlg.mp4"
     build_proxy(info, proxy)
-    ok, results = verify_source(str(clip), str(proxy), tonemap_chain=TONEMAP_CHAIN_HLG)
+    ok, results = verify_source(
+        str(clip), str(proxy), tonemap_chain=tonemap_chain_hlg()
+    )
     assert ok, results
 
 
@@ -166,6 +168,81 @@ def test_start_time_offset_does_not_break_verification(session_dir) -> None:
 # -avoid_negative_ts to shift the whole proxy timeline forward by the
 # reorder delay (~2 frames), so the proxy's video pts started at ~0.066s
 # instead of 0 and every early comparison landed 2 frames off. See #4.4.
+# sin zscale (p. ej. linuxbrew ffmpeg 9) el proxy HDR usa la cadena
+# fallback; con zscale, la calibrada. La seleccion la comparten proxy,
+# verify y render via tonemap_chain_hlg().
+def test_tonemap_chain_selector_follows_zscale_availability(monkeypatch) -> None:
+    import edl_agent.ingest.proxy as proxy_module
+    from edl_agent.ingest import TONEMAP_CHAIN_HLG, TONEMAP_CHAIN_HLG_BASIC
+
+    monkeypatch.setattr(proxy_module, "_has_zscale", lambda: True)
+    assert proxy_module.tonemap_chain_hlg() == TONEMAP_CHAIN_HLG
+
+    monkeypatch.setattr(proxy_module, "_has_zscale", lambda: False)
+    assert proxy_module.tonemap_chain_hlg() == TONEMAP_CHAIN_HLG_BASIC
+
+
+def _fake_hlg_info() -> Any:
+    from edl_agent.ingest import VideoSourceInfo
+
+    return VideoSourceInfo(
+        src="clip.mov",
+        sha256="0" * 64,
+        type="video",
+        raw_w=720,
+        raw_h=1280,
+        rotation=0,
+        w=720,
+        h=1280,
+        duration_s=2.0,
+        start_time_s=0.0,
+        nb_frames_est=60,
+        vfr=False,
+        src_fps_nominal=30,
+        hdr="hlg",
+        color={},
+        has_audio=False,
+    )
+
+
+def test_build_proxy_uses_fallback_vf_without_zscale(
+    session_dir, monkeypatch
+) -> None:
+    import edl_agent.ingest.proxy as proxy_module
+    from edl_agent.ingest import TONEMAP_CHAIN_HLG_BASIC
+
+    seen: dict = {}
+
+    def fake_run(cmd, **kwargs: Any) -> Any:
+        seen["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(proxy_module, "_has_zscale", lambda: False)
+    monkeypatch.setattr(proxy_module.subprocess, "run", fake_run)
+    proxy_module.build_proxy(_fake_hlg_info(), session_dir / "proxies" / "c.mp4")
+
+    vf = seen["cmd"][seen["cmd"].index("-vf") + 1]
+    assert TONEMAP_CHAIN_HLG_BASIC in vf
+    assert "zscale" not in vf
+
+
+def test_build_proxy_ffmpeg_failure_reports_stderr(
+    session_dir, monkeypatch
+) -> None:
+    import edl_agent.ingest.proxy as proxy_module
+
+    def failing_run(cmd, **kwargs: Any) -> Any:
+        raise subprocess.CalledProcessError(
+            8, cmd, output="", stderr="No such filter: 'zscale'\n"
+        )
+
+    monkeypatch.setattr(proxy_module.subprocess, "run", failing_run)
+    with pytest.raises(IngestError, match="No such filter"):
+        proxy_module.build_proxy(
+            _fake_hlg_info(), session_dir / "proxies" / "c.mp4"
+        )
+
+
 def test_proxy_video_pts_starts_at_zero(session_dir) -> None:
     clip = session_dir / "inputs" / "a.mp4"
     _make_clip(clip, w=640, h=360, duration=2)

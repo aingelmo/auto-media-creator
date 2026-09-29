@@ -28,11 +28,17 @@ from edl_agent.ingest.probe import (
     post_rotation_dims,
     probe_video_source,
 )
-from edl_agent.ingest.proxy import TONEMAP_CHAIN_HLG, build_proxy
+from edl_agent.ingest.proxy import (
+    TONEMAP_CHAIN_HLG,
+    TONEMAP_CHAIN_HLG_BASIC,
+    build_proxy,
+    tonemap_chain_hlg,
+)
 
 __all__ = [
     "TARGET",
     "TONEMAP_CHAIN_HLG",
+    "TONEMAP_CHAIN_HLG_BASIC",
     "IngestError",
     "VideoSourceInfo",
     "_fps",
@@ -54,5 +60,6 @@ __all__ = [
     "source_cache_dir",
     "store_info",
     "tmp_path",
+    "tonemap_chain_hlg",
     "write_manifest",
 ]

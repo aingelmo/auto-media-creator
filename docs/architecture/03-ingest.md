@@ -78,6 +78,7 @@ Notas:
 - `npl=203` con HLG: blanco de referencia HLG (BT.2408). Con `npl=1000` los clips DV84 salían a Y≈62 frente a Y≈110 de los SDR de la misma escena; con 203 quedan en Y≈100-127 (medido 2026-09-15). Alternativa no adoptada, `libplacebo`:
   `libplacebo=colorspace=bt709:color_primaries=bt709:color_trc=bt709:tonemapping=bt.2390:format=yuv420p` (requiere build con Vulkan; en Docker sin GPU exige lavapipe, rendimiento `[validar]`). Aviso: en libplacebo `apply_dolbyvision` está activo por defecto y con RPU presente la salida interna pasa a BT.2020+PQ `[verificado: doc vf_libplacebo]`; para que DV 8.4 se trate igual que HLG hay que pasar `apply_dolbyvision=false`.
 - La cadena de tonemap elegida se guarda en `render_profile.tonemap_chain` y se usa idéntica en proxy, preview y render.
+- Fallback sin `zscale`: algunos builds de ffmpeg (p. ej. linuxbrew ffmpeg 9) traen `tonemap`+`colorspace` pero no `zscale`; ahí el código usa `tonemap=mobius:desat=0,colorspace=all=bt709:iall=bt2020` (misma selección en proxy, verify y render vía `tonemap_chain_hlg()`). Se usa mobius y no hable porque hable alimentado con entrada HLG sin linealizar aplasta los medios (Y≈57 frente a Y≈110 de SDR de la misma escena; mobius queda en Y≈117, verificado visualmente 2026-09-29). `iall=bt2020` explícito porque sin lado de entrada `colorspace` falla en vez de leer los metadatos del frame.
 - `-g 30`: keyframe cada segundo para que `-ss` sobre el proxy (extracción de JPEG de pico, preview) sea rápido y exacto.
 
 ### 3.3 Imágenes

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from edl_agent.ingest import (
-    TONEMAP_CHAIN_HLG,
     IngestError,
     build_manifest,
     build_proxy,
@@ -17,6 +16,7 @@ from edl_agent.ingest import (
     sha256_file,
     store_info,
     tmp_path,
+    tonemap_chain_hlg,
     write_manifest,
 )
 from edl_agent.session._common import IMAGE_EXTS, MUSIC_EXTS, VIDEO_EXTS
@@ -95,7 +95,9 @@ def run_ingest(
                 if cache_root:
                     build_target.replace(proxy_target)
 
-                tonemap_chain = TONEMAP_CHAIN_HLG if info.hdr in ("hlg", "dv84") else ""
+                tonemap_chain = (
+                    tonemap_chain_hlg() if info.hdr in ("hlg", "dv84") else ""
+                )
                 verified, results = verify_source(
                     original=str(path),
                     proxy=str(proxy_target),

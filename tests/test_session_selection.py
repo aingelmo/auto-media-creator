@@ -57,10 +57,10 @@ def _manifest(hdr="none"):
 
 
 def test_tonemap_chain_for_manifest_hlg_and_dv84() -> None:
-    from edl_agent.ingest import TONEMAP_CHAIN_HLG
+    from edl_agent.ingest import tonemap_chain_hlg
 
-    assert session.tonemap_chain_for_manifest(_manifest("hlg")) == TONEMAP_CHAIN_HLG
-    assert session.tonemap_chain_for_manifest(_manifest("dv84")) == TONEMAP_CHAIN_HLG
+    assert session.tonemap_chain_for_manifest(_manifest("hlg")) == tonemap_chain_hlg()
+    assert session.tonemap_chain_for_manifest(_manifest("dv84")) == tonemap_chain_hlg()
 
 
 def test_tonemap_chain_for_manifest_none_for_sdr() -> None:
