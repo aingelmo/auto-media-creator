@@ -99,10 +99,11 @@ def list_sessions() -> list[dict]:
 def _link_ref(ref: str, dest_dir: Path, dest_name: str) -> None:
     """Symlink a `"{session}/{path}"` picker ref into `dest_dir/dest_name`.
 
-    Mirrors `ingest.cache.link_into`'s symlink-to-resolved-absolute-path
-    pattern. Raises 400/404 if the ref doesn't resolve to a real file
-    inside `SESSIONS_DIR` (same containment check as
-    `routes/files.py:session_file`).
+    The link is relative (from `dest_dir` to the resolved source), so it
+    survives the runtime data root being mounted at a different path and a
+    session being trashed and restored. Raises 400/404 if the ref doesn't
+    resolve to a real file inside `SESSIONS_DIR` (same containment check
+    as `routes/files.py:session_file`).
     """
     ref_session, _, ref_path = ref.partition("/")
     if not ref_session or not ref_path:
@@ -124,7 +125,7 @@ def _link_ref(ref: str, dest_dir: Path, dest_name: str) -> None:
     while dest.exists():
         dest = dest_dir / f"{stem}_{n}{suffix}"
         n += 1
-    dest.symlink_to(src_path)
+    dest.symlink_to(os.path.relpath(src_path, dest_dir.resolve()))
 
 
 @router.post("/api/sessions")

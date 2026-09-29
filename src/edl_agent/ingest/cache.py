@@ -85,13 +85,18 @@ def store_info(cache_root: Path, info: VideoSourceInfo, verified: bool) -> None:
 def link_into(session_path: Path, cache_path: Path) -> None:
     """Symlink `session_path` to `cache_path`, replacing any existing file/link.
 
+    The link is relative (from `session_path`'s parent to `cache_path`), so
+    it survives the runtime data root being mounted at a different path
+    (e.g. `./var` locally vs `/data/edl-agent` in the container) and a
+    session directory being moved aside into the trash and back.
+
     Args:
         session_path: Path inside the session (e.g. `proxies/<stem>.mp4`);
             its parent directory is created if missing.
-        cache_path: Target inside the cache; resolved to an absolute path
-            so the symlink survives regardless of the session's location.
+        cache_path: Target inside the cache.
     """
     session_path.parent.mkdir(parents=True, exist_ok=True)
     if session_path.exists() or session_path.is_symlink():
         session_path.unlink()
-    session_path.symlink_to(cache_path.resolve())
+    rel = os.path.relpath(cache_path.resolve(), session_path.parent.resolve())
+    session_path.symlink_to(rel)
