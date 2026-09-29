@@ -215,6 +215,85 @@ export function createSessionWithProgress(
   });
 }
 
+/** Per-request chunk size for resumable uploads (matches backend `CHUNK_SIZE`). */
+export const UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024;
+
+/** Total payload above this uses the chunked path instead of one multipart POST. */
+export const CHUNKED_THRESHOLD_TOTAL = 50 * 1024 * 1024;
+
+/** Any single file above this forces the chunked path (Cloudflare caps at 100 MB). */
+export const CHUNKED_THRESHOLD_SINGLE = 90 * 1024 * 1024;
+
+export type UploadKind = "clip" | "music" | "logo";
+
+export interface ChunkedUploadRef {
+  upload_id: string;
+  ref: string;
+  filename: string;
+  size: number;
+}
+
+/**
+ * Upload one file in <=8 MB chunks so arbitrarily large sessions fit
+ * through a 100 MB-capped reverse proxy (Cloudflare free/pro returns
+ * 413 for bigger single bodies before the app is reached).
+ */
+export async function uploadFileChunked(
+  file: File,
+  kind: UploadKind,
+  sessionName: string,
+  onProgress?: (loadedBytes: number, totalBytes: number) => void,
+): Promise<ChunkedUploadRef> {
+  const initRes = await fetch("/api/uploads/init", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_name: sessionName,
+      kind,
+      filename: file.name,
+      size: file.size,
+    }),
+  });
+  if (!initRes.ok) {
+    const body = await initRes.json().catch(() => ({}));
+    throw new ApiError(initRes.status, body.detail ?? initRes.statusText);
+  }
+  const { upload_id } = (await initRes.json()) as { upload_id: string; chunk_size: number };
+  let loaded = 0;
+  onProgress?.(0, file.size);
+  const totalChunks = Math.max(1, Math.ceil(file.size / UPLOAD_CHUNK_SIZE));
+  for (let index = 0; index < totalChunks; index++) {
+    const offset = index * UPLOAD_CHUNK_SIZE;
+    const slice = file.slice(offset, offset + UPLOAD_CHUNK_SIZE);
+    const params = new URLSearchParams({ index: String(index), offset: String(offset) });
+    const putRes = await fetch(`/api/uploads/${encodeURIComponent(upload_id)}/chunk?${params}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: slice,
+    });
+    if (!putRes.ok) {
+      const body = await putRes.json().catch(() => ({}));
+      if (putRes.status === 413) {
+        throw new ApiError(
+          putRes.status,
+          `Chunk rejected with 413 — the proxy caps single requests below 8 MB? (${body.detail ?? putRes.statusText})`,
+        );
+      }
+      throw new ApiError(putRes.status, body.detail ?? putRes.statusText);
+    }
+    loaded = Math.min(file.size, offset + slice.size);
+    onProgress?.(loaded, file.size);
+  }
+  const doneRes = await fetch(`/api/uploads/${encodeURIComponent(upload_id)}/complete`, {
+    method: "POST",
+  });
+  if (!doneRes.ok) {
+    const body = await doneRes.json().catch(() => ({}));
+    throw new ApiError(doneRes.status, body.detail ?? doneRes.statusText);
+  }
+  return (await doneRes.json()) as ChunkedUploadRef;
+}
+
 export function peakUrl(name: string, path: string): string {
   return `/sessions/${encodeURIComponent(name)}/files/${path}`;
 }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -24,6 +25,7 @@ from edl_agent.web.pipeline import (
     run_pipeline_job,
 )
 from edl_agent.web.routes.config import save_brand
+from edl_agent.web.routes.uploads import claim_completed_upload
 from edl_agent.web.stages.music import MUSIC_MAX_DURATION_S, MUSIC_MIN_DURATION_S
 from edl_agent.web.state import (
     PROVIDER_API_KEY_ENV,
@@ -140,6 +142,9 @@ async def create_session(
     clip_refs: list[str] = Form([]),
     music_ref: str = Form(""),
     logo: UploadFile | None = None,
+    clip_upload_ids: list[str] = Form([]),
+    music_upload_id: str = Form(""),
+    logo_upload_id: str = Form(""),
     handle: str = Form(""),
     brief: str = Form(""),
     audience: str = Form("prospects"),
@@ -152,6 +157,11 @@ async def create_session(
     picked from a past session's already-on-disk files (`clip_refs`/
     `music_ref`, each `"{session}/{path}"` from `GET /api/media`) — the two
     are symlinked/copied together into the new session's `inputs`/`music`.
+    Large files that went through the chunked API
+    (`routes/uploads.py:init_upload`, for proxies capping bodies at
+    100 MB) arrive via `clip_upload_ids`/`music_upload_id`/
+    `logo_upload_id` instead: each id must already be `complete`d for
+    this `name`/kind, and its final file is counted like a fresh upload.
 
     Args:
         background_tasks: FastAPI background runner for the pipeline job.
@@ -163,6 +173,9 @@ async def create_session(
         clip_refs: Library clip refs to symlink in.
         music_ref: Library music ref to symlink in.
         logo: Optional brand logo upload.
+        clip_upload_ids: Completed chunked clip upload ids for `name`.
+        music_upload_id: Completed chunked music upload id for `name`.
+        logo_upload_id: Completed chunked logo upload id for `name`.
         handle: Optional brand handle for watermark/end card.
         brief: Operator-typed session brief.
         audience: `"prospects"` | `"members"`.
@@ -204,6 +217,14 @@ async def create_session(
     for ref in clip_refs:
         _link_ref(ref, inputs_dir, Path(ref).name)
         clip_count += 1
+    for upload_id in clip_upload_ids:
+        claimed = claim_completed_upload(upload_id, name, "clip")
+        inputs_root = inputs_dir.resolve()
+        if inputs_root not in claimed.parents and claimed != inputs_root:
+            dest = inputs_dir / claimed.name
+            if not dest.exists():
+                shutil.copyfile(claimed, dest)
+        clip_count += 1
     if clip_count == 0:
         raise HTTPException(status_code=400, detail="at least one clip is required")
 
@@ -222,10 +243,32 @@ async def create_session(
     elif music_ref:
         _link_ref(music_ref, music_dir, Path(music_ref).name)
         have_music = True
+    if music_upload_id:
+        claimed = claim_completed_upload(music_upload_id, name, "music")
+        music_root = music_dir.resolve()
+        if music_root not in claimed.parents and claimed != music_root:
+            dest = music_dir / claimed.name
+            if not dest.exists():
+                shutil.copyfile(claimed, dest)
+        have_music = True
     if not have_music:
         raise HTTPException(status_code=400, detail="a music track is required")
 
     save_brand(session_dir, logo, handle)
+    if logo_upload_id:
+        claimed = claim_completed_upload(logo_upload_id, name, "logo")
+        brand_dir = session_dir / "brand"
+        brand_dir.mkdir(exist_ok=True)
+        target = brand_dir / "logo.png"
+        if claimed.resolve() != target.resolve():
+            shutil.copyfile(claimed, target)
+        (brand_dir / "brand.json").write_text(
+            json.dumps(
+                {"logo": "brand/logo.png", "handle": handle.strip()},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
 
     job = JobState()
     with lock:

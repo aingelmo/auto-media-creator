@@ -27,6 +27,7 @@ from edl_agent.web.routes import (
     stages,
     studio,
     trash,
+    uploads,
     waveform,
 )
 
@@ -55,6 +56,7 @@ app.include_router(settings.router)
 app.include_router(media.router)
 app.include_router(trash.router)
 app.include_router(waveform.router)
+app.include_router(uploads.router)
 
 
 @app.get("/health", include_in_schema=False)

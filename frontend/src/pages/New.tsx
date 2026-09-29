@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, createSessionWithProgress } from "../api";
+import {
+  ApiError,
+  CHUNKED_THRESHOLD_SINGLE,
+  CHUNKED_THRESHOLD_TOTAL,
+  createSessionWithProgress,
+  uploadFileChunked,
+} from "../api";
 import { api } from "../api";
 import { getFormMemory, saveFormMemory } from "../formMemory";
 import { clearDraft, loadDraft, suggestName, useCreateDraft } from "../useCreateDraft";
@@ -175,6 +181,99 @@ export default function New() {
     }
     saveFormMemory(formData);
     try {
+      const clipFiles = formData
+        .getAll("clips")
+        .filter((v): v is File => v instanceof File && v.size > 0 && v.name !== "");
+      const musicFile =
+        formData
+          .getAll("music")
+          .find((v): v is File => v instanceof File && v.size > 0 && v.name !== "") ?? null;
+      const logoFile =
+        formData
+          .getAll("logo")
+          .find((v): v is File => v instanceof File && v.size > 0 && v.name !== "") ?? null;
+      const freshFiles = [
+        ...clipFiles,
+        ...(musicFile ? [musicFile] : []),
+        ...(logoFile ? [logoFile] : []),
+      ];
+      const totalBytes = freshFiles.reduce((acc, f) => acc + f.size, 0);
+      const maxSingle = freshFiles.reduce((acc, f) => Math.max(acc, f.size), 0);
+      const useChunked =
+        totalBytes > CHUNKED_THRESHOLD_TOTAL || maxSingle > CHUNKED_THRESHOLD_SINGLE;
+      if (useChunked) {
+        // Chunked path: each file goes up in <=8 MB PUTs (fits through a
+        // 100 MB-capped proxy), then the session is created with only
+        // upload-ids + refs + text fields (tiny body).
+        const sizes = [
+          ...clipFiles.map((f) => f.size),
+          ...(musicFile ? [musicFile.size] : []),
+          ...(logoFile ? [logoFile.size] : []),
+        ];
+        const loaded = sizes.map(() => 0);
+        const report = () => {
+          const done = loaded.reduce((a, b) => a + b, 0);
+          const total = sizes.reduce((a, b) => a + b, 0);
+          const pct = total > 0 ? Math.round((done / total) * 100) : 100;
+          setStatus(`Uploading: ${formatMb(done)} / ${formatMb(total)} MB (${pct}%)`);
+        };
+        report();
+        const clipJobs = clipFiles.map((f, i) =>
+          uploadFileChunked(f, "clip", name, (l) => {
+            loaded[i] = l;
+            report();
+          }),
+        );
+        let idx = clipFiles.length;
+        const musicIdx = musicFile ? idx++ : -1;
+        const logoIdx = logoFile ? idx++ : -1;
+        const musicJob = musicFile
+          ? uploadFileChunked(musicFile, "music", name, (l) => {
+              loaded[musicIdx] = l;
+              report();
+            })
+          : null;
+        const logoJob = logoFile
+          ? uploadFileChunked(logoFile, "logo", name, (l) => {
+              loaded[logoIdx] = l;
+              report();
+            })
+          : null;
+        const [clipRefs2, musicDone, logoDone] = await Promise.all([
+          Promise.all(clipJobs),
+          musicJob,
+          logoJob,
+        ]);
+        const tiny = new FormData();
+        for (const [key, value] of formData.entries()) {
+          // Re-added explicitly below (plus upload ids); copying them here
+          // would duplicate every library ref.
+          if (typeof value !== "string") continue;
+          if (key === "clip_refs" || key === "music_ref") continue;
+          if (key === "music_offset" || key === "music_duration") continue;
+          tiny.append(key, value);
+        }
+        for (const ref of clipRefs) tiny.append("clip_refs", ref);
+        tiny.set("music_ref", musicRef);
+        if (musicOffset != null && musicDuration != null) {
+          tiny.set("music_offset", String(musicOffset));
+          tiny.set("music_duration", String(musicDuration));
+        }
+        for (const u of clipRefs2) tiny.append("clip_upload_ids", u.upload_id);
+        if (musicDone) tiny.set("music_upload_id", musicDone.upload_id);
+        if (logoDone) tiny.set("logo_upload_id", logoDone.upload_id);
+        saveFormMemory(tiny);
+        setStatus("Upload complete, saving session and launching pipeline...");
+        const res = await fetch("/api/sessions", { method: "POST", body: tiny });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new ApiError(res.status, body.detail ?? res.statusText);
+        }
+        const { name: created } = (await res.json()) as { name: string };
+        clearDraft();
+        navigate(`/studio/${created}`);
+        return;
+      }
       const { name: created } = await createSessionWithProgress(formData, (loaded, total) => {
         const pct = Math.round((loaded / total) * 100);
         setStatus(`Uploading: ${formatMb(loaded)} / ${formatMb(total)} MB (${pct}%)`);
