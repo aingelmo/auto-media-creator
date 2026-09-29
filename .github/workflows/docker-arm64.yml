@@ -70,9 +70,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull pinned image and report uncompressed size
+      - name: Resolve pinned image ref
         run: |
           echo "REF=ghcr.io/${{ github.repository }}:${GITHUB_SHA:0:7}-linuxarm64-gpl" >> "$GITHUB_ENV"
+
+      - name: Pull pinned image and report uncompressed size
+        run: |
           docker pull "$REF"
           SIZE="$(docker image inspect --format '{{.Size}}' "$REF")"
           python3 -c "print(f'uncompressed: ${SIZE} bytes = {${SIZE}/1e9:.2f} GB')"
