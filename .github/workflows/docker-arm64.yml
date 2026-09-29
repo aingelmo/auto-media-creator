@@ -55,3 +55,65 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Cold-boot the just-pushed image on native ARM and prove the
+  # homelab container contract (port, /health, EDL_AGENT_VAR, UID,
+  # TZ, headless cv2, CPU torch, GPL ffmpeg) plus report the
+  # uncompressed size and RSS the deploy manifest is sized against.
+  verify:
+    needs: build-push
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull pinned image and report uncompressed size
+        run: |
+          echo "REF=ghcr.io/${{ github.repository }}:${GITHUB_SHA:0:7}-linuxarm64-gpl" >> "$GITHUB_ENV"
+          docker pull "$REF"
+          SIZE="$(docker image inspect --format '{{.Size}}' "$REF")"
+          python3 -c "print(f'uncompressed: ${SIZE} bytes = {${SIZE}/1e9:.2f} GB')"
+
+      - name: Cold run and probe GET /health (120s budget)
+        run: |
+          set -eux
+          mkdir -p /tmp/x && sudo chown 1000:1000 /tmp/x
+          docker run -d --platform linux/arm64 --name edl \
+            -p 8000:8000 \
+            -e EDL_AGENT_VAR=/tmp/x -v /tmp/x:/tmp/x \
+            -e TZ=Pacific/Auckland \
+            "$REF"
+          for _ in $(seq 1 24); do
+            curl -sf http://127.0.0.1:8000/health && break
+            sleep 5
+          done
+          curl -sf http://127.0.0.1:8000/health
+
+      - name: Contract checks inside the running container
+        run: |
+          set -eux
+          test "$(docker exec edl id -u)" = 1000
+          docker exec edl python -c "import cv2; print(cv2.__version__)"
+          docker exec edl python -c "import torch; assert not torch.cuda.is_available(); print(torch.__version__)"
+          docker exec edl python -c "from edl_agent.paths import VAR; assert str(VAR) == '/tmp/x', VAR"
+          docker exec edl ffmpeg -hide_banner -buildconf | grep -i -E "gpl|aarch64"
+          docker exec edl date +%Z | grep -iE 'nz(st|dt)'
+          docker exec edl cat /proc/1/status | grep -E 'VmHWM|VmRSS'
+
+      - name: PORT env is honored
+        run: |
+          set -eux
+          docker run -d --platform linux/arm64 --name edl-port \
+            -p 8001:8001 -e PORT=8001 "$REF"
+          for _ in $(seq 1 12); do
+            curl -sf http://127.0.0.1:8001/health && break
+            sleep 5
+          done
+          curl -sf http://127.0.0.1:8001/health
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f edl edl-port || true

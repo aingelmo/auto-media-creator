@@ -17,9 +17,11 @@ RUN npm run build
 # ---- runtime ----
 FROM python:3.14-slim
 
-# tzdata: TZ env honored for log timestamps. libgomp1: torch/opencv
-# runtime. libgl1/libglib2.0-0/libxcb1: opencv-python-headless 5.x links
-# these at import. curl/xz-utils/ca-certificates: ffmpeg fetch below.
+# tzdata: TZ env honored for log timestamps. libgomp1: torch/numpy
+# runtime. libgl1/libglib2.0-0/libxcb1: belt-and-braces for
+# opencv/scipy native libs (the image ships headless opencv only,
+# see below, but a GUI-linked .so anywhere in the tree must still
+# find these at import instead of crash-looping the server).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl libgl1 libglib2.0-0 libgomp1 libxcb1 tzdata \
       xz-utils \
@@ -27,13 +29,50 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Created early so the dependency layer below can hand ownership
+# over in the same RUN (a later `chown -R` would duplicate the
+# ~2 GB venv in a second layer).
+RUN useradd -m -u 1000 appuser
+
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
 COPY src/ ./src/
 COPY scripts/ ./scripts/
-RUN uv sync --frozen --no-dev
 COPY --from=frontend /app/src/edl_agent/web/static/ ./src/edl_agent/web/static/
+# Single RUN so deleted bytes never persist in an earlier layer
+# (overlayfs whiteouts don't shrink the image). What it does:
+# 1. Full locked install (this pulls the PyPI CUDA torch + a GUI
+#    `opencv-python` via ultralytics/scenedetect — both evicted next).
+# 2. Swap torch/torchvision for the CPU-only wheel from the PyTorch
+#    CPU index (same versions as uv.lock, `+cpu` suffixed). The
+#    target has no NVIDIA GPU; the CUDA userspace (cuda-*/nvidia-*)
+#    is multi-GB dead weight that once filled the target disk.
+# 3. Drop the GUI `opencv-python` (exact-name uninstall; headless
+#    is reinstalled after so the shared cv2/ files it overwrote
+#    are restored) and every orphaned cuda-/nvidia-/triton package.
+# 4. Prune the uv cache, then prove the boot path: `import cv2`,
+#    CPU-only torch, and the full web app import that crash-looped
+#    before on a missing libxcb.
+RUN set -eux; \
+    export VIRTUAL_ENV=/app/.venv PATH="/app/.venv/bin:$PATH"; \
+    uv sync --frozen --no-dev; \
+    TORCH_VER="$(python3 -c "import tomllib;print(next(p['version'] for p in tomllib.load(open('uv.lock','rb'))['package'] if p['name']=='torch'))")"; \
+    TV_VER="$(python3 -c "import tomllib;print(next(p['version'] for p in tomllib.load(open('uv.lock','rb'))['package'] if p['name']=='torchvision'))")"; \
+    CV_VER="$(python3 -c "import tomllib;print(next(p['version'] for p in tomllib.load(open('uv.lock','rb'))['package'] if p['name']=='opencv-python-headless'))")"; \
+    uv pip install --force-reinstall --no-deps \
+      --index-url https://download.pytorch.org/whl/cpu \
+      "torch==${TORCH_VER}+cpu" "torchvision==${TV_VER}+cpu"; \
+    uv pip uninstall -y opencv-python; \
+    uv pip install --force-reinstall --no-deps \
+      "opencv-python-headless==${CV_VER}"; \
+    uv pip list --format=freeze | cut -d= -f1 \
+      | grep -Ei '^(nvidia-|cuda-|triton$)' \
+      | xargs -r uv pip uninstall -y; \
+    uv cache prune --ci; \
+    python -c "import cv2; print(cv2.__version__)"; \
+    python -c "import torch; assert not torch.cuda.is_available(), torch.__version__; print(torch.__version__)"; \
+    python -c "import edl_agent.web.app; print('app import ok')"; \
+    chown -R appuser:appuser /app
 
 # Full static ffmpeg with every filter the pipeline needs (see
 # docs/deployment.md #2-3). Pin a dated release with
@@ -71,11 +110,16 @@ ENV EDL_AGENT_VAR=/data/edl-agent \
 VOLUME /data/edl-agent
 EXPOSE 8000
 
-# Rootless: the server runs as UID 1000, so the bind mount must be owned
-# by (or writable for) UID 1000 on the host.
-RUN useradd -m -u 1000 appuser \
-  && mkdir -p /data/edl-agent \
-  && chown -R appuser:appuser /app /data/edl-agent
+# Rootless: the server runs as UID 1000 (`appuser`, created above;
+# /app already handed over in the build layer). The `EDL_AGENT_VAR`
+# bind mount must therefore be writable by UID 1000 on the host —
+# e.g. `chown -R 1000:1000 /host/path` (preferred) or a group-write
+# bit with GID 1000. A root-owned mount fails writes; that is a host
+# permission issue, not an image bug. There is one explicit
+# deviation from "any non-root UID works": only UID 1000 (or
+# equivalent write access) works, because the image can't chown a
+# host mount from inside as a non-root user.
+RUN mkdir -p /data/edl-agent && chown -R appuser:appuser /data/edl-agent
 USER appuser
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \

@@ -139,10 +139,34 @@ Container contract (what the homelab wrapper relies on):
 | Port | 8000; `scripts/run_web.py` honors `PORT` when set |
 | Health | `GET /health` → 200 `{"status": "ok"}`, dependency-free so it answers mid-job; allow a 120s start window (also the image `HEALTHCHECK` start period) |
 | Data dir | `EDL_AGENT_VAR`, image default `/data/edl-agent` (bind mount, survives restarts); local default `./var` |
-| User | UID 1000 (`appuser`, rootless); the bind mount must be owned by (or writable for) UID 1000 |
+| User | UID 1000 (`appuser`, rootless). Explicit deviation: the bind mount must be writable by UID 1000 (`chown -R 1000:1000 /host/path`); any-other-UID mounts fail writes |
 | TZ | Honored for log timestamps (tzdata installed; OS-level, no code support needed) |
 | Secrets | None baked in (`.env` is `.dockerignore`d); pass `ANTHROPIC_API_KEY` / `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` with `-e` (full list in `.env.example`) |
 | Networking | No host-port assumptions; Traefik routes to :8000 internally |
+| torch | CPU-only (`torch==<lock>+cpu` from the PyTorch CPU index, same version as `uv.lock`); the PyPI CUDA torch plus its `cuda-*`/`nvidia-*` userspace is evicted at build time — the target has no NVIDIA GPU |
+| opencv | `opencv-python-headless` only; the GUI `opencv-python` that `ultralytics`/`scenedetect` pull in is evicted at build time (it was the `libxcb.so.1` crash-loop). The `libgl1`/`libglib2.0-0`/`libxcb1` apt libs stay as belt-and-braces |
+
+Every push that rebuilds the image also cold-boots the pinned tag
+on native ARM (`verify` job) and asserts the contract above —
+`/health` within 120s, `PORT` honored, `id -u` == 1000,
+`EDL_AGENT_VAR` honored, `TZ` honored, `import cv2`, CPU-only
+torch, GPL/`aarch64` ffmpeg buildconf — and prints the
+uncompressed image size plus PID 1 `VmHWM`/`VmRSS`. Use the pinned
+`<shortsha>-linuxarm64-gpl` tag from a green run in deploy
+manifests, and copy its reported size/RSS into the homelab notes.
+
+Acceptance (run on ARM, not x86 emulation):
+
+```bash
+REF=ghcr.io/aingelmo/auto-media-creator:<shortsha>-linuxarm64-gpl
+docker run -d --platform linux/arm64 --name edl \
+  -e EDL_AGENT_VAR=/tmp/x -v /tmp/x:/tmp/x "$REF"
+sleep 120; curl -sf localhost:8000/health
+docker exec edl python -c "import cv2"
+docker exec edl ffmpeg -hide_banner -buildconf | grep -i -E "gpl|aarch64"
+docker image inspect --format '{{.Size}}' "$REF"  # uncompressed bytes
+docker exec edl cat /proc/1/status | grep -E 'VmHWM|VmRSS'
+```
 
 Notes:
 
