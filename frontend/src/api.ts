@@ -215,8 +215,20 @@ export function createSessionWithProgress(
   });
 }
 
-/** Per-request chunk size for resumable uploads (matches backend `CHUNK_SIZE`). */
-export const UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024;
+/** Small bodies survive a Cloudflare tunnel with tiny host QUIC buffers;
+ * the backend `CHUNK_SIZE` (8 MB) stays the per-request max — this is just
+ * the frontend slice size, so every PUT stays far under both caps. */
+export const UPLOAD_CHUNK_SIZE = 2 * 1024 * 1024;
+
+/** Retries per chunk on network errors / 5xx / 429 / 409-resume. */
+export const UPLOAD_CHUNK_RETRIES = 3;
+
+/** Base delay for per-chunk exponential backoff (doubled per attempt). */
+const UPLOAD_RETRY_BASE_MS = 800;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /** Total payload above this uses the chunked path instead of one multipart POST. */
 export const CHUNKED_THRESHOLD_TOTAL = 50 * 1024 * 1024;
@@ -233,65 +245,223 @@ export interface ChunkedUploadRef {
   size: number;
 }
 
+export interface UploadStatus {
+  upload_id: string;
+  received: number;
+  size: number;
+  done: boolean;
+  completed: boolean;
+}
+
+/** Authoritative resume point for an in-progress upload. */
+export async function getUploadStatus(upload_id: string): Promise<UploadStatus> {
+  const res = await fetch(`/api/uploads/${encodeURIComponent(upload_id)}/status`);
+  return asJson<UploadStatus>(res);
+}
+
+async function initChunkedUpload(
+  file: File,
+  kind: UploadKind,
+  sessionName: string,
+): Promise<string> {
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt <= UPLOAD_CHUNK_RETRIES; attempt++) {
+    if (attempt > 0) await sleep(UPLOAD_RETRY_BASE_MS * 2 ** (attempt - 1));
+    try {
+      const initRes = await fetch("/api/uploads/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_name: sessionName,
+          kind,
+          filename: file.name,
+          size: file.size,
+        }),
+      });
+      if (initRes.status >= 500 || initRes.status === 429) {
+        lastErr = new ApiError(initRes.status, initRes.statusText);
+        continue;
+      }
+      if (!initRes.ok) {
+        const body = await initRes.json().catch(() => ({}));
+        throw new ApiError(initRes.status, body.detail ?? initRes.statusText);
+      }
+      const { upload_id } = (await initRes.json()) as {
+        upload_id: string;
+        chunk_size: number;
+      };
+      return upload_id;
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("Upload init failed.");
+}
+
+async function completeChunkedUpload(upload_id: string): Promise<ChunkedUploadRef> {
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt <= UPLOAD_CHUNK_RETRIES; attempt++) {
+    if (attempt > 0) await sleep(UPLOAD_RETRY_BASE_MS * 2 ** (attempt - 1));
+    try {
+      const doneRes = await fetch(`/api/uploads/${encodeURIComponent(upload_id)}/complete`, {
+        method: "POST",
+      });
+      if (doneRes.status >= 500 || doneRes.status === 429) {
+        lastErr = new ApiError(doneRes.status, doneRes.statusText);
+        continue;
+      }
+      if (!doneRes.ok) {
+        const body = await doneRes.json().catch(() => ({}));
+        throw new ApiError(doneRes.status, body.detail ?? doneRes.statusText);
+      }
+      return (await doneRes.json()) as ChunkedUploadRef;
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("Upload complete failed.");
+}
+
 /**
- * Upload one file in <=8 MB chunks so arbitrarily large sessions fit
+ * Upload one file in 2 MB chunks so arbitrarily large sessions fit
  * through a 100 MB-capped reverse proxy (Cloudflare free/pro returns
- * 413 for bigger single bodies before the app is reached).
+ * 413 for bigger single bodies before the app is reached) and each
+ * PUT stays small enough to move through a tunnel with tiny host
+ * QUIC buffers. Every chunk is retried (exp backoff); a 409
+ * offset-mismatch (or a network error that may have landed
+ * server-side) refetches `GET status` and continues from the
+ * authoritative `received` count instead of failing. Passing a
+ * previous `opts.uploadId` for the same file resumes that staging
+ * dir instead of orphaning it with a fresh init.
  */
 export async function uploadFileChunked(
   file: File,
   kind: UploadKind,
   sessionName: string,
   onProgress?: (loadedBytes: number, totalBytes: number) => void,
+  opts?: { uploadId?: string },
 ): Promise<ChunkedUploadRef> {
-  const initRes = await fetch("/api/uploads/init", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_name: sessionName,
-      kind,
-      filename: file.name,
-      size: file.size,
-    }),
-  });
-  if (!initRes.ok) {
-    const body = await initRes.json().catch(() => ({}));
-    throw new ApiError(initRes.status, body.detail ?? initRes.statusText);
-  }
-  const { upload_id } = (await initRes.json()) as { upload_id: string; chunk_size: number };
-  let loaded = 0;
-  onProgress?.(0, file.size);
-  const totalChunks = Math.max(1, Math.ceil(file.size / UPLOAD_CHUNK_SIZE));
-  for (let index = 0; index < totalChunks; index++) {
-    const offset = index * UPLOAD_CHUNK_SIZE;
-    const slice = file.slice(offset, offset + UPLOAD_CHUNK_SIZE);
-    const params = new URLSearchParams({ index: String(index), offset: String(offset) });
-    const putRes = await fetch(`/api/uploads/${encodeURIComponent(upload_id)}/chunk?${params}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/octet-stream" },
-      body: slice,
-    });
-    if (!putRes.ok) {
-      const body = await putRes.json().catch(() => ({}));
-      if (putRes.status === 413) {
-        throw new ApiError(
-          putRes.status,
-          `Chunk rejected with 413 — the proxy caps single requests below 8 MB? (${body.detail ?? putRes.statusText})`,
-        );
+  let upload_id: string;
+  let offset = 0;
+  if (opts?.uploadId) {
+    try {
+      const st = await getUploadStatus(opts.uploadId);
+      if (st.size === file.size) {
+        if (st.completed || st.done) {
+          onProgress?.(st.received, file.size);
+          return completeChunkedUpload(opts.uploadId);
+        }
+        upload_id = opts.uploadId;
+        offset = st.received;
+      } else {
+        upload_id = await initChunkedUpload(file, kind, sessionName);
       }
+    } catch {
+      upload_id = await initChunkedUpload(file, kind, sessionName);
+    }
+  } else {
+    upload_id = await initChunkedUpload(file, kind, sessionName);
+  }
+  onProgress?.(offset, file.size);
+  // Informational sequence number only; the server treats `offset` as
+  // authoritative so sub-max (2 MB) slices don't need 8 MB alignment.
+  let seq = Math.floor(offset / UPLOAD_CHUNK_SIZE);
+  while (offset < file.size) {
+    const slice = file.slice(offset, offset + UPLOAD_CHUNK_SIZE);
+    const params = new URLSearchParams({ index: String(seq), offset: String(offset) });
+    let putRes: Response | null = null;
+    try {
+      putRes = await fetch(`/api/uploads/${encodeURIComponent(upload_id)}/chunk?${params}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: slice,
+      });
+    } catch (err) {
+      // Network error: the chunk may still have landed, so refetch the
+      // authoritative offset before retrying instead of resending blind.
+      let retried = false;
+      for (let attempt = 0; attempt < UPLOAD_CHUNK_RETRIES; attempt++) {
+        await sleep(UPLOAD_RETRY_BASE_MS * 2 ** attempt);
+        try {
+          const st = await getUploadStatus(upload_id);
+          offset = st.received;
+          seq = Math.floor(offset / UPLOAD_CHUNK_SIZE);
+          onProgress?.(offset, file.size);
+          if (offset >= file.size) return completeChunkedUpload(upload_id);
+          retried = true;
+          break;
+        } catch {
+          // status itself failed; keep backing off
+        }
+      }
+      if (retried) continue;
+      throw err instanceof Error ? err : new Error("Upload failed (network error).");
+    }
+    if (putRes.ok) {
+      const body = (await putRes.json().catch(() => null)) as {
+        received: number;
+      } | null;
+      offset = body?.received ?? offset + slice.size;
+      seq += 1;
+      onProgress?.(offset, file.size);
+      continue;
+    }
+    if (putRes.status === 409) {
+      // Offset drift (e.g. a retried chunk that already landed):
+      // continue from the server's count instead of failing.
+      let resumed = false;
+      for (let attempt = 0; attempt <= UPLOAD_CHUNK_RETRIES; attempt++) {
+        if (attempt > 0) await sleep(UPLOAD_RETRY_BASE_MS * 2 ** (attempt - 1));
+        try {
+          const st = await getUploadStatus(upload_id);
+          if (st.size !== file.size) break;
+          offset = st.received;
+          seq = Math.floor(offset / UPLOAD_CHUNK_SIZE);
+          onProgress?.(offset, file.size);
+          if (offset >= file.size) return completeChunkedUpload(upload_id);
+          resumed = true;
+          break;
+        } catch {
+          // status failed; back off and retry the refetch
+        }
+      }
+      if (resumed) continue;
+      const body = await putRes.json().catch(() => ({}));
       throw new ApiError(putRes.status, body.detail ?? putRes.statusText);
     }
-    loaded = Math.min(file.size, offset + slice.size);
-    onProgress?.(loaded, file.size);
+    if (putRes.status === 413) {
+      const body = await putRes.json().catch(() => ({}));
+      throw new ApiError(
+        putRes.status,
+        `Chunk rejected with 413 — the proxy caps single requests below 2 MB? (${body.detail ?? putRes.statusText})`,
+      );
+    }
+    if (putRes.status >= 500 || putRes.status === 429) {
+      let recovered = false;
+      for (let attempt = 0; attempt < UPLOAD_CHUNK_RETRIES; attempt++) {
+        await sleep(UPLOAD_RETRY_BASE_MS * 2 ** attempt);
+        try {
+          const st = await getUploadStatus(upload_id);
+          offset = st.received;
+          seq = Math.floor(offset / UPLOAD_CHUNK_SIZE);
+          onProgress?.(offset, file.size);
+          if (offset >= file.size) return completeChunkedUpload(upload_id);
+          recovered = true;
+          break;
+        } catch {
+          // status failed; keep backing off
+        }
+      }
+      if (recovered) continue;
+      const body = await putRes.json().catch(() => ({}));
+      throw new ApiError(putRes.status, body.detail ?? putRes.statusText);
+    }
+    const body = await putRes.json().catch(() => ({}));
+    throw new ApiError(putRes.status, body.detail ?? putRes.statusText);
   }
-  const doneRes = await fetch(`/api/uploads/${encodeURIComponent(upload_id)}/complete`, {
-    method: "POST",
-  });
-  if (!doneRes.ok) {
-    const body = await doneRes.json().catch(() => ({}));
-    throw new ApiError(doneRes.status, body.detail ?? doneRes.statusText);
-  }
-  return (await doneRes.json()) as ChunkedUploadRef;
+  return completeChunkedUpload(upload_id);
 }
 
 export function peakUrl(name: string, path: string): string {

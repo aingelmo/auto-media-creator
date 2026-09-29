@@ -6,6 +6,7 @@ import {
   CHUNKED_THRESHOLD_TOTAL,
   createSessionWithProgress,
   uploadFileChunked,
+  type ChunkedUploadRef,
 } from "../api";
 import { api } from "../api";
 import { getFormMemory, saveFormMemory } from "../formMemory";
@@ -25,6 +26,10 @@ const NAME_RE = /^[A-Za-z0-9_-]+$/;
 
 function formatMb(bytes: number) {
   return (bytes / 1e6).toFixed(1);
+}
+
+function fileKey(kind: string, f: File) {
+  return `${kind}:${f.name}:${f.size}:${f.lastModified}`;
 }
 
 export default function New() {
@@ -60,6 +65,11 @@ export default function New() {
   const formRef = useRef<HTMLFormElement>(null);
   const navigate = useNavigate();
   const confirm = useConfirm();
+  // Staging-dir reuse across Start retries on the same files: file key ->
+  // upload_id. A failed submit keeps the component mounted, so a retry
+  // resumes the existing staging dir (via GET status) instead of
+  // orphaning it with a fresh init.
+  const uploadIds = useRef(new Map<string, string>());
 
   useEffect(() => {
     api.getConfig().then(setConfig);
@@ -202,9 +212,10 @@ export default function New() {
       const useChunked =
         totalBytes > CHUNKED_THRESHOLD_TOTAL || maxSingle > CHUNKED_THRESHOLD_SINGLE;
       if (useChunked) {
-        // Chunked path: each file goes up in <=8 MB PUTs (fits through a
-        // 100 MB-capped proxy), then the session is created with only
-        // upload-ids + refs + text fields (tiny body).
+        // Chunked path: files go up strictly one at a time in 2 MB PUTs
+        // (parallel multi-MB PUTs stall the cloudflared origin conn),
+        // then the session is created with only upload-ids + refs + text
+        // fields (tiny body).
         const sizes = [
           ...clipFiles.map((f) => f.size),
           ...(musicFile ? [musicFile.size] : []),
@@ -218,32 +229,55 @@ export default function New() {
           setStatus(`Uploading: ${formatMb(done)} / ${formatMb(total)} MB (${pct}%)`);
         };
         report();
-        const clipJobs = clipFiles.map((f, i) =>
-          uploadFileChunked(f, "clip", name, (l) => {
-            loaded[i] = l;
-            report();
-          }),
-        );
-        let idx = clipFiles.length;
-        const musicIdx = musicFile ? idx++ : -1;
-        const logoIdx = logoFile ? idx++ : -1;
-        const musicJob = musicFile
-          ? uploadFileChunked(musicFile, "music", name, (l) => {
-              loaded[musicIdx] = l;
+        const clipRefs2: ChunkedUploadRef[] = [];
+        for (let i = 0; i < clipFiles.length; i++) {
+          const f = clipFiles[i];
+          const key = fileKey("clip", f);
+          const u = await uploadFileChunked(
+            f,
+            "clip",
+            name,
+            (l) => {
+              loaded[i] = l;
               report();
-            })
-          : null;
-        const logoJob = logoFile
-          ? uploadFileChunked(logoFile, "logo", name, (l) => {
-              loaded[logoIdx] = l;
+            },
+            { uploadId: uploadIds.current.get(key) },
+          );
+          uploadIds.current.set(key, u.upload_id);
+          clipRefs2.push(u);
+        }
+        let musicDone: ChunkedUploadRef | null = null;
+        if (musicFile) {
+          const idx = clipFiles.length;
+          const key = fileKey("music", musicFile);
+          musicDone = await uploadFileChunked(
+            musicFile,
+            "music",
+            name,
+            (l) => {
+              loaded[idx] = l;
               report();
-            })
-          : null;
-        const [clipRefs2, musicDone, logoDone] = await Promise.all([
-          Promise.all(clipJobs),
-          musicJob,
-          logoJob,
-        ]);
+            },
+            { uploadId: uploadIds.current.get(key) },
+          );
+          uploadIds.current.set(key, musicDone.upload_id);
+        }
+        let logoDone: ChunkedUploadRef | null = null;
+        if (logoFile) {
+          const idx = clipFiles.length + (musicFile ? 1 : 0);
+          const key = fileKey("logo", logoFile);
+          logoDone = await uploadFileChunked(
+            logoFile,
+            "logo",
+            name,
+            (l) => {
+              loaded[idx] = l;
+              report();
+            },
+            { uploadId: uploadIds.current.get(key) },
+          );
+          uploadIds.current.set(key, logoDone.upload_id);
+        }
         const tiny = new FormData();
         for (const [key, value] of formData.entries()) {
           // Re-added explicitly below (plus upload ids); copying them here

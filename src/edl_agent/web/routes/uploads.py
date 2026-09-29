@@ -3,15 +3,17 @@
 Cloudflare free/pro caps proxied request bodies at 100 MB total, so the
 single-multipart `POST /api/sessions` in `routes/sessions.py` fails with
 413 for large sessions before reaching the app (#4.3). This router splits
-each file into <=8 MB `PUT` chunks:
+each file into small `PUT` chunks (frontend uses 2 MB bodies; the
+per-request max stays 8 MB):
 
 1. `POST /api/uploads/init` reserves an `upload_id` + staging dir.
 2. `PUT /api/uploads/{id}/chunk?index=N&offset=M` appends one chunk.
-3. `POST /api/uploads/{id}/complete` verifies size/hash and moves the
+3. `GET /api/uploads/{id}/status` reports `{received, size}` for resume.
+4. `POST /api/uploads/{id}/complete` verifies size/hash and moves the
    file into `SESSIONS_DIR/{session}/{inputs,music,brand}/`.
 
-The frontend (`frontend/src/api.ts:uploadFileChunked`) drives the three
-steps with 8 MB `Blob.slice` windows, then submits `POST /api/sessions`
+The frontend (`frontend/src/api.ts:uploadFileChunked`) drives the steps
+with 2 MB `Blob.slice` windows, then submits `POST /api/sessions`
 with only upload-ids + refs + text fields (tiny body). Abandoned staging
 dirs expire after 24h via an mtime sweep on init/complete.
 """
@@ -289,15 +291,18 @@ def init_upload(body: InitRequest) -> dict:
 async def put_chunk(upload_id: str, request: Request, index: int, offset: int) -> dict:
     """Append one <=8 MB chunk at the current end of the stream.
 
-    Chunks are sequential: `offset` must equal bytes received so far
-    and `index` must equal `offset // CHUNK_SIZE`, so a retry after a
-    dropped connection resumes exactly where it stopped. Meta is
+    Chunks are sequential: `offset` must equal bytes received so far, so
+    a retry after a dropped connection resumes exactly where it stopped.
+    `index` is an informational sequence number from the client (the
+    frontend sends `offset // <its own 2 MB slice size>`) and is only
+    range-checked, not tied to the 8 MB server max — sub-max slices
+    would otherwise never align to the server grid. Meta is
     rewritten after every append, so resume survives a restart.
 
     Args:
         upload_id: Opaque id from `init_upload`.
         request: Raw `application/octet-stream` chunk body.
-        index: Zero-based chunk number (`offset // CHUNK_SIZE`).
+        index: Client chunk sequence number (non-negative).
         offset: Byte offset the chunk starts at (must equal the
             bytes received so far).
 
@@ -306,7 +311,7 @@ async def put_chunk(upload_id: str, request: Request, index: int, offset: int) -
         `size` (declared total), and `done` (received == size).
 
     Raises:
-        HTTPException: 404 for unknown ids; 409 when `offset`/`index`
+        HTTPException: 404 for unknown ids; 409 when `offset`
             disagrees with the stored progress; 400 for empty or
             over-8 MB bodies; 413 when the chunk would overflow the
             declared size.
@@ -314,7 +319,7 @@ async def put_chunk(upload_id: str, request: Request, index: int, offset: int) -
     meta = _read_meta(upload_id)
     if meta.get("completed"):
         raise HTTPException(status_code=400, detail="upload already completed")
-    if index < 0 or offset < 0 or index * CHUNK_SIZE != offset:
+    if index < 0 or offset < 0:
         raise HTTPException(status_code=409, detail="index/offset mismatch")
     if offset != meta["received"]:
         raise HTTPException(
@@ -341,6 +346,39 @@ async def put_chunk(upload_id: str, request: Request, index: int, offset: int) -
         "received": meta["received"],
         "size": meta["size"],
         "done": meta["received"] == meta["size"],
+    }
+
+
+@router.get("/api/uploads/{upload_id}/status")
+def upload_status(upload_id: str) -> dict:
+    """Report resumable-upload progress for retry/resume.
+
+    The frontend calls this after a chunk `PUT` gets a 409
+    offset-mismatch (or a network error that may have landed
+    server-side) to learn the authoritative `received` byte count
+    and continue from there instead of failing or re-sending
+    bytes the server already has.
+
+    Args:
+        upload_id: Opaque id from `init_upload`.
+
+    Returns:
+        Dict with `upload_id`, `received` (bytes stored so far),
+        `size` (declared total), `done` (received == size), and
+        `completed` (whether `complete_upload` already ran).
+
+    Raises:
+        HTTPException: 404 for unknown ids (see `_read_meta`).
+    """
+    meta = _read_meta(upload_id)
+    received = int(meta.get("received", 0))
+    size = int(meta.get("size", 0))
+    return {
+        "upload_id": upload_id,
+        "received": received,
+        "size": size,
+        "done": received == size,
+        "completed": bool(meta.get("completed")),
     }
 
 
