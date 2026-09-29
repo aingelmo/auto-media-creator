@@ -119,11 +119,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     python -c "import edl_agent.web.app; print('app import ok')"
 
 # Container contract: EDL_AGENT_VAR defaults to /data/edl-agent (bind
-# mount, survives restarts); PORT honored by scripts/run_web.py.
+# mount, survives restarts); PORT honored by scripts/run_web.py. No
+# VOLUME directive on purpose: deploy mounts each subdirectory
+# explicitly (precious binds + disposable cache volume), and an image
+# VOLUME would materialise as an anonymous volume holding whichever
+# subpath isn't covered — silently un-persisting real state.
 ENV EDL_AGENT_VAR=/data/edl-agent \
     PORT=8000 \
     PYTHONUNBUFFERED=1
-VOLUME /data/edl-agent
 EXPOSE 8000
 
 # Rootless: the server runs as UID 1000 (`appuser`; /app already
