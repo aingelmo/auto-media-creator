@@ -41,8 +41,12 @@ tar xf ffmpeg-master-latest-linux64-gpl.tar.xz
 cp ffmpeg-master-latest-linux64-gpl/bin/{ffmpeg,ffprobe} ~/.local/bin/
 ```
 
-Ensure the install dir precedes any brew/apt ffmpeg in `PATH`.
-This dev machine uses `~/.local/bin`, which already shadows linuxbrew.
+Ensure the install dir precedes any brew/apt ffmpeg in `PATH` —
+a brew-first login shell will otherwise keep shadowing the full
+build (this bit us: the web server kept resolving linuxbrew's
+ffmpeg). On this dev machine `~/.zshrc.local` (sourced last from
+`~/.zshrc`, outside chezmoi) prepends `~/.local/bin`, so every new
+shell defaults to the static build.
 
 ### PATH pitfalls and the `EDL_AGENT_FFMPEG` override
 
