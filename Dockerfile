@@ -18,9 +18,11 @@ RUN npm run build
 FROM python:3.14-slim
 
 # tzdata: TZ env honored for log timestamps. libgomp1: torch/opencv
-# runtime. curl/xz-utils/ca-certificates: ffmpeg fetch below.
+# runtime. libgl1/libglib2.0-0/libxcb1: opencv-python-headless 5.x links
+# these at import. curl/xz-utils/ca-certificates: ffmpeg fetch below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl libgomp1 tzdata xz-utils \
+      ca-certificates curl libgl1 libglib2.0-0 libgomp1 libxcb1 tzdata \
+      xz-utils \
     && rm -rf /var/lib/apt/lists
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
