@@ -28,6 +28,43 @@ function formatMb(bytes: number) {
   return (bytes / 1e6).toFixed(1);
 }
 
+function formatEta(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "";
+  const s = Math.round(seconds);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+/** Live chunked-upload state; rendered every second so a pause shows
+ * "waiting Ns" (working, slow) instead of a frozen percentage. */
+interface UploadProgress {
+  done: number;
+  total: number;
+  fileName: string;
+  fileIdx: number;
+  fileCount: number;
+  rateBps: number | null;
+  lastActivity: number;
+  note: string;
+}
+
+function formatProgress(p: UploadProgress, nowMs: number): string {
+  const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 100;
+  const rate = p.rateBps != null && p.rateBps > 0 ? ` · ${(p.rateBps / 1e6).toFixed(1)} MB/s` : "";
+  const eta =
+    p.rateBps != null && p.rateBps > 0 && p.done < p.total
+      ? ` · ETA ${formatEta((p.total - p.done) / p.rateBps)}`
+      : "";
+  const agoS = Math.max(0, Math.round((nowMs - p.lastActivity) / 1000));
+  const wait = agoS >= 5 ? ` · waiting ${agoS}s` : "";
+  return (
+    `Uploading ${p.fileIdx + 1}/${p.fileCount}: ${p.fileName} — ` +
+    `${formatMb(p.done)} / ${formatMb(p.total)} MB (${pct}%)${rate}${eta}${wait}`
+  );
+}
+
 function fileKey(kind: string, f: File) {
   return `${kind}:${f.name}:${f.size}:${f.lastModified}`;
 }
@@ -37,6 +74,8 @@ export default function New() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState("");
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [step, setStep] = useState(0);
   const [draftNotice, setDraftNotice] = useState(false);
   const [stats, setStats] = useState<CreateStats>({
@@ -78,6 +117,14 @@ export default function New() {
   useEffect(() => {
     if (loadDraft()) setDraftNotice(true);
   }, []);
+
+  // Tick while uploading so the progress line's "waiting Ns" and rate
+  // stay live even when no chunk completes for a while.
+  useEffect(() => {
+    if (!uploading) return;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [uploading]);
 
   useCreateDraft({
     name,
@@ -222,17 +269,44 @@ export default function New() {
           ...(logoFile ? [logoFile.size] : []),
         ];
         const loaded = sizes.map(() => 0);
+        const names = [
+          ...clipFiles.map((f) => f.name),
+          ...(musicFile ? [musicFile.name] : []),
+          ...(logoFile ? [logoFile.name] : []),
+        ];
+        const samples: { t: number; b: number }[] = [];
+        let curIdx = 0;
+        let note = "";
         const report = () => {
           const done = loaded.reduce((a, b) => a + b, 0);
           const total = sizes.reduce((a, b) => a + b, 0);
-          const pct = total > 0 ? Math.round((done / total) * 100) : 100;
-          setStatus(`Uploading: ${formatMb(done)} / ${formatMb(total)} MB (${pct}%)`);
+          const now = Date.now();
+          samples.push({ t: now, b: done });
+          while (samples.length > 2 && now - samples[0].t > 15_000) samples.shift();
+          const span = samples.length > 1 ? (now - samples[0].t) / 1000 : 0;
+          const rateBps = span >= 2 && done > samples[0].b ? (done - samples[0].b) / span : null;
+          setProgress({
+            done,
+            total,
+            fileName: names[curIdx] ?? "",
+            fileIdx: curIdx,
+            fileCount: sizes.length,
+            rateBps,
+            lastActivity: now,
+            note,
+          });
+        };
+        const noteIt = (msg: string) => {
+          note = msg;
+          report();
         };
         report();
         const clipRefs2: ChunkedUploadRef[] = [];
         for (let i = 0; i < clipFiles.length; i++) {
           const f = clipFiles[i];
           const key = fileKey("clip", f);
+          curIdx = i;
+          const upNote = (msg: string) => noteIt(`${f.name}: ${msg}`);
           const u = await uploadFileChunked(
             f,
             "clip",
@@ -241,7 +315,7 @@ export default function New() {
               loaded[i] = l;
               report();
             },
-            { uploadId: uploadIds.current.get(key) },
+            { uploadId: uploadIds.current.get(key), onNote: upNote },
           );
           uploadIds.current.set(key, u.upload_id);
           clipRefs2.push(u);
@@ -250,6 +324,8 @@ export default function New() {
         if (musicFile) {
           const idx = clipFiles.length;
           const key = fileKey("music", musicFile);
+          curIdx = idx;
+          const upNote = (msg: string) => noteIt(`${musicFile.name}: ${msg}`);
           musicDone = await uploadFileChunked(
             musicFile,
             "music",
@@ -258,7 +334,7 @@ export default function New() {
               loaded[idx] = l;
               report();
             },
-            { uploadId: uploadIds.current.get(key) },
+            { uploadId: uploadIds.current.get(key), onNote: upNote },
           );
           uploadIds.current.set(key, musicDone.upload_id);
         }
@@ -266,6 +342,8 @@ export default function New() {
         if (logoFile) {
           const idx = clipFiles.length + (musicFile ? 1 : 0);
           const key = fileKey("logo", logoFile);
+          curIdx = idx;
+          const upNote = (msg: string) => noteIt(`${logoFile.name}: ${msg}`);
           logoDone = await uploadFileChunked(
             logoFile,
             "logo",
@@ -274,7 +352,7 @@ export default function New() {
               loaded[idx] = l;
               report();
             },
-            { uploadId: uploadIds.current.get(key) },
+            { uploadId: uploadIds.current.get(key), onNote: upNote },
           );
           uploadIds.current.set(key, logoDone.upload_id);
         }
@@ -297,6 +375,7 @@ export default function New() {
         if (musicDone) tiny.set("music_upload_id", musicDone.upload_id);
         if (logoDone) tiny.set("logo_upload_id", logoDone.upload_id);
         saveFormMemory(tiny);
+        setProgress(null);
         setStatus("Upload complete, saving session and launching pipeline...");
         const res = await fetch("/api/sessions", { method: "POST", body: tiny });
         if (!res.ok) {
@@ -444,8 +523,13 @@ export default function New() {
             )}
           </p>
           <p id="upload-status" aria-live="polite">
-            {status}
+            {progress ? formatProgress(progress, nowMs) : status}
           </p>
+          {progress?.note ? (
+            <p className="field-hint" aria-live="polite">
+              {progress.note}
+            </p>
+          ) : null}
         </form>
         <CreateSummary
           stats={stats}

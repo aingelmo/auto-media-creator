@@ -239,6 +239,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Human byte count for upload notes (`35.6 MB`, `900 KB`). */
+export function formatBytes(bytes: number): string {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  if (bytes >= 1e3) return `${Math.round(bytes / 1e3)} KB`;
+  return `${bytes} B`;
+}
+
 /** `fetch` with a response deadline: aborts (DOMException AbortError,
  * surfaced here as a plain Error) when the server takes longer than
  * `timeoutMs` to answer. Callers treat it like any network error. */
@@ -398,8 +406,9 @@ export async function uploadFileChunked(
   kind: UploadKind,
   sessionName: string,
   onProgress?: (loadedBytes: number, totalBytes: number) => void,
-  opts?: { uploadId?: string },
+  opts?: { uploadId?: string; onNote?: (note: string) => void },
 ): Promise<ChunkedUploadRef> {
+  const note = (msg: string) => opts?.onNote?.(msg);
   let upload_id: string;
   let offset = 0;
   if (opts?.uploadId) {
@@ -407,9 +416,11 @@ export async function uploadFileChunked(
       const st = await getUploadStatus(opts.uploadId);
       if (st.size === file.size) {
         if (st.completed || st.done) {
+          note(`Already on server (${formatBytes(st.received)}), skipping re-upload.`);
           onProgress?.(st.received, file.size);
           return completeChunkedUpload(opts.uploadId);
         }
+        note(`Resuming from ${formatBytes(st.received)} of ${formatBytes(st.size)}.`);
         upload_id = opts.uploadId;
         offset = st.received;
       } else {
@@ -441,8 +452,14 @@ export async function uploadFileChunked(
         UPLOAD_CHUNK_TIMEOUT_MS,
       );
     } catch (err) {
-      // Network error: the chunk may still have landed, so refetch the
-      // authoritative offset before retrying instead of resending blind.
+      // Network error or chunk deadline: the chunk may still have
+      // landed, so refetch the authoritative offset before retrying
+      // instead of resending blind.
+      note(
+        err instanceof Error && err.message.startsWith("Request timed out")
+          ? `Chunk ${seq} got no response for 60s — checking what landed…`
+          : `Chunk ${seq} hit a network error — checking what landed…`,
+      );
       let retried = false;
       for (let attempt = 0; attempt < UPLOAD_CHUNK_RETRIES; attempt++) {
         await sleep(UPLOAD_RETRY_BASE_MS * 2 ** attempt);
@@ -471,6 +488,7 @@ export async function uploadFileChunked(
     if (putRes.status === 409) {
       // Offset drift (e.g. a retried chunk that already landed):
       // continue from the server's count instead of failing.
+      note(`Chunk ${seq} disagreed with the server — resuming from its count…`);
       let resumed = false;
       for (let attempt = 0; attempt <= UPLOAD_CHUNK_RETRIES; attempt++) {
         if (attempt > 0) await sleep(UPLOAD_RETRY_BASE_MS * 2 ** (attempt - 1));
@@ -499,6 +517,7 @@ export async function uploadFileChunked(
       );
     }
     if (putRes.status >= 500 || putRes.status === 429) {
+      note(`Server busy (${putRes.status}) on chunk ${seq} — backing off…`);
       let recovered = false;
       for (let attempt = 0; attempt < UPLOAD_CHUNK_RETRIES; attempt++) {
         await sleep(UPLOAD_RETRY_BASE_MS * 2 ** attempt);
