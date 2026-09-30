@@ -1,6 +1,6 @@
 [project]
 name = "edl-agent"
-version = "0.3.1"
+version = "0.3.2"
 description = "Add your description here"
 authors = [
     { name = "Andres Ingelmo Poveda", email = "aingelmop@gmail.com" }
